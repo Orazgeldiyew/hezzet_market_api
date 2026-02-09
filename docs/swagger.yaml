@@ -1,0 +1,1091 @@
+basePath: /
+definitions:
+  category.Category:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      parent_id:
+        type: integer
+    type: object
+  category.CategoryTree:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/category.CategoryTree'
+        type: array
+      id:
+        type: integer
+      name:
+        type: string
+      parent_id:
+        type: integer
+    type: object
+  category.CreateRequest:
+    properties:
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      parent_id:
+        type: integer
+    required:
+    - name
+    type: object
+  category.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/category.Category'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  category.TreeResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/category.CategoryTree'
+        type: array
+    type: object
+  category.UpdateRequest:
+    properties:
+      is_active:
+        type: boolean
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      parent_id:
+        type: integer
+    type: object
+  client.Client:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      phone:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  client.CreateRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      phone:
+        maxLength: 50
+        type: string
+    required:
+    - name
+    type: object
+  client.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/client.Client'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  client.UpdateRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      is_active:
+        type: boolean
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      phone:
+        maxLength: 50
+        type: string
+    type: object
+  product.Card:
+    properties:
+      categories:
+        items:
+          $ref: '#/definitions/product.CategoryBrief'
+        type: array
+      product:
+        $ref: '#/definitions/product.Product'
+      stock:
+        type: number
+      supplier_ids:
+        items:
+          type: integer
+        type: array
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  product.CategoryBrief:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  product.CreateRequest:
+    properties:
+      barcode:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      purchase_price:
+        type: number
+      sale_price:
+        type: number
+      sku:
+        type: string
+      unit:
+        type: string
+    required:
+    - name
+    - unit
+    type: object
+  product.Product:
+    properties:
+      barcode:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      purchase_price:
+        type: number
+      sale_price:
+        type: number
+      sku:
+        type: string
+      unit:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  product.SetCategoriesRequest:
+    properties:
+      category_ids:
+        items:
+          type: integer
+        type: array
+    required:
+    - category_ids
+    type: object
+  product.UpdateRequest:
+    properties:
+      barcode:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      purchase_price:
+        type: number
+      sale_price:
+        type: number
+      sku:
+        type: string
+      unit:
+        type: string
+    type: object
+  response.APIError:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  response.APIResponse:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/response.APIError'
+      success:
+        type: boolean
+    type: object
+  supplier.CreateRequest:
+    properties:
+      address:
+        type: string
+      email:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      phone:
+        maxLength: 50
+        type: string
+    required:
+    - name
+    type: object
+  supplier.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/supplier.Supplier'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  supplier.Supplier:
+    properties:
+      address:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      phone:
+        type: string
+    type: object
+  supplier.UpdateRequest:
+    properties:
+      address:
+        type: string
+      email:
+        maxLength: 255
+        type: string
+      is_active:
+        type: boolean
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      phone:
+        maxLength: 50
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Market backend (products, stock, income, sales)
+  title: Hezzet Market API
+  version: "1.0"
+paths:
+  /categories:
+    get:
+      description: Get paginated list of active categories with optional search
+      parameters:
+      - description: Limit (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      - description: Search by name
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/category.ListResponse'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: List categories
+      tags:
+      - Categories
+    post:
+      consumes:
+      - application/json
+      description: Create a new category with optional parent
+      parameters:
+      - description: Category data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/category.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/category.Category'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Create category
+      tags:
+      - Categories
+  /categories/{id}:
+    delete:
+      description: Soft delete category by setting is_active=false
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Delete category (soft)
+      tags:
+      - Categories
+    get:
+      description: Get a single category by its ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/category.Category'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get category by ID
+      tags:
+      - Categories
+    patch:
+      consumes:
+      - application/json
+      description: Update category fields (name, parent_id, is_active)
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/category.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/category.Category'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Update category
+      tags:
+      - Categories
+  /categories/tree:
+    get:
+      description: Get hierarchical tree of all active categories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/category.TreeResponse'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get category tree
+      tags:
+      - Categories
+  /clients:
+    get:
+      description: Get paginated list of active clients with optional search
+      parameters:
+      - description: Limit (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      - description: Search by name or phone
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.ListResponse'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: List clients
+      tags:
+      - Clients
+    post:
+      consumes:
+      - application/json
+      description: Create a new client (customer)
+      parameters:
+      - description: Client data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/client.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.Client'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Create client
+      tags:
+      - Clients
+  /clients/{id}:
+    delete:
+      description: Soft delete client by setting is_active=false
+      parameters:
+      - description: Client ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Delete client (soft)
+      tags:
+      - Clients
+    get:
+      description: Get a single active client by its ID
+      parameters:
+      - description: Client ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.Client'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get client by ID
+      tags:
+      - Clients
+    patch:
+      consumes:
+      - application/json
+      description: Update client fields (name, phone, email, is_active)
+      parameters:
+      - description: Client ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/client.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.Client'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Update client
+      tags:
+      - Clients
+  /products:
+    get:
+      description: Get paginated list of products with optional search
+      parameters:
+      - description: Limit (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      - description: Search by name, SKU, or barcode
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/product.Product'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: List products
+      tags:
+      - Products
+    post:
+      consumes:
+      - application/json
+      description: Create a new product
+      parameters:
+      - description: Product data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/product.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Create product
+      tags:
+      - Products
+  /products/{id}:
+    get:
+      description: Get a single product by its ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.Product'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get product by ID
+      tags:
+      - Products
+    patch:
+      consumes:
+      - application/json
+      description: Update product fields
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/product.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Update product
+      tags:
+      - Products
+  /products/{id}/card:
+    get:
+      description: Get product with stock, categories, and additional info
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.Card'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get product card
+      tags:
+      - Products
+  /products/{id}/categories:
+    get:
+      description: Get all categories associated with a product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/product.CategoryBrief'
+                  type: array
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get product categories
+      tags:
+      - Products
+    put:
+      consumes:
+      - application/json
+      description: Replace all categories for a product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Category IDs
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/product.SetCategoriesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/product.CategoryBrief'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Set product categories
+      tags:
+      - Products
+  /products/{id}/categories/{categoryId}:
+    delete:
+      description: Remove a single category from a product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Category ID
+        in: path
+        name: categoryId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Remove product category
+      tags:
+      - Products
+  /suppliers:
+    get:
+      description: Get paginated list of active suppliers with optional search by
+        name/phone/email
+      parameters:
+      - description: Limit (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      - description: Search by name, phone, or email
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/supplier.ListResponse'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: List suppliers
+      tags:
+      - Suppliers
+    post:
+      consumes:
+      - application/json
+      description: Create a new supplier
+      parameters:
+      - description: Supplier data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/supplier.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/supplier.Supplier'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Create supplier
+      tags:
+      - Suppliers
+  /suppliers/{id}:
+    delete:
+      description: Soft delete supplier by setting is_active=false
+      parameters:
+      - description: Supplier ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Delete supplier (soft)
+      tags:
+      - Suppliers
+    get:
+      description: Get a single supplier by its ID
+      parameters:
+      - description: Supplier ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/supplier.Supplier'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get supplier by ID
+      tags:
+      - Suppliers
+    patch:
+      consumes:
+      - application/json
+      description: Update supplier fields (name, phone, email, address, is_active)
+      parameters:
+      - description: Supplier ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/supplier.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/supplier.Supplier'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Update supplier
+      tags:
+      - Suppliers
+schemes:
+- http
+swagger: "2.0"

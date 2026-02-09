@@ -1,0 +1,172 @@
+package category
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+
+	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
+	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/response"
+)
+
+type Handler struct {
+	svc *Service
+}
+
+func NewHandler(svc *Service) *Handler {
+	return &Handler{svc: svc}
+}
+
+// Create godoc
+// @Summary      Create category
+// @Description  Create a new category with optional parent
+// @Tags         Categories
+// @Accept       json
+// @Produce      json
+// @Param        body  body      CreateRequest  true  "Category data"
+// @Success      201   {object}  response.APIResponse{data=Category}
+// @Failure      400   {object}  response.APIResponse
+// @Failure      409   {object}  response.APIResponse
+// @Router       /categories [post]
+func (h *Handler) Create(c *gin.Context) {
+	var req CreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	out, err := h.svc.Create(c.Request.Context(), req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.Created(c, out)
+}
+
+// List godoc
+// @Summary      List categories
+// @Description  Get paginated list of active categories with optional search
+// @Tags         Categories
+// @Produce      json
+// @Param        limit            query  int     false  "Limit (default 50, max 200)"
+// @Param        skip             query  int     false  "Skip (default 0)"
+// @Param        search           query  string  false  "Search by name"
+// @Param        order_by         query  string  false  "Order by field (name, created_at)" Enums(name,created_at)
+// @Param        order_direction  query  string  false  "Order direction (asc/desc)" Enums(asc,desc)
+// @Success      200              {object}  response.APIResponse{data=ListResponse}
+// @Failure      400              {object}  response.APIResponse
+// @Failure      500              {object}  response.APIResponse
+// @Router       /categories [get]
+func (h *Handler) List(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	skip, _ := strconv.Atoi(c.Query("skip"))
+	q := c.Query("search")
+
+	orderBy := c.Query("order_by")
+	if orderBy == "" {
+		orderBy = "created_at"
+	}
+	switch orderBy {
+	case "name", "created_at":
+	default:
+		c.Error(apperr.Validation("order_by must be 'name' or 'created_at'"))
+		return
+	}
+
+	orderDir := strings.ToLower(c.Query("order_direction"))
+	if orderDir == "" {
+		orderDir = "desc"
+	}
+	if orderDir != "asc" && orderDir != "desc" {
+		c.Error(apperr.Validation("order_direction must be 'asc' or 'desc'"))
+		return
+	}
+
+	out, err := h.svc.List(c.Request.Context(), limit, skip, orderBy, orderDir, q)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
+// Tree godoc
+// @Summary      Get category tree
+// @Description  Get hierarchical tree of all active categories
+// @Tags         Categories
+// @Produce      json
+// @Success      200  {object}  response.APIResponse{data=TreeResponse}
+// @Failure      500  {object}  response.APIResponse
+// @Router       /categories/tree [get]
+func (h *Handler) Tree(c *gin.Context) {
+	out, err := h.svc.Tree(c.Request.Context())
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
+// Get godoc
+// @Summary      Get category by ID
+// @Description  Get a single category by its ID
+// @Tags         Categories
+// @Produce      json
+// @Param        id   path      int  true  "Category ID"
+// @Success      200  {object}  response.APIResponse{data=Category}
+// @Failure      404  {object}  response.APIResponse
+// @Router       /categories/{id} [get]
+func (h *Handler) Get(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	out, err := h.svc.Get(c.Request.Context(), id)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
+// Update godoc
+// @Summary      Update category
+// @Description  Update category fields (name, parent_id, is_active)
+// @Tags         Categories
+// @Accept       json
+// @Produce      json
+// @Param        id    path      int            true  "Category ID"
+// @Param        body  body      UpdateRequest  true  "Update data"
+// @Success      200   {object}  response.APIResponse{data=Category}
+// @Failure      400   {object}  response.APIResponse
+// @Failure      404   {object}  response.APIResponse
+// @Router       /categories/{id} [patch]
+func (h *Handler) Update(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var req UpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	out, err := h.svc.Update(c.Request.Context(), id, req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
+// Delete godoc
+// @Summary      Delete category (soft)
+// @Description  Soft delete category by setting is_active=false
+// @Tags         Categories
+// @Produce      json
+// @Param        id   path      int  true  "Category ID"
+// @Success      200  {object}  response.APIResponse{data=object}
+// @Failure      404  {object}  response.APIResponse
+// @Router       /categories/{id} [delete]
+func (h *Handler) Delete(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
+}
