@@ -28,6 +28,8 @@ definitions:
     type: object
   category.CreateRequest:
     properties:
+      is_active:
+        type: boolean
       name:
         maxLength: 255
         minLength: 1
@@ -158,6 +160,10 @@ definitions:
     properties:
       barcode:
         type: string
+      category_ids:
+        items:
+          type: integer
+        type: array
       is_active:
         type: boolean
       name:
@@ -173,6 +179,19 @@ definitions:
     required:
     - name
     - unit
+    type: object
+  product.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/product.Product'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
     type: object
   product.Product:
     properties:
@@ -210,6 +229,10 @@ definitions:
     properties:
       barcode:
         type: string
+      category_ids:
+        items:
+          type: integer
+        type: array
       is_active:
         type: boolean
       name:
@@ -235,8 +258,35 @@ definitions:
       data: {}
       error:
         $ref: '#/definitions/response.APIError'
+      meta:
+        $ref: '#/definitions/response.Meta'
       success:
         type: boolean
+    type: object
+  response.Meta:
+    properties:
+      pagination:
+        $ref: '#/definitions/response.PaginationMeta'
+      timestamp:
+        description: Useful for frontend debugging / UX
+        type: string
+    type: object
+  response.PaginationMeta:
+    properties:
+      has_next:
+        type: boolean
+      has_prev:
+        type: boolean
+      limit:
+        type: integer
+      offset:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
     type: object
   supplier.CreateRequest:
     properties:
@@ -312,17 +362,35 @@ paths:
     get:
       description: Get paginated list of active categories with optional search
       parameters:
-      - description: Limit (default 50, max 200)
+      - description: Page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Limit (default 10, max 100)
         in: query
         name: limit
         type: integer
-      - description: Offset (default 0)
+      - description: Skip (legacy, default 0). If provided, overrides page/offset.
         in: query
-        name: offset
+        name: skip
         type: integer
       - description: Search by name
         in: query
-        name: q
+        name: search
+        type: string
+      - description: Order by field (name, created_at)
+        enum:
+        - name
+        - created_at
+        in: query
+        name: order_by
+        type: string
+      - description: Order direction (asc/desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order_direction
         type: string
       produces:
       - application/json
@@ -336,6 +404,10 @@ paths:
                 data:
                   $ref: '#/definitions/category.ListResponse'
               type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -497,17 +569,35 @@ paths:
     get:
       description: Get paginated list of active clients with optional search
       parameters:
-      - description: Limit (default 50, max 200)
+      - description: Page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Limit (default 10, max 100)
         in: query
         name: limit
         type: integer
-      - description: Offset (default 0)
+      - description: Skip (legacy, default 0). If provided, overrides page/offset.
         in: query
-        name: offset
+        name: skip
         type: integer
       - description: Search by name or phone
         in: query
-        name: q
+        name: search
+        type: string
+      - description: Order by field (name, created_at)
+        enum:
+        - name
+        - created_at
+        in: query
+        name: order_by
+        type: string
+      - description: Order direction (asc/desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order_direction
         type: string
       produces:
       - application/json
@@ -521,6 +611,10 @@ paths:
                 data:
                   $ref: '#/definitions/client.ListResponse'
               type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -662,19 +756,37 @@ paths:
       - Clients
   /products:
     get:
-      description: Get paginated list of products with optional search
+      description: Get paginated list of active products with optional search
       parameters:
-      - description: Limit (default 50, max 200)
+      - description: Page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Limit (default 10, max 100)
         in: query
         name: limit
         type: integer
-      - description: Offset (default 0)
+      - description: Skip (legacy, default 0). If provided, overrides page/offset.
         in: query
-        name: offset
+        name: skip
         type: integer
       - description: Search by name, SKU, or barcode
         in: query
-        name: q
+        name: search
+        type: string
+      - description: Order by field (name, created_at)
+        enum:
+        - name
+        - created_at
+        in: query
+        name: order_by
+        type: string
+      - description: Order direction (asc/desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order_direction
         type: string
       produces:
       - application/json
@@ -686,10 +798,12 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/product.Product'
-                  type: array
+                  $ref: '#/definitions/product.ListResponse'
               type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -724,10 +838,41 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
       summary: Create product
       tags:
       - Products
   /products/{id}:
+    delete:
+      description: Soft delete product by setting is_active=false
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Delete product (soft)
+      tags:
+      - Products
     get:
       description: Get a single product by its ID
       parameters:
@@ -789,6 +934,10 @@ paths:
             $ref: '#/definitions/response.APIResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/response.APIResponse'
       summary: Update product
@@ -931,17 +1080,35 @@ paths:
       description: Get paginated list of active suppliers with optional search by
         name/phone/email
       parameters:
-      - description: Limit (default 50, max 200)
+      - description: Page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Limit (default 10, max 100)
         in: query
         name: limit
         type: integer
-      - description: Offset (default 0)
+      - description: Skip (legacy, default 0). If provided, overrides page/offset.
         in: query
-        name: offset
+        name: skip
         type: integer
       - description: Search by name, phone, or email
         in: query
-        name: q
+        name: search
+        type: string
+      - description: Order by field (name, created_at)
+        enum:
+        - name
+        - created_at
+        in: query
+        name: order_by
+        type: string
+      - description: Order direction (asc/desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order_direction
         type: string
       produces:
       - application/json
@@ -955,6 +1122,10 @@ paths:
                 data:
                   $ref: '#/definitions/supplier.ListResponse'
               type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "500":
           description: Internal Server Error
           schema:

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/response"
 )
@@ -35,11 +36,13 @@ func (h *Handler) Create(c *gin.Context) {
 		c.Error(err)
 		return
 	}
+
 	out, err := h.svc.Create(c.Request.Context(), req)
 	if err != nil {
 		c.Error(err)
 		return
 	}
+
 	response.Created(c, out)
 }
 
@@ -48,8 +51,9 @@ func (h *Handler) Create(c *gin.Context) {
 // @Description  Get paginated list of active categories with optional search
 // @Tags         Categories
 // @Produce      json
-// @Param        limit            query  int     false  "Limit (default 50, max 200)"
-// @Param        skip             query  int     false  "Skip (default 0)"
+// @Param        page             query  int     false  "Page (default 1)"
+// @Param        limit            query  int     false  "Limit (default 10, max 100)"
+// @Param        skip             query  int     false  "Skip (legacy, default 0). If provided, overrides page/offset."
 // @Param        search           query  string  false  "Search by name"
 // @Param        order_by         query  string  false  "Order by field (name, created_at)" Enums(name,created_at)
 // @Param        order_direction  query  string  false  "Order direction (asc/desc)" Enums(asc,desc)
@@ -58,8 +62,49 @@ func (h *Handler) Create(c *gin.Context) {
 // @Failure      500              {object}  response.APIResponse
 // @Router       /categories [get]
 func (h *Handler) List(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.Query("limit"))
-	skip, _ := strconv.Atoi(c.Query("skip"))
+	// Defaults from pagination middleware (page+limit -> offset)
+	page := 1
+	limit := 10
+	offset := 0
+
+	if pRaw, ok := c.Get("pagination"); ok {
+		if p, ok := pRaw.(middleware.Pagination); ok {
+			if p.Page > 0 {
+				page = p.Page
+			}
+			if p.Limit > 0 {
+				limit = p.Limit
+			}
+			if p.Offset >= 0 {
+				offset = p.Offset
+			}
+		}
+	}
+
+	// legacy overrides
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	if v := c.Query("skip"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = n
+			// if skip used, we recompute page to be consistent
+			if limit > 0 {
+				page = (offset / limit) + 1
+			}
+		}
+	}
+
+	// Validate limit/offset hard
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	q := c.Query("search")
 
 	orderBy := c.Query("order_by")
@@ -82,13 +127,84 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	out, err := h.svc.List(c.Request.Context(), limit, skip, orderBy, orderDir, q)
+	out, err := h.svc.List(c.Request.Context(), limit, offset, orderBy, orderDir, q)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	response.OK(c, out)
+
+	// ✅ send list with pagination meta
+	response.List(c, out, page, out.Limit, out.Offset, out.Total)
 }
+
+// func (h *Handler) List(c *gin.Context) {
+// 	// Defaults from pagination middleware (page+limit -> offset)
+// 	limit := 10
+// 	offset := 0
+
+// 	if pRaw, ok := c.Get("pagination"); ok {
+// 		if p, ok := pRaw.(middleware.Pagination); ok {
+// 			if p.Limit > 0 {
+// 				limit = p.Limit
+// 			}
+// 			if p.Offset >= 0 {
+// 				offset = p.Offset
+// 			}
+// 		}
+// 	}
+
+// 	// Optional overrides (legacy or direct use)
+// 	// limit override
+// 	if v := c.Query("limit"); v != "" {
+// 		if n, err := strconv.Atoi(v); err == nil {
+// 			limit = n
+// 		}
+// 	}
+// 	// skip override (legacy) -> override offset
+// 	if v := c.Query("skip"); v != "" {
+// 		if n, err := strconv.Atoi(v); err == nil {
+// 			offset = n
+// 		}
+// 	}
+
+// 	// Validate limit/offset hard (backend-side, even if middleware already does it)
+// 	if limit <= 0 || limit > 200 {
+// 		limit = 50
+// 	}
+// 	if offset < 0 {
+// 		offset = 0
+// 	}
+
+// 	q := c.Query("search")
+
+// 	orderBy := c.Query("order_by")
+// 	if orderBy == "" {
+// 		orderBy = "created_at"
+// 	}
+// 	switch orderBy {
+// 	case "name", "created_at":
+// 	default:
+// 		c.Error(apperr.Validation("order_by must be 'name' or 'created_at'"))
+// 		return
+// 	}
+
+// 	orderDir := strings.ToLower(c.Query("order_direction"))
+// 	if orderDir == "" {
+// 		orderDir = "desc"
+// 	}
+// 	if orderDir != "asc" && orderDir != "desc" {
+// 		c.Error(apperr.Validation("order_direction must be 'asc' or 'desc'"))
+// 		return
+// 	}
+
+// 	out, err := h.svc.List(c.Request.Context(), limit, offset, orderBy, orderDir, q)
+// 	if err != nil {
+// 		c.Error(err)
+// 		return
+// 	}
+
+// 	response.OK(c, out)
+// }
 
 // Tree godoc
 // @Summary      Get category tree
@@ -140,11 +256,13 @@ func (h *Handler) Get(c *gin.Context) {
 // @Router       /categories/{id} [patch]
 func (h *Handler) Update(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+
 	var req UpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Error(err)
 		return
 	}
+
 	out, err := h.svc.Update(c.Request.Context(), id, req)
 	if err != nil {
 		c.Error(err)

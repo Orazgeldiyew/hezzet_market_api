@@ -40,8 +40,21 @@ func (s *Service) Get(ctx context.Context, id int) (Supplier, error) {
 	return sup, nil
 }
 
-func (s *Service) List(ctx context.Context, limit, offset int, q string) (ListResponse, error) {
-	items, total, err := s.repo.List(ctx, limit, offset, q)
+func (s *Service) List(ctx context.Context, limit, offset int, orderBy, orderDir, q string) (ListResponse, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if orderBy == "" {
+		orderBy = "created_at"
+	}
+	if orderDir == "" {
+		orderDir = "desc"
+	}
+
+	items, total, err := s.repo.List(ctx, limit, offset, orderBy, orderDir, q)
 	if err != nil {
 		return ListResponse{}, apperr.Internal(err)
 	}

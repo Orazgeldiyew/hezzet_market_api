@@ -2,9 +2,12 @@ package product
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
+	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/response"
 )
 
@@ -25,6 +28,7 @@ func NewHandler(svc *Service) *Handler {
 // @Param        body  body      CreateRequest  true  "Product data"
 // @Success      201   {object}  response.APIResponse{data=Product}
 // @Failure      400   {object}  response.APIResponse
+// @Failure      409   {object}  response.APIResponse
 // @Router       /products [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateRequest
@@ -42,26 +46,91 @@ func (h *Handler) Create(c *gin.Context) {
 
 // List godoc
 // @Summary      List products
-// @Description  Get paginated list of products with optional search
+// @Description  Get paginated list of active products with optional search
 // @Tags         Products
 // @Produce      json
-// @Param        limit   query     int     false  "Limit (default 50, max 200)"
-// @Param        offset  query     int     false  "Offset (default 0)"
-// @Param        q       query     string  false  "Search by name, SKU, or barcode"
-// @Success      200     {object}  response.APIResponse{data=[]Product}
-// @Failure      500     {object}  response.APIResponse
+// @Param        page             query  int     false  "Page (default 1)"
+// @Param        limit            query  int     false  "Limit (default 10, max 100)"
+// @Param        skip             query  int     false  "Skip (legacy, default 0). If provided, overrides page/offset."
+// @Param        search           query  string  false  "Search by name, SKU, or barcode"
+// @Param        order_by         query  string  false  "Order by field (name, created_at)" Enums(name,created_at)
+// @Param        order_direction  query  string  false  "Order direction (asc/desc)" Enums(asc,desc)
+// @Success      200              {object}  response.APIResponse{data=ListResponse}
+// @Failure      400              {object}  response.APIResponse
+// @Failure      500              {object}  response.APIResponse
 // @Router       /products [get]
 func (h *Handler) List(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.Query("limit"))
-	offset, _ := strconv.Atoi(c.Query("offset"))
-	q := c.Query("q")
+	// Defaults from pagination middleware (page+limit -> offset)
+	page := 1
+	limit := 10
+	offset := 0
 
-	out, err := h.svc.List(c.Request.Context(), limit, offset, q)
+	if pRaw, ok := c.Get("pagination"); ok {
+		if p, ok := pRaw.(middleware.Pagination); ok {
+			if p.Page > 0 {
+				page = p.Page
+			}
+			if p.Limit > 0 {
+				limit = p.Limit
+			}
+			if p.Offset >= 0 {
+				offset = p.Offset
+			}
+		}
+	}
+
+	// legacy overrides
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	if v := c.Query("skip"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = n
+			if limit > 0 {
+				page = (offset / limit) + 1
+			}
+		}
+	}
+
+	// Validate limit/offset hard
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	q := c.Query("search")
+
+	orderBy := c.Query("order_by")
+	if orderBy == "" {
+		orderBy = "created_at"
+	}
+	switch orderBy {
+	case "name", "created_at":
+	default:
+		c.Error(apperr.Validation("order_by must be 'name' or 'created_at'"))
+		return
+	}
+
+	orderDir := strings.ToLower(c.Query("order_direction"))
+	if orderDir == "" {
+		orderDir = "desc"
+	}
+	if orderDir != "asc" && orderDir != "desc" {
+		c.Error(apperr.Validation("order_direction must be 'asc' or 'desc'"))
+		return
+	}
+
+	out, err := h.svc.List(c.Request.Context(), limit, offset, orderBy, orderDir, q)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	response.OK(c, out)
+
+	response.List(c, out, page, out.Limit, out.Offset, out.Total)
 }
 
 // Get godoc
@@ -94,6 +163,7 @@ func (h *Handler) Get(c *gin.Context) {
 // @Success      200   {object}  response.APIResponse{data=Product}
 // @Failure      400   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
+// @Failure      409   {object}  response.APIResponse
 // @Router       /products/{id} [patch]
 func (h *Handler) Update(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -108,6 +178,24 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	response.OK(c, p)
+}
+
+// Delete godoc
+// @Summary      Delete product (soft)
+// @Description  Soft delete product by setting is_active=false
+// @Tags         Products
+// @Produce      json
+// @Param        id   path      int  true  "Product ID"
+// @Success      200  {object}  response.APIResponse{data=object}
+// @Failure      404  {object}  response.APIResponse
+// @Router       /products/{id} [delete]
+func (h *Handler) Delete(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
 }
 
 // GetCard godoc

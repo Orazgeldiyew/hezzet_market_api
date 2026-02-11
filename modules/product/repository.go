@@ -2,6 +2,7 @@ package product
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -62,27 +63,57 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 	return p, err
 }
 
-func (r *Repository) List(ctx context.Context, limit, offset int, qstr string) ([]Product, error) {
-	if limit <= 0 {
+func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, orderDir, qstr string) ([]Product, int, error) {
+	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	if offset < 0 {
 		offset = 0
 	}
 
-	q := `
+	// total count
+	countSQL := `
+		SELECT COUNT(*) FROM products
+		WHERE is_active = true
+		  AND ($1 = '' OR
+		       name ILIKE '%' || $1 || '%' OR
+		       sku ILIKE '%' || $1 || '%' OR
+		       barcode ILIKE '%' || $1 || '%')
+	`
+	var total int
+	if err := r.db.QueryRow(ctx, countSQL, qstr).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// whitelist order column
+	col := "created_at"
+	switch orderBy {
+	case "name":
+		col = "name"
+	case "created_at":
+		col = "created_at"
+	}
+
+	dir := "DESC"
+	if orderDir == "asc" {
+		dir = "ASC"
+	}
+
+	sql := fmt.Sprintf(`
 		SELECT id, name, sku, barcode, unit, purchase_price, sale_price, is_active, created_at, updated_at
 		FROM products
-		WHERE ($1 = '' OR
-			   name ILIKE '%'||$1||'%' OR
-			   sku ILIKE '%'||$1||'%' OR
-			   barcode ILIKE '%'||$1||'%')
-		ORDER BY id DESC
+		WHERE is_active = true
+		  AND ($1 = '' OR
+		       name ILIKE '%%' || $1 || '%%' OR
+		       sku ILIKE '%%' || $1 || '%%' OR
+		       barcode ILIKE '%%' || $1 || '%%')
+		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
-	`
-	rows, err := r.db.Query(ctx, q, qstr, limit, offset)
+	`, col, dir)
+
+	rows, err := r.db.Query(ctx, sql, qstr, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -93,11 +124,23 @@ func (r *Repository) List(ctx context.Context, limit, offset int, qstr string) (
 			&p.ID, &p.Name, &p.SKU, &p.Barcode, &p.Unit,
 			&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, p)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
+}
+
+func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
+	ct, err := r.db.Exec(ctx,
+		`UPDATE products SET is_active=false, updated_at=now() WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }
 
 func IsNoRows(err error) bool { return err == pgx.ErrNoRows }

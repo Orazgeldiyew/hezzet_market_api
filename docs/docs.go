@@ -28,20 +28,46 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Limit (default 50, max 200)",
+                        "description": "Page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default 10, max 100)",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Offset (default 0)",
-                        "name": "offset",
+                        "description": "Skip (legacy, default 0). If provided, overrides page/offset.",
+                        "name": "skip",
                         "in": "query"
                     },
                     {
                         "type": "string",
                         "description": "Search by name",
-                        "name": "q",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "created_at"
+                        ],
+                        "type": "string",
+                        "description": "Order by field (name, created_at)",
+                        "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Order direction (asc/desc)",
+                        "name": "order_direction",
                         "in": "query"
                     }
                 ],
@@ -62,6 +88,12 @@ const docTemplate = `{
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
                         }
                     },
                     "500": {
@@ -335,20 +367,46 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Limit (default 50, max 200)",
+                        "description": "Page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default 10, max 100)",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Offset (default 0)",
-                        "name": "offset",
+                        "description": "Skip (legacy, default 0). If provided, overrides page/offset.",
+                        "name": "skip",
                         "in": "query"
                     },
                     {
                         "type": "string",
                         "description": "Search by name or phone",
-                        "name": "q",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "created_at"
+                        ],
+                        "type": "string",
+                        "description": "Order by field (name, created_at)",
+                        "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Order direction (asc/desc)",
+                        "name": "order_direction",
                         "in": "query"
                     }
                 ],
@@ -369,6 +427,12 @@ const docTemplate = `{
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
                         }
                     },
                     "500": {
@@ -599,7 +663,7 @@ const docTemplate = `{
         },
         "/products": {
             "get": {
-                "description": "Get paginated list of products with optional search",
+                "description": "Get paginated list of active products with optional search",
                 "produces": [
                     "application/json"
                 ],
@@ -610,20 +674,46 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Limit (default 50, max 200)",
+                        "description": "Page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default 10, max 100)",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Offset (default 0)",
-                        "name": "offset",
+                        "description": "Skip (legacy, default 0). If provided, overrides page/offset.",
+                        "name": "skip",
                         "in": "query"
                     },
                     {
                         "type": "string",
                         "description": "Search by name, SKU, or barcode",
-                        "name": "q",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "created_at"
+                        ],
+                        "type": "string",
+                        "description": "Order by field (name, created_at)",
+                        "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Order direction (asc/desc)",
+                        "name": "order_direction",
                         "in": "query"
                     }
                 ],
@@ -639,14 +729,17 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/product.Product"
-                                            }
+                                            "$ref": "#/definitions/product.ListResponse"
                                         }
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
                         }
                     },
                     "500": {
@@ -704,6 +797,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
                         }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
                     }
                 }
             }
@@ -740,6 +839,51 @@ const docTemplate = `{
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/product.Product"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Soft delete product by setting is_active=false",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Products"
+                ],
+                "summary": "Delete product (soft)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Product ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object"
                                         }
                                     }
                                 }
@@ -811,6 +955,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
                         }
@@ -1048,20 +1198,46 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Limit (default 50, max 200)",
+                        "description": "Page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default 10, max 100)",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Offset (default 0)",
-                        "name": "offset",
+                        "description": "Skip (legacy, default 0). If provided, overrides page/offset.",
+                        "name": "skip",
                         "in": "query"
                     },
                     {
                         "type": "string",
                         "description": "Search by name, phone, or email",
-                        "name": "q",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "created_at"
+                        ],
+                        "type": "string",
+                        "description": "Order by field (name, created_at)",
+                        "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Order direction (asc/desc)",
+                        "name": "order_direction",
                         "in": "query"
                     }
                 ],
@@ -1082,6 +1258,12 @@ const docTemplate = `{
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
                         }
                     },
                     "500": {
@@ -1346,6 +1528,9 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "is_active": {
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 255,
@@ -1541,6 +1726,12 @@ const docTemplate = `{
                 "barcode": {
                     "type": "string"
                 },
+                "category_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "is_active": {
                     "type": "boolean"
                 },
@@ -1558,6 +1749,26 @@ const docTemplate = `{
                 },
                 "unit": {
                     "type": "string"
+                }
+            }
+        },
+        "product.ListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/product.Product"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -1616,6 +1827,12 @@ const docTemplate = `{
                 "barcode": {
                     "type": "string"
                 },
+                "category_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "is_active": {
                     "type": "boolean"
                 },
@@ -1654,8 +1871,49 @@ const docTemplate = `{
                 "error": {
                     "$ref": "#/definitions/response.APIError"
                 },
+                "meta": {
+                    "$ref": "#/definitions/response.Meta"
+                },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "response.Meta": {
+            "type": "object",
+            "properties": {
+                "pagination": {
+                    "$ref": "#/definitions/response.PaginationMeta"
+                },
+                "timestamp": {
+                    "description": "Useful for frontend debugging / UX",
+                    "type": "string"
+                }
+            }
+        },
+        "response.PaginationMeta": {
+            "type": "object",
+            "properties": {
+                "has_next": {
+                    "type": "boolean"
+                },
+                "has_prev": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
                 }
             }
         },

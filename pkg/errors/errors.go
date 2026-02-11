@@ -7,9 +7,10 @@ type AppError struct {
 	Err        error  `json:"-"`
 }
 
-func (e *AppError) Error() string {
-	return e.Message
-}
+func (e *AppError) Error() string { return e.Message }
+
+// полезно для errors.Is / errors.As
+func (e *AppError) Unwrap() error { return e.Err }
 
 func NotFound(code, msg string) *AppError {
 	return &AppError{Code: code, Message: msg, HTTPStatus: 404}
@@ -20,5 +21,10 @@ func Validation(msg string) *AppError {
 }
 
 func Internal(err error) *AppError {
-	return &AppError{Code: "INTERNAL_ERROR", Message: "internal error", HTTPStatus: 500, Err: err}
+	return &AppError{
+		Code:       "INTERNAL_ERROR",
+		Message:    "internal error",
+		HTTPStatus: 500,
+		Err:        err,
+	}
 }

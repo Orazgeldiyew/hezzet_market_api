@@ -2,6 +2,7 @@ package category
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,7 +42,8 @@ func (r *Repository) GetByID(ctx context.Context, id int) (Category, error) {
 	return c, err
 }
 
-func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, orderDir, q string) ([]Category, int, error){
+func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, orderDir, q string) ([]Category, int, error) {
+	// defaults + bounds
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -49,7 +51,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		offset = 0
 	}
 
-	// Count total matching rows
+	// total count
 	countSQL := `
 		SELECT COUNT(*) FROM categories
 		WHERE is_active = true
@@ -60,15 +62,29 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		return nil, 0, err
 	}
 
-	// Get data
-	sql := `
+	// whitelist order column
+	col := "created_at"
+	switch orderBy {
+	case "name":
+		col = "name"
+	case "created_at":
+		col = "created_at"
+	}
+
+	dir := "DESC"
+	if orderDir == "asc" {
+		dir = "ASC"
+	}
+
+	sql := fmt.Sprintf(`
 		SELECT id, name, parent_id, is_active, created_at
 		FROM categories
 		WHERE is_active = true
-		  AND ($1 = '' OR name ILIKE '%' || $1 || '%')
-		ORDER BY name
+		  AND ($1 = '' OR name ILIKE '%%' || $1 || '%%')
+		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
-	`
+	`, col, dir)
+
 	rows, err := r.db.Query(ctx, sql, q, limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -131,8 +147,7 @@ func (r *Repository) Update(ctx context.Context, id int, req UpdateRequest) (Cat
 }
 
 func (r *Repository) SoftDelete(ctx context.Context, id int) error {
-	ct, err := r.db.Exec(ctx,
-		`UPDATE categories SET is_active=false WHERE id=$1`, id)
+	ct, err := r.db.Exec(ctx, `UPDATE categories SET is_active=false WHERE id=$1`, id)
 	if err != nil {
 		return err
 	}

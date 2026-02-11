@@ -2,6 +2,7 @@ package supplier
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,7 +42,7 @@ func (r *Repository) GetByID(ctx context.Context, id int) (Supplier, error) {
 	return s, err
 }
 
-func (r *Repository) List(ctx context.Context, limit, offset int, q string) ([]Supplier, int, error) {
+func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, orderDir, q string) ([]Supplier, int, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -63,18 +64,32 @@ func (r *Repository) List(ctx context.Context, limit, offset int, q string) ([]S
 		return nil, 0, err
 	}
 
-	// Get data
-	sql := `
+	// whitelist order column
+	col := "created_at"
+	switch orderBy {
+	case "name":
+		col = "name"
+	case "created_at":
+		col = "created_at"
+	}
+
+	dir := "DESC"
+	if orderDir == "asc" {
+		dir = "ASC"
+	}
+
+	sql := fmt.Sprintf(`
 		SELECT id, name, phone, email, address, is_active, created_at
 		FROM suppliers
 		WHERE is_active = true
 		  AND ($1 = '' OR
-		       name ILIKE '%' || $1 || '%' OR
-		       phone ILIKE '%' || $1 || '%' OR
-		       email ILIKE '%' || $1 || '%')
-		ORDER BY name
+		       name ILIKE '%%' || $1 || '%%' OR
+		       phone ILIKE '%%' || $1 || '%%' OR
+		       email ILIKE '%%' || $1 || '%%')
+		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
-	`
+	`, col, dir)
+
 	rows, err := r.db.Query(ctx, sql, q, limit, offset)
 	if err != nil {
 		return nil, 0, err

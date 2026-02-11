@@ -23,6 +23,7 @@ type CreateRequest struct {
 	PurchasePrice float64 `json:"purchase_price"`
 	SalePrice     float64 `json:"sale_price"`
 	IsActive      *bool   `json:"is_active"`
+	CategoryIDs   []int64 `json:"category_ids"`
 }
 
 type UpdateRequest struct {
@@ -33,6 +34,15 @@ type UpdateRequest struct {
 	PurchasePrice *float64 `json:"purchase_price"`
 	SalePrice     *float64 `json:"sale_price"`
 	IsActive      *bool    `json:"is_active"`
+	CategoryIDs   *[]int64 `json:"category_ids"`
+}
+
+// ListResponse for paginated product list
+type ListResponse struct {
+	Items  []Product `json:"items"`
+	Total  int       `json:"total"`
+	Limit  int       `json:"limit"`
+	Offset int       `json:"offset"`
 }
 
 type Card struct {
