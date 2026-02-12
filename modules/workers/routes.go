@@ -1,4 +1,4 @@
-package category
+package workers
 
 import (
 	"github.com/gin-gonic/gin"
@@ -12,21 +12,26 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 	svc := NewService(repo)
 	h := NewHandler(svc)
 
-	// Read: operator, cashier, manager (admin bypass)
-	read := rg.Group("/categories")
-	read.Use(middleware.RequireRoles("operator", "cashier", "manager"))
+	// Read: manager, operator (admin bypass)
+	read := rg.Group("/workers")
+	read.Use(middleware.RequireRoles("manager", "operator"))
 	{
 		read.GET("", middleware.PaginationMiddleware(), h.List)
-		read.GET("/tree", h.Tree)
 		read.GET("/:id", h.Get)
 	}
 
-	// Write: operator (admin bypass)
-	write := rg.Group("/categories")
-	write.Use(middleware.RequireRoles("operator"))
+	// Write: manager (admin bypass)
+	write := rg.Group("/workers")
+	write.Use(middleware.RequireRoles("manager"))
 	{
 		write.POST("", h.Create)
 		write.PATCH("/:id", h.Update)
-		write.DELETE("/:id", h.Delete)
+	}
+
+	// Delete: admin only
+	admin := rg.Group("/workers")
+	admin.Use(middleware.RequireRoles())
+	{
+		admin.DELETE("/:id", h.Delete)
 	}
 }

@@ -28,3 +28,14 @@ func Internal(err error) *AppError {
 		Err:        err,
 	}
 }
+
+func Unauthorized(msg string) *AppError {
+	return &AppError{Code: "UNAUTHORIZED", Message: msg, HTTPStatus: 401}
+}
+
+func Forbidden(msg string) *AppError {
+	return &AppError{Code: "FORBIDDEN", Message: msg, HTTPStatus: 403}
+}
+func Conflict(code, msg string) *AppError {
+	return &AppError{Code: code, Message: msg, HTTPStatus: 409}
+}

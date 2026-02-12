@@ -1,5 +1,139 @@
 basePath: /
 definitions:
+  auth.ChangePasswordRequest:
+    properties:
+      password:
+        minLength: 6
+        type: string
+    required:
+    - password
+    type: object
+  auth.CreateUserRequest:
+    properties:
+      email:
+        type: string
+      full_name:
+        type: string
+      is_active:
+        type: boolean
+      password:
+        minLength: 6
+        type: string
+      phone:
+        type: string
+      roles:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      username:
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - password
+    - roles
+    - username
+    type: object
+  auth.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/auth.UserWithRoles'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  auth.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  auth.LoginResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      roles:
+        items:
+          type: string
+        type: array
+      token_type:
+        type: string
+      user:
+        $ref: '#/definitions/auth.UserDTO'
+    type: object
+  auth.UpdateUserRequest:
+    properties:
+      email:
+        type: string
+      full_name:
+        type: string
+      is_active:
+        type: boolean
+      phone:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      username:
+        maxLength: 50
+        minLength: 3
+        type: string
+    type: object
+  auth.UserDTO:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      phone:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  auth.UserWithRoles:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      phone:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
   category.Category:
     properties:
       created_at:
@@ -70,9 +204,42 @@ definitions:
       parent_id:
         type: integer
     type: object
-  client.Client:
+  customer.AddSpentRequest:
     properties:
+      amount:
+        type: number
+    required:
+    - amount
+    type: object
+  customer.CreateRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      notes:
+        type: string
+      phone:
+        maxLength: 50
+        type: string
+      type:
+        enum:
+        - regular
+        - wholesale
+        type: string
+    required:
+    - name
+    type: object
+  customer.Customer:
+    properties:
+      bonus_points:
+        type: number
       created_at:
+        type: string
+      deleted_at:
         type: string
       email:
         type: string
@@ -82,31 +249,22 @@ definitions:
         type: boolean
       name:
         type: string
+      notes:
+        type: string
       phone:
+        type: string
+      total_spent:
+        type: number
+      type:
         type: string
       updated_at:
         type: string
     type: object
-  client.CreateRequest:
-    properties:
-      email:
-        maxLength: 255
-        type: string
-      name:
-        maxLength: 255
-        minLength: 1
-        type: string
-      phone:
-        maxLength: 50
-        type: string
-    required:
-    - name
-    type: object
-  client.ListResponse:
+  customer.ListResponse:
     properties:
       items:
         items:
-          $ref: '#/definitions/client.Client'
+          $ref: '#/definitions/customer.Customer'
         type: array
       limit:
         type: integer
@@ -115,7 +273,7 @@ definitions:
       total:
         type: integer
     type: object
-  client.UpdateRequest:
+  customer.UpdateRequest:
     properties:
       email:
         maxLength: 255
@@ -126,8 +284,15 @@ definitions:
         maxLength: 255
         minLength: 1
         type: string
+      notes:
+        type: string
       phone:
         maxLength: 50
+        type: string
+      type:
+        enum:
+        - regular
+        - wholesale
         type: string
     type: object
   product.Card:
@@ -352,12 +517,428 @@ definitions:
         maxLength: 50
         type: string
     type: object
+  workers.CreateRequest:
+    properties:
+      address:
+        type: string
+      department:
+        maxLength: 100
+        type: string
+      email:
+        maxLength: 255
+        type: string
+      hire_date:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      notes:
+        type: string
+      phone:
+        maxLength: 50
+        type: string
+      position:
+        maxLength: 100
+        type: string
+      salary:
+        minimum: 0
+        type: number
+    required:
+    - name
+    type: object
+  workers.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/workers.Worker'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  workers.UpdateRequest:
+    properties:
+      address:
+        type: string
+      department:
+        maxLength: 100
+        type: string
+      email:
+        maxLength: 255
+        type: string
+      hire_date:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      notes:
+        type: string
+      phone:
+        maxLength: 50
+        type: string
+      position:
+        maxLength: 100
+        type: string
+      salary:
+        minimum: 0
+        type: number
+    type: object
+  workers.Worker:
+    properties:
+      address:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      department:
+        type: string
+      email:
+        type: string
+      hire_date:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      notes:
+        type: string
+      phone:
+        type: string
+      position:
+        type: string
+      salary:
+        type: number
+      updated_at:
+        type: string
+    type: object
 info:
   contact: {}
   description: Market backend (products, stock, income, sales)
   title: Hezzet Market API
   version: "1.0"
 paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate with username and password
+      parameters:
+      - description: Login credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.LoginResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: User login
+      tags:
+      - Auth
+  /auth/users:
+    get:
+      description: Get paginated list of users (admin only)
+      parameters:
+      - description: Page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Limit (default 10, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Skip (legacy, default 0)
+        in: query
+        name: skip
+        type: integer
+      - description: Search by username or full_name
+        in: query
+        name: search
+        type: string
+      - description: Order by field (username, created_at)
+        enum:
+        - username
+        - created_at
+        in: query
+        name: order_by
+        type: string
+      - description: Order direction (asc/desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order_direction
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.ListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List users
+      tags:
+      - Auth
+    post:
+      consumes:
+      - application/json
+      description: Create a new user with roles (admin only)
+      parameters:
+      - description: User data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.UserWithRoles'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create user
+      tags:
+      - Auth
+  /auth/users/{id}:
+    delete:
+      description: Soft delete user (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete user (soft)
+      tags:
+      - Auth
+    get:
+      description: Get a single user by ID (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.UserWithRoles'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user by ID
+      tags:
+      - Auth
+    patch:
+      consumes:
+      - application/json
+      description: Update user fields (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.UserWithRoles'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user
+      tags:
+      - Auth
+  /auth/users/{id}/password:
+    post:
+      consumes:
+      - application/json
+      description: Change password (admin or self)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: New password
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Change user password
+      tags:
+      - Auth
   /categories:
     get:
       description: Get paginated list of active categories with optional search
@@ -412,6 +993,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: List categories
       tags:
       - Categories
@@ -442,10 +1025,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "409":
           description: Conflict
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Create category
       tags:
       - Categories
@@ -470,10 +1063,20 @@ paths:
                 data:
                   type: object
               type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Delete category (soft)
       tags:
       - Categories
@@ -501,6 +1104,8 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Get category by ID
       tags:
       - Categories
@@ -540,6 +1145,8 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Update category
       tags:
       - Categories
@@ -562,18 +1169,21 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Get category tree
       tags:
       - Categories
-  /clients:
+  /customers:
     get:
-      description: Get paginated list of active clients with optional search
+      description: Get paginated list of customers (not deleted). By default returns
+        only active=true; set active_only=false to include inactive.
       parameters:
       - description: Page (default 1)
         in: query
         name: page
         type: integer
-      - description: Limit (default 10, max 100)
+      - description: Limit (default 10, max 200)
         in: query
         name: limit
         type: integer
@@ -581,14 +1191,19 @@ paths:
         in: query
         name: skip
         type: integer
-      - description: Search by name or phone
+      - description: Search by name, phone, or email
         in: query
         name: search
         type: string
-      - description: Order by field (name, created_at)
+      - description: Only active customers (default true)
+        in: query
+        name: active_only
+        type: boolean
+      - description: Order by field (name, created_at, total_spent)
         enum:
         - name
         - created_at
+        - total_spent
         in: query
         name: order_by
         type: string
@@ -609,30 +1224,39 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/client.ListResponse'
+                  $ref: '#/definitions/customer.ListResponse'
               type: object
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/response.APIResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/response.APIResponse'
-      summary: List clients
+      security:
+      - BearerAuth: []
+      summary: List customers
       tags:
-      - Clients
+      - Customers
     post:
       consumes:
       - application/json
-      description: Create a new client (customer)
       parameters:
-      - description: Client data
+      - description: Customer data
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/client.CreateRequest'
+          $ref: '#/definitions/customer.CreateRequest'
       produces:
       - application/json
       responses:
@@ -643,24 +1267,35 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/client.Client'
+                  $ref: '#/definitions/customer.Customer'
               type: object
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/response.APIResponse'
         "409":
           description: Conflict
           schema:
             $ref: '#/definitions/response.APIResponse'
-      summary: Create client
+      security:
+      - BearerAuth: []
+      summary: Create customer
       tags:
-      - Clients
-  /clients/{id}:
+      - Customers
+  /customers/{id}:
     delete:
-      description: Soft delete client by setting is_active=false
+      description: 'Soft delete customer: sets deleted_at=now and is_active=false
+        (admin only)'
       parameters:
-      - description: Client ID
+      - description: Customer ID
         in: path
         name: id
         required: true
@@ -677,17 +1312,28 @@ paths:
                 data:
                   type: object
               type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
-      summary: Delete client (soft)
+      security:
+      - BearerAuth: []
+      summary: Delete customer (soft)
       tags:
-      - Clients
+      - Customers
     get:
-      description: Get a single active client by its ID
+      description: Get a single customer by its ID (404 only if deleted). If inactive,
+        still returns object with is_active=false.
       parameters:
-      - description: Client ID
+      - description: Customer ID
         in: path
         name: id
         required: true
@@ -702,21 +1348,31 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/client.Client'
+                  $ref: '#/definitions/customer.Customer'
               type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
-      summary: Get client by ID
+      security:
+      - BearerAuth: []
+      summary: Get customer by ID
       tags:
-      - Clients
+      - Customers
     patch:
       consumes:
       - application/json
-      description: Update client fields (name, phone, email, is_active)
+      description: Update customer fields (cashier/operator/admin)
       parameters:
-      - description: Client ID
+      - description: Customer ID
         in: path
         name: id
         required: true
@@ -726,7 +1382,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/client.UpdateRequest'
+          $ref: '#/definitions/customer.UpdateRequest'
       produces:
       - application/json
       responses:
@@ -737,23 +1393,79 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/client.Client'
+                  $ref: '#/definitions/customer.Customer'
               type: object
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/response.APIResponse'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
-        "409":
-          description: Conflict
+      security:
+      - BearerAuth: []
+      summary: Update customer
+      tags:
+      - Customers
+  /customers/{id}/spent:
+    post:
+      consumes:
+      - application/json
+      description: Add spent amount and calculate bonus points (1% of amount)
+      parameters:
+      - description: Customer ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Amount
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/customer.AddSpentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/customer.Customer'
+              type: object
+        "400":
+          description: Bad Request
           schema:
             $ref: '#/definitions/response.APIResponse'
-      summary: Update client
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Add spent amount
       tags:
-      - Clients
+      - Customers
   /products:
     get:
       description: Get paginated list of active products with optional search
@@ -808,6 +1520,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: List products
       tags:
       - Products
@@ -838,10 +1552,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "409":
           description: Conflict
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Create product
       tags:
       - Products
@@ -866,10 +1590,20 @@ paths:
                 data:
                   type: object
               type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Delete product (soft)
       tags:
       - Products
@@ -897,6 +1631,8 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Get product by ID
       tags:
       - Products
@@ -940,6 +1676,8 @@ paths:
           description: Conflict
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Update product
       tags:
       - Products
@@ -968,6 +1706,8 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Get product card
       tags:
       - Products
@@ -998,6 +1738,8 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Get product categories
       tags:
       - Products
@@ -1039,6 +1781,8 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Set product categories
       tags:
       - Products
@@ -1072,6 +1816,8 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Remove product category
       tags:
       - Products
@@ -1130,6 +1876,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: List suppliers
       tags:
       - Suppliers
@@ -1160,6 +1908,16 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Create supplier
       tags:
       - Suppliers
@@ -1184,10 +1942,20 @@ paths:
                 data:
                   type: object
               type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Delete supplier (soft)
       tags:
       - Suppliers
@@ -1215,6 +1983,8 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Get supplier by ID
       tags:
       - Suppliers
@@ -1254,9 +2024,248 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
       summary: Update supplier
       tags:
       - Suppliers
+  /workers:
+    get:
+      description: Get paginated list of workers. By default returns only active;
+        set active_only=false to include inactive.
+      parameters:
+      - description: Page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Limit (default 10, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Skip (legacy, default 0)
+        in: query
+        name: skip
+        type: integer
+      - description: Search by name, phone, or email
+        in: query
+        name: search
+        type: string
+      - description: Only active workers (default true)
+        in: query
+        name: active_only
+        type: boolean
+      - description: Order by field (name, created_at)
+        enum:
+        - name
+        - created_at
+        in: query
+        name: order_by
+        type: string
+      - description: Order direction (asc/desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order_direction
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/workers.ListResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List workers
+      tags:
+      - Workers
+    post:
+      consumes:
+      - application/json
+      description: Create a new worker (store employee)
+      parameters:
+      - description: Worker data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/workers.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/workers.Worker'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create worker
+      tags:
+      - Workers
+  /workers/{id}:
+    delete:
+      description: 'Soft delete worker: sets deleted_at=now and is_active=false'
+      parameters:
+      - description: Worker ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete worker (soft)
+      tags:
+      - Workers
+    get:
+      description: Get a single worker by ID (404 only if deleted)
+      parameters:
+      - description: Worker ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/workers.Worker'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get worker by ID
+      tags:
+      - Workers
+    patch:
+      consumes:
+      - application/json
+      description: Update worker fields
+      parameters:
+      - description: Worker ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/workers.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/workers.Worker'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update worker
+      tags:
+      - Workers
 schemes:
 - http
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

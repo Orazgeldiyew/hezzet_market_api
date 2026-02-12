@@ -1,6 +1,8 @@
 package category
 
-import "time"
+import (
+	"time"
+)
 
 // Category represents a product category with hierarchy support
 type Category struct {
@@ -37,16 +39,6 @@ type UpdateRequest struct {
 	Name     *string `json:"name" binding:"omitempty,min=1,max=255"`
 	ParentID *int    `json:"parent_id"`
 	IsActive *bool   `json:"is_active"`
-}
-
-// ListQuery for filtering categories
-type ListQuery struct {
-	Limit          int    `form:"limit"`
-	Skip           int    `form:"skip"`
-	Page           int    `form:"page"`
-	Search         string `form:"search"`
-	OrderBy        string `form:"order_by"`
-	OrderDirection string `form:"order_direction"`
 }
 
 // ListResponse for paginated category list

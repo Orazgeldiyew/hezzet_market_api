@@ -25,9 +25,12 @@ func NewHandler(svc *Service) *Handler {
 // @Tags         Categories
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        body  body      CreateRequest  true  "Category data"
 // @Success      201   {object}  response.APIResponse{data=Category}
 // @Failure      400   {object}  response.APIResponse
+// @Failure      401   {object}  response.APIResponse
+// @Failure      403   {object}  response.APIResponse
 // @Failure      409   {object}  response.APIResponse
 // @Router       /categories [post]
 func (h *Handler) Create(c *gin.Context) {
@@ -51,6 +54,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Description  Get paginated list of active categories with optional search
 // @Tags         Categories
 // @Produce      json
+// @Security     BearerAuth
 // @Param        page             query  int     false  "Page (default 1)"
 // @Param        limit            query  int     false  "Limit (default 10, max 100)"
 // @Param        skip             query  int     false  "Skip (legacy, default 0). If provided, overrides page/offset."
@@ -133,84 +137,15 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	// ✅ send list with pagination meta
 	response.List(c, out, page, out.Limit, out.Offset, out.Total)
 }
-
-// func (h *Handler) List(c *gin.Context) {
-// 	// Defaults from pagination middleware (page+limit -> offset)
-// 	limit := 10
-// 	offset := 0
-
-// 	if pRaw, ok := c.Get("pagination"); ok {
-// 		if p, ok := pRaw.(middleware.Pagination); ok {
-// 			if p.Limit > 0 {
-// 				limit = p.Limit
-// 			}
-// 			if p.Offset >= 0 {
-// 				offset = p.Offset
-// 			}
-// 		}
-// 	}
-
-// 	// Optional overrides (legacy or direct use)
-// 	// limit override
-// 	if v := c.Query("limit"); v != "" {
-// 		if n, err := strconv.Atoi(v); err == nil {
-// 			limit = n
-// 		}
-// 	}
-// 	// skip override (legacy) -> override offset
-// 	if v := c.Query("skip"); v != "" {
-// 		if n, err := strconv.Atoi(v); err == nil {
-// 			offset = n
-// 		}
-// 	}
-
-// 	// Validate limit/offset hard (backend-side, even if middleware already does it)
-// 	if limit <= 0 || limit > 200 {
-// 		limit = 50
-// 	}
-// 	if offset < 0 {
-// 		offset = 0
-// 	}
-
-// 	q := c.Query("search")
-
-// 	orderBy := c.Query("order_by")
-// 	if orderBy == "" {
-// 		orderBy = "created_at"
-// 	}
-// 	switch orderBy {
-// 	case "name", "created_at":
-// 	default:
-// 		c.Error(apperr.Validation("order_by must be 'name' or 'created_at'"))
-// 		return
-// 	}
-
-// 	orderDir := strings.ToLower(c.Query("order_direction"))
-// 	if orderDir == "" {
-// 		orderDir = "desc"
-// 	}
-// 	if orderDir != "asc" && orderDir != "desc" {
-// 		c.Error(apperr.Validation("order_direction must be 'asc' or 'desc'"))
-// 		return
-// 	}
-
-// 	out, err := h.svc.List(c.Request.Context(), limit, offset, orderBy, orderDir, q)
-// 	if err != nil {
-// 		c.Error(err)
-// 		return
-// 	}
-
-// 	response.OK(c, out)
-// }
 
 // Tree godoc
 // @Summary      Get category tree
 // @Description  Get hierarchical tree of all active categories
 // @Tags         Categories
 // @Produce      json
+// @Security     BearerAuth
 // @Success      200  {object}  response.APIResponse{data=TreeResponse}
 // @Failure      500  {object}  response.APIResponse
 // @Router       /categories/tree [get]
@@ -228,6 +163,7 @@ func (h *Handler) Tree(c *gin.Context) {
 // @Description  Get a single category by its ID
 // @Tags         Categories
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id   path      int  true  "Category ID"
 // @Success      200  {object}  response.APIResponse{data=Category}
 // @Failure      404  {object}  response.APIResponse
@@ -248,6 +184,7 @@ func (h *Handler) Get(c *gin.Context) {
 // @Tags         Categories
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id    path      int            true  "Category ID"
 // @Param        body  body      UpdateRequest  true  "Update data"
 // @Success      200   {object}  response.APIResponse{data=Category}
@@ -276,8 +213,11 @@ func (h *Handler) Update(c *gin.Context) {
 // @Description  Soft delete category by setting is_active=false
 // @Tags         Categories
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id   path      int  true  "Category ID"
 // @Success      200  {object}  response.APIResponse{data=object}
+// @Failure      401  {object}  response.APIResponse
+// @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
 // @Router       /categories/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {

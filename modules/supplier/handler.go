@@ -25,9 +25,12 @@ func NewHandler(svc *Service) *Handler {
 // @Tags         Suppliers
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        body  body      CreateRequest  true  "Supplier data"
 // @Success      201   {object}  response.APIResponse{data=Supplier}
 // @Failure      400   {object}  response.APIResponse
+// @Failure      401   {object}  response.APIResponse
+// @Failure      403   {object}  response.APIResponse
 // @Router       /suppliers [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateRequest
@@ -48,6 +51,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Description  Get paginated list of active suppliers with optional search by name/phone/email
 // @Tags         Suppliers
 // @Produce      json
+// @Security     BearerAuth
 // @Param        page             query  int     false  "Page (default 1)"
 // @Param        limit            query  int     false  "Limit (default 10, max 100)"
 // @Param        skip             query  int     false  "Skip (legacy, default 0). If provided, overrides page/offset."
@@ -137,6 +141,7 @@ func (h *Handler) List(c *gin.Context) {
 // @Description  Get a single supplier by its ID
 // @Tags         Suppliers
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id   path      int  true  "Supplier ID"
 // @Success      200  {object}  response.APIResponse{data=Supplier}
 // @Failure      404  {object}  response.APIResponse
@@ -157,6 +162,7 @@ func (h *Handler) Get(c *gin.Context) {
 // @Tags         Suppliers
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id    path      int            true  "Supplier ID"
 // @Param        body  body      UpdateRequest  true  "Update data"
 // @Success      200   {object}  response.APIResponse{data=Supplier}
@@ -183,8 +189,11 @@ func (h *Handler) Update(c *gin.Context) {
 // @Description  Soft delete supplier by setting is_active=false
 // @Tags         Suppliers
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id   path      int  true  "Supplier ID"
 // @Success      200  {object}  response.APIResponse{data=object}
+// @Failure      401  {object}  response.APIResponse
+// @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
 // @Router       /suppliers/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {

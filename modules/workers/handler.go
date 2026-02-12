@@ -1,4 +1,4 @@
-package client
+package workers
 
 import (
 	"strconv"
@@ -15,21 +15,21 @@ type Handler struct {
 	svc *Service
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
-}
+func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
 // Create godoc
-// @Summary      Create client
-// @Description  Create a new client (customer)
-// @Tags         Clients
+// @Summary      Create worker
+// @Description  Create a new worker (store employee)
+// @Tags         Workers
 // @Accept       json
 // @Produce      json
-// @Param        body  body      CreateRequest  true  "Client data"
-// @Success      201   {object}  response.APIResponse{data=Client}
+// @Security     BearerAuth
+// @Param        body  body      CreateRequest  true  "Worker data"
+// @Success      201   {object}  response.APIResponse{data=Worker}
 // @Failure      400   {object}  response.APIResponse
-// @Failure      409   {object}  response.APIResponse
-// @Router       /clients [post]
+// @Failure      401   {object}  response.APIResponse
+// @Failure      403   {object}  response.APIResponse
+// @Router       /workers [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -45,22 +45,24 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 // List godoc
-// @Summary      List clients
-// @Description  Get paginated list of active clients with optional search
-// @Tags         Clients
+// @Summary      List workers
+// @Description  Get paginated list of workers. By default returns only active; set active_only=false to include inactive.
+// @Tags         Workers
 // @Produce      json
+// @Security     BearerAuth
 // @Param        page             query  int     false  "Page (default 1)"
-// @Param        limit            query  int     false  "Limit (default 10, max 100)"
-// @Param        skip             query  int     false  "Skip (legacy, default 0). If provided, overrides page/offset."
-// @Param        search           query  string  false  "Search by name or phone"
+// @Param        limit            query  int     false  "Limit (default 10, max 200)"
+// @Param        skip             query  int     false  "Skip (legacy, default 0)"
+// @Param        search           query  string  false  "Search by name, phone, or email"
+// @Param        active_only      query  bool    false  "Only active workers (default true)"
 // @Param        order_by         query  string  false  "Order by field (name, created_at)" Enums(name,created_at)
 // @Param        order_direction  query  string  false  "Order direction (asc/desc)" Enums(asc,desc)
 // @Success      200              {object}  response.APIResponse{data=ListResponse}
 // @Failure      400              {object}  response.APIResponse
-// @Failure      500              {object}  response.APIResponse
-// @Router       /clients [get]
+// @Failure      401              {object}  response.APIResponse
+// @Failure      403              {object}  response.APIResponse
+// @Router       /workers [get]
 func (h *Handler) List(c *gin.Context) {
-	// Defaults from pagination middleware (page+limit -> offset)
 	page := 1
 	limit := 10
 	offset := 0
@@ -79,7 +81,6 @@ func (h *Handler) List(c *gin.Context) {
 		}
 	}
 
-	// legacy overrides
 	if v := c.Query("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			limit = n
@@ -94,7 +95,6 @@ func (h *Handler) List(c *gin.Context) {
 		}
 	}
 
-	// Validate limit/offset hard
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -102,7 +102,15 @@ func (h *Handler) List(c *gin.Context) {
 		offset = 0
 	}
 
-	q := c.Query("search")
+	search := c.Query("search")
+
+	activeOnly := true
+	if v := c.Query("active_only"); v != "" {
+		v = strings.ToLower(strings.TrimSpace(v))
+		if v == "false" || v == "0" {
+			activeOnly = false
+		}
+	}
 
 	orderBy := c.Query("order_by")
 	if orderBy == "" {
@@ -124,7 +132,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	out, err := h.svc.List(c.Request.Context(), limit, offset, orderBy, orderDir, q)
+	out, err := h.svc.List(c.Request.Context(), limit, offset, orderBy, orderDir, search, activeOnly)
 	if err != nil {
 		c.Error(err)
 		return
@@ -134,14 +142,17 @@ func (h *Handler) List(c *gin.Context) {
 }
 
 // Get godoc
-// @Summary      Get client by ID
-// @Description  Get a single active client by its ID
-// @Tags         Clients
+// @Summary      Get worker by ID
+// @Description  Get a single worker by ID (404 only if deleted)
+// @Tags         Workers
 // @Produce      json
-// @Param        id   path      int  true  "Client ID"
-// @Success      200  {object}  response.APIResponse{data=Client}
+// @Security     BearerAuth
+// @Param        id   path      int  true  "Worker ID"
+// @Success      200  {object}  response.APIResponse{data=Worker}
+// @Failure      401  {object}  response.APIResponse
+// @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /clients/{id} [get]
+// @Router       /workers/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	out, err := h.svc.Get(c.Request.Context(), id)
@@ -153,18 +164,20 @@ func (h *Handler) Get(c *gin.Context) {
 }
 
 // Update godoc
-// @Summary      Update client
-// @Description  Update client fields (name, phone, email, is_active)
-// @Tags         Clients
+// @Summary      Update worker
+// @Description  Update worker fields
+// @Tags         Workers
 // @Accept       json
 // @Produce      json
-// @Param        id    path      int            true  "Client ID"
+// @Security     BearerAuth
+// @Param        id    path      int            true  "Worker ID"
 // @Param        body  body      UpdateRequest  true  "Update data"
-// @Success      200   {object}  response.APIResponse{data=Client}
+// @Success      200   {object}  response.APIResponse{data=Worker}
 // @Failure      400   {object}  response.APIResponse
+// @Failure      401   {object}  response.APIResponse
+// @Failure      403   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Failure      409   {object}  response.APIResponse
-// @Router       /clients/{id} [patch]
+// @Router       /workers/{id} [patch]
 func (h *Handler) Update(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var req UpdateRequest
@@ -181,14 +194,17 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 // Delete godoc
-// @Summary      Delete client (soft)
-// @Description  Soft delete client by setting is_active=false
-// @Tags         Clients
+// @Summary      Delete worker (soft)
+// @Description  Soft delete worker: sets deleted_at=now and is_active=false
+// @Tags         Workers
 // @Produce      json
-// @Param        id   path      int  true  "Client ID"
+// @Security     BearerAuth
+// @Param        id   path      int  true  "Worker ID"
 // @Success      200  {object}  response.APIResponse{data=object}
+// @Failure      401  {object}  response.APIResponse
+// @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /clients/{id} [delete]
+// @Router       /workers/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := h.svc.Delete(c.Request.Context(), id); err != nil {

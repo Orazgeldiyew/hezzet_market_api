@@ -7,22 +7,30 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool) {
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 	repo := NewRepository(db)
 	stock := NewStockRepository(db)
 	svc := NewService(repo, stock)
 	h := NewHandler(svc)
 
-	g := r.Group("/products")
+	// Read: operator, cashier, manager (admin bypass)
+	read := rg.Group("/products")
+	read.Use(middleware.RequireRoles("operator", "cashier", "manager"))
 	{
-		g.POST("", h.Create)
-		g.GET("", middleware.PaginationMiddleware(), h.List)
-		g.GET("/:id", h.Get)
-		g.PATCH("/:id", h.Update)
-		g.DELETE("/:id", h.Delete)
-		g.GET("/:id/card", h.GetCard)
-		g.GET("/:id/categories", h.GetCategories)
-		g.PUT("/:id/categories", h.SetCategories)
-		g.DELETE("/:id/categories/:categoryId", h.RemoveCategory)
+		read.GET("", middleware.PaginationMiddleware(), h.List)
+		read.GET("/:id", h.Get)
+		read.GET("/:id/card", h.GetCard)
+		read.GET("/:id/categories", h.GetCategories)
+	}
+
+	// Write: operator (admin bypass)
+	write := rg.Group("/products")
+	write.Use(middleware.RequireRoles("operator"))
+	{
+		write.POST("", h.Create)
+		write.PATCH("/:id", h.Update)
+		write.DELETE("/:id", h.Delete)
+		write.PUT("/:id/categories", h.SetCategories)
+		write.DELETE("/:id/categories/:categoryId", h.RemoveCategory)
 	}
 }

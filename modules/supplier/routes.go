@@ -7,12 +7,14 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool) {
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 	repo := NewRepository(db)
 	svc := NewService(repo)
 	h := NewHandler(svc)
 
-	g := r.Group("/suppliers")
+	// All supplier endpoints: operator (admin bypass)
+	g := rg.Group("/suppliers")
+	g.Use(middleware.RequireRoles("operator"))
 	{
 		g.POST("", h.Create)
 		g.GET("", middleware.PaginationMiddleware(), h.List)

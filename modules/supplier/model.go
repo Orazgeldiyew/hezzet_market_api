@@ -30,13 +30,6 @@ type UpdateRequest struct {
 	IsActive *bool   `json:"is_active"`
 }
 
-// ListQuery for filtering suppliers
-type ListQuery struct {
-	Limit  int    `form:"limit"`
-	Offset int    `form:"offset"`
-	Q      string `form:"q"`
-}
-
 // ListResponse for paginated supplier list
 type ListResponse struct {
 	Items  []Supplier `json:"items"`

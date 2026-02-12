@@ -25,9 +25,12 @@ func NewHandler(svc *Service) *Handler {
 // @Tags         Products
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        body  body      CreateRequest  true  "Product data"
 // @Success      201   {object}  response.APIResponse{data=Product}
 // @Failure      400   {object}  response.APIResponse
+// @Failure      401   {object}  response.APIResponse
+// @Failure      403   {object}  response.APIResponse
 // @Failure      409   {object}  response.APIResponse
 // @Router       /products [post]
 func (h *Handler) Create(c *gin.Context) {
@@ -49,6 +52,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Description  Get paginated list of active products with optional search
 // @Tags         Products
 // @Produce      json
+// @Security     BearerAuth
 // @Param        page             query  int     false  "Page (default 1)"
 // @Param        limit            query  int     false  "Limit (default 10, max 100)"
 // @Param        skip             query  int     false  "Skip (legacy, default 0). If provided, overrides page/offset."
@@ -138,6 +142,7 @@ func (h *Handler) List(c *gin.Context) {
 // @Description  Get a single product by its ID
 // @Tags         Products
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id   path      int  true  "Product ID"
 // @Success      200  {object}  response.APIResponse{data=Product}
 // @Failure      404  {object}  response.APIResponse
@@ -158,6 +163,7 @@ func (h *Handler) Get(c *gin.Context) {
 // @Tags         Products
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id    path      int            true  "Product ID"
 // @Param        body  body      UpdateRequest  true  "Update data"
 // @Success      200   {object}  response.APIResponse{data=Product}
@@ -185,8 +191,11 @@ func (h *Handler) Update(c *gin.Context) {
 // @Description  Soft delete product by setting is_active=false
 // @Tags         Products
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id   path      int  true  "Product ID"
 // @Success      200  {object}  response.APIResponse{data=object}
+// @Failure      401  {object}  response.APIResponse
+// @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
 // @Router       /products/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
@@ -203,6 +212,7 @@ func (h *Handler) Delete(c *gin.Context) {
 // @Description  Get product with stock, categories, and additional info
 // @Tags         Products
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id   path      int  true  "Product ID"
 // @Success      200  {object}  response.APIResponse{data=Card}
 // @Failure      404  {object}  response.APIResponse
@@ -222,6 +232,7 @@ func (h *Handler) GetCard(c *gin.Context) {
 // @Description  Get all categories associated with a product
 // @Tags         Products
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id   path      int  true  "Product ID"
 // @Success      200  {object}  response.APIResponse{data=[]CategoryBrief}
 // @Failure      404  {object}  response.APIResponse
@@ -242,6 +253,7 @@ func (h *Handler) GetCategories(c *gin.Context) {
 // @Tags         Products
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id    path      int                   true  "Product ID"
 // @Param        body  body      SetCategoriesRequest  true  "Category IDs"
 // @Success      200   {object}  response.APIResponse{data=[]CategoryBrief}
@@ -268,6 +280,7 @@ func (h *Handler) SetCategories(c *gin.Context) {
 // @Description  Remove a single category from a product
 // @Tags         Products
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id          path      int  true  "Product ID"
 // @Param        categoryId  path      int  true  "Category ID"
 // @Success      200         {object}  response.APIResponse{data=object}
