@@ -1,4 +1,4 @@
--- Workers table (store employees, not system users)
+-- 004_workers.sql
 CREATE TABLE IF NOT EXISTS workers (
     id            BIGSERIAL PRIMARY KEY,
     name          VARCHAR(255) NOT NULL,

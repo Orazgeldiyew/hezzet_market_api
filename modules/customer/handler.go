@@ -106,12 +106,19 @@ func (h *Handler) List(c *gin.Context) {
 
 	q := c.Query("search")
 
-	activeOnly := true
+	// activeOnly := true
+	// if v := c.Query("active_only"); v != "" {
+	// 	// accept: true/false/1/0
+	// 	v = strings.ToLower(strings.TrimSpace(v))
+	// 	if v == "false" || v == "0" {
+	// 		activeOnly = false
+	// 	}
+	// }
+	activeOnly := false // default: show all not deleted
 	if v := c.Query("active_only"); v != "" {
-		// accept: true/false/1/0
 		v = strings.ToLower(strings.TrimSpace(v))
-		if v == "false" || v == "0" {
-			activeOnly = false
+		if v == "true" || v == "1" {
+			activeOnly = true
 		}
 	}
 
@@ -249,4 +256,33 @@ func (h *Handler) AddSpent(c *gin.Context) {
 
 type AddSpentRequest struct {
 	Amount float64 `json:"amount" binding:"required,gt=0"`
+}
+// UpdateContact godoc
+// @Summary      Update customer contact fields
+// @Description  Update name/phone/email/notes (cashier/operator/manager)
+// @Tags         Customers
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      int                  true  "Customer ID"
+// @Param        body  body      UpdateContactRequest  true  "Contact update"
+// @Success      200   {object}  response.APIResponse{data=Customer}
+// @Failure      400   {object}  response.APIResponse
+// @Failure      401   {object}  response.APIResponse
+// @Failure      403   {object}  response.APIResponse
+// @Failure      404   {object}  response.APIResponse
+// @Router       /customers/{id}/contact [patch]
+func (h *Handler) UpdateContact(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	var req UpdateContactRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	out, err := h.svc.UpdateContact(c.Request.Context(), id, req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
 }

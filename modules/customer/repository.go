@@ -173,3 +173,22 @@ func (r *Repository) AddSpent(ctx context.Context, id int64, amount float64, bon
 	)
 	return c, err
 }
+func (r *Repository) UpdateContact(ctx context.Context, id int64, req UpdateContactRequest) (Customer, error) {
+	q := `
+		UPDATE customers SET
+			name      = COALESCE($1, name),
+			phone     = COALESCE($2, phone),
+			email     = COALESCE($3, email),
+			notes     = COALESCE($4, notes),
+			updated_at = now()
+		WHERE id = $5 AND deleted_at IS NULL
+		RETURNING id, name, phone, email, type, total_spent, bonus_points,
+		          is_active, notes, created_at, updated_at, deleted_at
+	`
+	var c Customer
+	err := r.db.QueryRow(ctx, q, req.Name, req.Phone, req.Email, req.Notes, id).Scan(
+		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints,
+		&c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
+	)
+	return c, err
+}

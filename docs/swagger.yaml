@@ -273,6 +273,21 @@ definitions:
       total:
         type: integer
     type: object
+  customer.UpdateContactRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      notes:
+        type: string
+      phone:
+        maxLength: 50
+        type: string
+    type: object
   customer.UpdateRequest:
     properties:
       email:
@@ -1414,6 +1429,56 @@ paths:
       security:
       - BearerAuth: []
       summary: Update customer
+      tags:
+      - Customers
+  /customers/{id}/contact:
+    patch:
+      consumes:
+      - application/json
+      description: Update name/phone/email/notes (cashier/operator/manager)
+      parameters:
+      - description: Customer ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Contact update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/customer.UpdateContactRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/customer.Customer'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update customer contact fields
       tags:
       - Customers
   /customers/{id}/spent:

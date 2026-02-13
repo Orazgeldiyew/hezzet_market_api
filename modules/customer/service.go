@@ -132,3 +132,13 @@ func (s *Service) AddSpent(ctx context.Context, customerID int64, amount float64
 	}
 	return c, nil
 }
+func (s *Service) UpdateContact(ctx context.Context, id int64, req UpdateContactRequest) (Customer, error) {
+	c, err := s.repo.UpdateContact(ctx, id, req)
+	if err != nil {
+		if IsNotFound(err) {
+			return Customer{}, apperr.NotFound("NOT_FOUND", "customer not found")
+		}
+		return Customer{}, apperr.Internal(err)
+	}
+	return c, nil
+}

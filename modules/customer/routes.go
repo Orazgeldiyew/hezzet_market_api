@@ -18,6 +18,7 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 	{
 		read.GET("", middleware.PaginationMiddleware(), h.List)
 		read.GET("/:id", h.Get)
+		read.PATCH("/:id/contact", h.UpdateContact)
 	}
 
 	// Write: cashier (admin bypass)

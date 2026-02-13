@@ -1,3 +1,4 @@
+-- 002_auth.sql
 -- Auth tables: users, roles, user_roles
 
 CREATE TABLE IF NOT EXISTS users (
@@ -25,7 +26,6 @@ CREATE TABLE IF NOT EXISTS user_roles (
     UNIQUE(user_id, role_id)
 );
 
--- Seed default roles
 INSERT INTO roles (code, name) VALUES
     ('admin',    'Administrator'),
     ('cashier',  'Cashier'),

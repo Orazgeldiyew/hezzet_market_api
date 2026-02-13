@@ -41,3 +41,9 @@ type ListResponse struct {
 	Limit  int        `json:"limit"`
 	Offset int        `json:"offset"`
 }
+type UpdateContactRequest struct {
+	Name  *string `json:"name" binding:"omitempty,min=1,max=255"`
+	Phone *string `json:"phone" binding:"omitempty,max=50"`
+	Email *string `json:"email" binding:"omitempty,email,max=255"`
+	Notes *string `json:"notes"`
+}

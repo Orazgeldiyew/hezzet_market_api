@@ -1,4 +1,4 @@
--- Customers table (CRM business entity, not a system user)
+-- 003_customers.sql
 CREATE TABLE IF NOT EXISTS customers (
     id            BIGSERIAL PRIMARY KEY,
     name          VARCHAR(255) NOT NULL,
