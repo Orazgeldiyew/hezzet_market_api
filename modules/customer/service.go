@@ -87,26 +87,6 @@ func (s *Service) List(ctx context.Context, limit, offset int, orderBy, orderDir
 	}, nil
 }
 
-func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest) (Customer, error) {
-	c, err := s.repo.Update(ctx, id, req)
-	if err != nil {
-		if IsNotFound(err) {
-			return Customer{}, apperr.NotFound("NOT_FOUND", "customer not found")
-		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return Customer{}, &apperr.AppError{
-				Code:       "CUSTOMER_ALREADY_EXISTS",
-				Message:    "customer already exists",
-				HTTPStatus: http.StatusConflict,
-				Err:        err,
-			}
-		}
-		return Customer{}, apperr.Internal(err)
-	}
-	return c, nil
-}
-
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	if err := s.repo.SoftDelete(ctx, id); err != nil {
 		if IsNotFound(err) {
@@ -134,6 +114,16 @@ func (s *Service) AddSpent(ctx context.Context, customerID int64, amount float64
 }
 func (s *Service) UpdateContact(ctx context.Context, id int64, req UpdateContactRequest) (Customer, error) {
 	c, err := s.repo.UpdateContact(ctx, id, req)
+	if err != nil {
+		if IsNotFound(err) {
+			return Customer{}, apperr.NotFound("NOT_FOUND", "customer not found")
+		}
+		return Customer{}, apperr.Internal(err)
+	}
+	return c, nil
+}
+func (s *Service) UpdateAdmin(ctx context.Context, id int64, req UpdateAdminRequest) (Customer, error) {
+	c, err := s.repo.UpdateAdmin(ctx, id, req)
 	if err != nil {
 		if IsNotFound(err) {
 			return Customer{}, apperr.NotFound("NOT_FOUND", "customer not found")

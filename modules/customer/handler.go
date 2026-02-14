@@ -47,7 +47,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 // List godoc
 // @Summary      List customers
-// @Description  Get paginated list of customers (not deleted). By default returns only active=true; set active_only=false to include inactive.
+// @Description  Get paginated list of customers (not deleted). By default returns all not deleted; set active_only=true to return only active.
 // @Tags         Customers
 // @Produce      json
 // @Security     BearerAuth
@@ -55,7 +55,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Param        limit            query  int     false  "Limit (default 10, max 200)"
 // @Param        skip             query  int     false  "Skip (legacy, default 0). If provided, overrides page/offset."
 // @Param        search           query  string  false  "Search by name, phone, or email"
-// @Param        active_only      query  bool    false  "Only active customers (default true)"
+// @Param        active_only      query  bool    false  "Only active customers (default false)"
 // @Param        order_by         query  string  false  "Order by field (name, created_at, total_spent)" Enums(name,created_at,total_spent)
 // @Param        order_direction  query  string  false  "Order direction (asc/desc)" Enums(asc,desc)
 // @Success      200              {object}  response.APIResponse{data=ListResponse}
@@ -173,36 +173,6 @@ func (h *Handler) Get(c *gin.Context) {
 	response.OK(c, out)
 }
 
-// Update godoc
-// @Summary      Update customer
-// @Description  Update customer fields (cashier/operator/admin)
-// @Tags         Customers
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        id    path      int            true  "Customer ID"
-// @Param        body  body      UpdateRequest  true  "Update data"
-// @Success      200   {object}  response.APIResponse{data=Customer}
-// @Failure      400   {object}  response.APIResponse
-// @Failure      401   {object}  response.APIResponse
-// @Failure      403   {object}  response.APIResponse
-// @Failure      404   {object}  response.APIResponse
-// @Router       /customers/{id} [patch]
-func (h *Handler) Update(c *gin.Context) {
-	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	var req UpdateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.Error(err)
-		return
-	}
-	out, err := h.svc.Update(c.Request.Context(), id, req)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	response.OK(c, out)
-}
-
 // Delete godoc
 // @Summary      Delete customer (soft)
 // @Description  Soft delete customer: sets deleted_at=now and is_active=false (admin only)
@@ -257,6 +227,7 @@ func (h *Handler) AddSpent(c *gin.Context) {
 type AddSpentRequest struct {
 	Amount float64 `json:"amount" binding:"required,gt=0"`
 }
+
 // UpdateContact godoc
 // @Summary      Update customer contact fields
 // @Description  Update name/phone/email/notes (cashier/operator/manager)
@@ -280,6 +251,39 @@ func (h *Handler) UpdateContact(c *gin.Context) {
 		return
 	}
 	out, err := h.svc.UpdateContact(c.Request.Context(), id, req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
+// UpdateAdmin godoc
+// @Summary      Update customer business fields
+// @Description  Update only type and is_active (manager/admin)
+// @Tags         Customers
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      int               true  "Customer ID"
+// @Param        body  body      UpdateAdminRequest true  "Business update"
+// @Success      200   {object}  response.APIResponse{data=Customer}
+// @Failure      400   {object}  response.APIResponse
+// @Failure      401   {object}  response.APIResponse
+// @Failure      403   {object}  response.APIResponse
+// @Failure      404   {object}  response.APIResponse
+// @Router       /customers/{id}/admin [patch]
+func (h *Handler) UpdateAdmin(c *gin.Context) {
+
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+
+	var req UpdateAdminRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+
+	out, err := h.svc.UpdateAdmin(c.Request.Context(), id, req)
 	if err != nil {
 		c.Error(err)
 		return

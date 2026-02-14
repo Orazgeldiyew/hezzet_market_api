@@ -21,18 +21,18 @@ type APIError struct {
 
 type Meta struct {
 	// Useful for frontend debugging / UX
-	Timestamp string          `json:"timestamp,omitempty"`
+	Timestamp  string          `json:"timestamp,omitempty"`
 	Pagination *PaginationMeta `json:"pagination,omitempty"`
 }
 
 type PaginationMeta struct {
-	Page      int  `json:"page"`
-	Limit     int  `json:"limit"`
-	Offset    int  `json:"offset"`
-	Total     int  `json:"total"`
-	HasNext   bool `json:"has_next"`
-	HasPrev   bool `json:"has_prev"`
-	TotalPages int `json:"total_pages"`
+	Page       int  `json:"page"`
+	Limit      int  `json:"limit"`
+	Offset     int  `json:"offset"`
+	Total      int  `json:"total"`
+	HasNext    bool `json:"has_next"`
+	HasPrev    bool `json:"has_prev"`
+	TotalPages int  `json:"total_pages"`
 }
 
 func OK(c *gin.Context, data interface{}) {
@@ -99,7 +99,7 @@ func List(c *gin.Context, data interface{}, page, limit, offset, total int) {
 			HasNext:    hasNext,
 			TotalPages: totalPages,
 		},
-	}	
+	}
 
 	c.JSON(http.StatusOK, APIResponse{
 		Success: true,
@@ -107,4 +107,3 @@ func List(c *gin.Context, data interface{}, page, limit, offset, total int) {
 		Meta:    meta,
 	})
 }
-

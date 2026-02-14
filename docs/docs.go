@@ -929,7 +929,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get paginated list of customers (not deleted). By default returns only active=true; set active_only=false to include inactive.",
+                "description": "Get paginated list of customers (not deleted). By default returns all not deleted; set active_only=true to return only active.",
                 "produces": [
                     "application/json"
                 ],
@@ -964,7 +964,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Only active customers (default true)",
+                        "description": "Only active customers (default false)",
                         "name": "active_only",
                         "in": "query"
                     },
@@ -1239,7 +1239,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Update customer fields (cashier/operator/admin)",
+                "description": "Update only type and is_active (manager/admin)",
                 "consumes": [
                     "application/json"
                 ],
@@ -1249,7 +1249,7 @@ const docTemplate = `{
                 "tags": [
                     "Customers"
                 ],
-                "summary": "Update customer",
+                "summary": "Update customer business fields",
                 "parameters": [
                     {
                         "type": "integer",
@@ -1259,12 +1259,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Update data",
+                        "description": "Business update",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/customer.UpdateRequest"
+                            "$ref": "#/definitions/customer.UpdateAdminRequest"
                         }
                     }
                 ],
@@ -3203,6 +3203,21 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "customer.UpdateAdminRequest": {
+            "type": "object",
+            "properties": {
+                "is_active": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "regular",
+                        "wholesale"
+                    ]
                 }
             }
         },

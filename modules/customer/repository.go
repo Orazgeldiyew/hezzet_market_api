@@ -116,30 +116,6 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	return out, total, rows.Err()
 }
 
-func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (Customer, error) {
-	q := `
-		UPDATE customers SET
-			name      = COALESCE($1, name),
-			phone     = COALESCE($2, phone),
-			email     = COALESCE($3, email),
-			type      = COALESCE($4, type),
-			is_active = COALESCE($5, is_active),
-			notes     = COALESCE($6, notes),
-			updated_at = now()
-		WHERE id = $7 AND deleted_at IS NULL
-		RETURNING id, name, phone, email, type, total_spent, bonus_points,
-		          is_active, notes, created_at, updated_at, deleted_at
-	`
-	var c Customer
-	err := r.db.QueryRow(ctx, q,
-		req.Name, req.Phone, req.Email, req.Type, req.IsActive, req.Notes, id,
-	).Scan(
-		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints,
-		&c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
-	)
-	return c, err
-}
-
 // Delete policy: deleted_at=now(), is_active=false
 func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
 	ct, err := r.db.Exec(ctx, `
@@ -173,6 +149,8 @@ func (r *Repository) AddSpent(ctx context.Context, id int64, amount float64, bon
 	)
 	return c, err
 }
+
+// UpdateContact updates only contact fields (name/phone/email/notes).
 func (r *Repository) UpdateContact(ctx context.Context, id int64, req UpdateContactRequest) (Customer, error) {
 	q := `
 		UPDATE customers SET
@@ -185,8 +163,30 @@ func (r *Repository) UpdateContact(ctx context.Context, id int64, req UpdateCont
 		RETURNING id, name, phone, email, type, total_spent, bonus_points,
 		          is_active, notes, created_at, updated_at, deleted_at
 	`
+
 	var c Customer
-	err := r.db.QueryRow(ctx, q, req.Name, req.Phone, req.Email, req.Notes, id).Scan(
+	err := r.db.QueryRow(ctx, q,
+		req.Name, req.Phone, req.Email, req.Notes, id,
+	).Scan(
+		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints,
+		&c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
+	)
+	return c, err
+}
+
+// UpdateAdmin updates only business fields (type, is_active).
+func (r *Repository) UpdateAdmin(ctx context.Context, id int64, req UpdateAdminRequest) (Customer, error) {
+	q := `
+		UPDATE customers SET
+			type      = COALESCE($1, type),
+			is_active = COALESCE($2, is_active),
+			updated_at = now()
+		WHERE id = $3 AND deleted_at IS NULL
+		RETURNING id, name, phone, email, type, total_spent, bonus_points,
+		          is_active, notes, created_at, updated_at, deleted_at
+	`
+	var c Customer
+	err := r.db.QueryRow(ctx, q, req.Type, req.IsActive, id).Scan(
 		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints,
 		&c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
 	)

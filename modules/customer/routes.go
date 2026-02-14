@@ -12,28 +12,22 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 	svc := NewService(repo)
 	h := NewHandler(svc)
 
-	// Read: cashier, operator, manager (admin bypass)
-	read := rg.Group("/customers")
-	read.Use(middleware.RequireRoles("cashier", "operator", "manager"))
-	{
-		read.GET("", middleware.PaginationMiddleware(), h.List)
-		read.GET("/:id", h.Get)
-		read.PATCH("/:id/contact", h.UpdateContact)
-	}
+	customers := rg.Group("/customers")
 
-	// Write: cashier (admin bypass)
-	write := rg.Group("/customers")
-	write.Use(middleware.RequireRoles("cashier"))
-	{
-		write.POST("", h.Create)
-		write.POST("/:id/spent", h.AddSpent)
-	}
+	// Read: cashier/operator/manager (admin bypass)
+	customers.GET("", middleware.RequireRoles("cashier", "operator", "manager"), middleware.PaginationMiddleware(), h.List)
+	customers.GET("/:id", middleware.RequireRoles("cashier", "operator", "manager"), h.Get)
 
-	// Update/Delete: admin only
-	admin := rg.Group("/customers")
-	admin.Use(middleware.RequireRoles())
-	{
-		admin.PATCH("/:id", h.Update)
-		admin.DELETE("/:id", h.Delete)
-	}
+	// Create + spent: cashier/manager (admin bypass)
+	customers.POST("", middleware.RequireRoles("cashier", "manager"), h.Create)
+	customers.POST("/:id/spent", middleware.RequireRoles("cashier", "manager"), h.AddSpent)
+
+	// Contact update: cashier/operator/manager (admin bypass)
+	customers.PATCH("/:id/contact", middleware.RequireRoles("cashier", "operator", "manager"), h.UpdateContact)
+
+	// Business update: manager/admin (admin bypass already works)
+	customers.PATCH("/:id/admin", middleware.RequireRoles("manager"), h.UpdateAdmin)
+
+	// Delete: admin only
+	customers.DELETE("/:id", middleware.RequireRoles(), h.Delete)
 }

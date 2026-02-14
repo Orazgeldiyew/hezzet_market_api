@@ -26,15 +26,6 @@ type CreateRequest struct {
 	Notes string  `json:"notes"`
 }
 
-type UpdateRequest struct {
-	Name     *string `json:"name" binding:"omitempty,min=1,max=255"`
-	Phone    *string `json:"phone" binding:"omitempty,max=50"`
-	Email    *string `json:"email" binding:"omitempty,email,max=255"`
-	Type     *string `json:"type" binding:"omitempty,oneof=regular wholesale"`
-	IsActive *bool   `json:"is_active"`
-	Notes    *string `json:"notes"`
-}
-
 type ListResponse struct {
 	Items  []Customer `json:"items"`
 	Total  int        `json:"total"`
@@ -46,4 +37,8 @@ type UpdateContactRequest struct {
 	Phone *string `json:"phone" binding:"omitempty,max=50"`
 	Email *string `json:"email" binding:"omitempty,email,max=255"`
 	Notes *string `json:"notes"`
+}
+type UpdateAdminRequest struct {
+	Type     *string `json:"type" binding:"omitempty,oneof=regular wholesale"`
+	IsActive *bool   `json:"is_active"`
 }
