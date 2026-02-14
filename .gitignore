@@ -1,0 +1,42 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+hezzet_market_backend
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+*.prof
+
+# Go workspace
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+.claude
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build output
+/bin/
+/dist/
+/tmp/
