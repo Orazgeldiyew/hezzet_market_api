@@ -8,10 +8,11 @@ import (
 )
 
 type APIResponse struct {
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   *APIError   `json:"error,omitempty"`
-	Meta    *Meta       `json:"meta,omitempty"`
+	Success    bool        `json:"success"`
+	StatusCode int         `json:"status_code"`
+	Data       interface{} `json:"data,omitempty"`
+	Error      *APIError   `json:"error,omitempty"`
+	Meta       *Meta       `json:"meta,omitempty"`
 }
 
 type APIError struct {
@@ -37,22 +38,25 @@ type PaginationMeta struct {
 
 func OK(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusOK, APIResponse{
-		Success: true,
-		Data:    data,
+		Success:    true,
+		StatusCode: http.StatusOK,
+		Data:       data,
 	})
 }
 
 func Created(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusCreated, APIResponse{
-		Success: true,
-		Data:    data,
+		Success:    true,
+		StatusCode: http.StatusCreated,
+		Data:       data,
 	})
 }
 
 func Error(c *gin.Context, status int, code, msg string) {
 	c.JSON(status, APIResponse{
-		Success: false,
-		Error:   &APIError{Code: code, Message: msg},
+		Success:    false,
+		StatusCode: status,
+		Error:      &APIError{Code: code, Message: msg},
 	})
 }
 
@@ -62,9 +66,10 @@ func OKMeta(c *gin.Context, data interface{}, meta *Meta) {
 		meta.Timestamp = time.Now().UTC().Format(time.RFC3339)
 	}
 	c.JSON(http.StatusOK, APIResponse{
-		Success: true,
-		Data:    data,
-		Meta:    meta,
+		Success:    true,
+		StatusCode: http.StatusOK,
+		Data:       data,
+		Meta:       meta,
 	})
 }
 
@@ -102,8 +107,9 @@ func List(c *gin.Context, data interface{}, page, limit, offset, total int) {
 	}
 
 	c.JSON(http.StatusOK, APIResponse{
-		Success: true,
-		Data:    data,
-		Meta:    meta,
+		Success:    true,
+		StatusCode: http.StatusOK,
+		Data:       data,
+		Meta:       meta,
 	})
 }

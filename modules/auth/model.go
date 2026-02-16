@@ -46,14 +46,34 @@ type ChangePasswordRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 }
 
+// ---------- JWT ----------
+
+type JWTPayload struct {
+	UserID   int64    `json:"user_id"`
+	Username string   `json:"username"`
+	Role     []string `json:"role"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
 // ---------- Responses ----------
 
 type LoginResponse struct {
-	AccessToken string   `json:"access_token"`
-	TokenType   string   `json:"token_type"`
-	ExpiresIn   int64    `json:"expires_in"`
-	User        UserDTO  `json:"user"`
-	Roles       []string `json:"roles"`
+	AccessToken  string   `json:"access_token"`
+	RefreshToken string   `json:"refresh_token"`
+	TokenType    string   `json:"token_type"`
+	ExpiresIn    int64    `json:"expires_in"`
+	User         UserDTO  `json:"user"`
+	Roles        []string `json:"roles"`
+}
+
+type TokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in"`
 }
 
 type UserDTO struct {

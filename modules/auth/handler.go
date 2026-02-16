@@ -43,6 +43,31 @@ func (h *Handler) Login(c *gin.Context) {
 	response.OK(c, out)
 }
 
+// RefreshToken godoc
+// @Summary      Refresh tokens
+// @Description  Get new access and refresh tokens using a valid refresh token
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      RefreshRequest  true  "Refresh token"
+// @Success      200   {object}  response.APIResponse{data=TokenResponse}
+// @Failure      400   {object}  response.APIResponse
+// @Failure      401   {object}  response.APIResponse
+// @Router       /auth/refresh [post]
+func (h *Handler) RefreshToken(c *gin.Context) {
+	var req RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	out, err := h.svc.RefreshToken(c.Request.Context(), req.RefreshToken)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
 // CreateUser godoc
 // @Summary      Create user
 // @Description  Create a new user with roles (admin only)

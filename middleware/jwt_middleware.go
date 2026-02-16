@@ -22,8 +22,12 @@ func AuthRequired(cfg config.Config) gin.HandlerFunc {
 			return
 		}
 
-		if cfg.JWTSecret == "" {
-			c.Error(apperr.Internal(fmt.Errorf("JWT_SECRET is empty")))
+		secret := cfg.AccessTokenSecret
+		if secret == "" {
+			secret = cfg.JWTSecret
+		}
+		if secret == "" {
+			c.Error(apperr.Internal(fmt.Errorf("ACCESS_TOKEN_SECRET is empty")))
 			c.Abort()
 			return
 		}
@@ -34,7 +38,7 @@ func AuthRequired(cfg config.Config) gin.HandlerFunc {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 			}
-			return []byte(cfg.JWTSecret), nil
+			return []byte(secret), nil
 		})
 		if err != nil || !token.Valid {
 			c.Error(apperr.Unauthorized("unauthorized"))
@@ -45,6 +49,12 @@ func AuthRequired(cfg config.Config) gin.HandlerFunc {
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
 			c.Error(apperr.Unauthorized("unauthorized"))
+			c.Abort()
+			return
+		}
+
+		if tokenType, _ := claims["type"].(string); tokenType != "access" {
+			c.Error(apperr.Unauthorized("invalid token type"))
 			c.Abort()
 			return
 		}
@@ -63,13 +73,13 @@ func AuthRequired(cfg config.Config) gin.HandlerFunc {
 		}
 
 		var roles []string
-		if rolesRaw, ok := claims["roles"].([]interface{}); ok {
+		if rolesRaw, ok := claims["role"].([]interface{}); ok {
 			for _, r := range rolesRaw {
 				if s, ok := r.(string); ok {
 					roles = append(roles, s)
 				}
 			}
-		} else if rolesStr, ok := claims["roles"].([]string); ok {
+		} else if rolesStr, ok := claims["role"].([]string); ok {
 			roles = append(roles, rolesStr...)
 		}
 		if roles == nil {

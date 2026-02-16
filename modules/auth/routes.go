@@ -17,6 +17,7 @@ func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config) {
 	g := r.Group("/auth")
 	{
 		g.POST("/login", h.Login)
+		g.POST("/refresh", h.RefreshToken)
 
 		admin := g.Group("/users")
 		admin.Use(middleware.AuthRequired(cfg))

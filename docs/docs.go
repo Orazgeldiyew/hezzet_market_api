@@ -73,6 +73,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/refresh": {
+            "post": {
+                "description": "Get new access and refresh tokens using a valid refresh token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Refresh tokens",
+                "parameters": [
+                    {
+                        "description": "Refresh token",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/auth.RefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/auth.TokenResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/users": {
             "get": {
                 "security": [
@@ -1232,7 +1290,9 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
+            }
+        },
+        "/customers/{id}/admin": {
             "patch": {
                 "security": [
                     {
@@ -2891,6 +2951,9 @@ const docTemplate = `{
                 "expires_in": {
                     "type": "integer"
                 },
+                "refresh_token": {
+                    "type": "string"
+                },
                 "roles": {
                     "type": "array",
                     "items": {
@@ -2902,6 +2965,34 @@ const docTemplate = `{
                 },
                 "user": {
                     "$ref": "#/definitions/auth.UserDTO"
+                }
+            }
+        },
+        "auth.RefreshRequest": {
+            "type": "object",
+            "required": [
+                "refresh_token"
+            ],
+            "properties": {
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "auth.TokenResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "expires_in": {
+                    "type": "integer"
+                },
+                "refresh_token": {
+                    "type": "string"
+                },
+                "token_type": {
+                    "type": "string"
                 }
             }
         },
@@ -3242,37 +3333,6 @@ const docTemplate = `{
                 }
             }
         },
-        "customer.UpdateRequest": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string",
-                    "maxLength": 255
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "minLength": 1
-                },
-                "notes": {
-                    "type": "string"
-                },
-                "phone": {
-                    "type": "string",
-                    "maxLength": 50
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "regular",
-                        "wholesale"
-                    ]
-                }
-            }
-        },
         "product.Card": {
             "type": "object",
             "properties": {
@@ -3470,6 +3530,9 @@ const docTemplate = `{
                 },
                 "meta": {
                     "$ref": "#/definitions/response.Meta"
+                },
+                "status_code": {
+                    "type": "integer"
                 },
                 "success": {
                     "type": "boolean"

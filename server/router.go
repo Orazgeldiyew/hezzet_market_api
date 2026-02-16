@@ -26,6 +26,7 @@ type Deps struct {
 
 func NewRouter(deps Deps) *gin.Engine {
 	r := gin.New()
+	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 	r.Use(ErrorMiddleware())
 
@@ -33,20 +34,23 @@ func NewRouter(deps Deps) *gin.Engine {
 		response.OK(c, gin.H{"status": "ok"})
 	})
 
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// Swagger: dev only (recommended)
+	if deps.Cfg.Env == "dev" {
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	}
 
-	// ── Auth routes (public login + admin-only user management) ──
+	// Auth routes (public login/refresh + admin-only user management inside auth/routes.go)
 	auth.RegisterRoutes(r, deps.DB, deps.Cfg)
 
-	// ── Protected group (all routes below require a valid JWT) ──
-	protected := r.Group("")
-	protected.Use(middleware.AuthRequired(deps.Cfg))
+	// Protected API
+	api := r.Group("/api")
+	api.Use(middleware.AuthRequired(deps.Cfg))
 
-	category.RegisterRoutes(protected, deps.DB)
-	product.RegisterRoutes(protected, deps.DB)
-	supplier.RegisterRoutes(protected, deps.DB)
-	customer.RegisterRoutes(protected, deps.DB)
-	workers.RegisterRoutes(protected, deps.DB)
+	category.RegisterRoutes(api, deps.DB)
+	product.RegisterRoutes(api, deps.DB)
+	supplier.RegisterRoutes(api, deps.DB)
+	customer.RegisterRoutes(api, deps.DB)
+	workers.RegisterRoutes(api, deps.DB)
 
 	return r
 }
