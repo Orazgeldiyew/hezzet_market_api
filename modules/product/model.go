@@ -10,8 +10,8 @@ type Product struct {
 	SKU           string    `json:"sku"`
 	Barcode       string    `json:"barcode"`
 	Unit          string    `json:"unit"`
-	PurchasePrice float64   `json:"purchase_price"`
-	SalePrice     float64   `json:"sale_price"`
+	PurchasePrice int64     `json:"purchase_price"`
+	SalePrice     int64     `json:"sale_price"`
 	IsActive      bool      `json:"is_active"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
@@ -22,9 +22,9 @@ type CreateRequest struct {
 	SKU           string  `json:"sku"`
 	Barcode       string  `json:"barcode"`
 	Unit          string  `json:"unit" binding:"required"`
-	PurchasePrice float64 `json:"purchase_price"`
-	SalePrice     float64 `json:"sale_price"`
-	IsActive      *bool   `json:"is_active"`
+	PurchasePrice int64 `json:"purchase_price"`
+	SalePrice     int64 `json:"sale_price"`
+	IsActive      *bool `json:"is_active"`
 	CategoryIDs   []int64 `json:"category_ids"`
 }
 
@@ -33,8 +33,8 @@ type UpdateRequest struct {
 	SKU           *string  `json:"sku"`
 	Barcode       *string  `json:"barcode"`
 	Unit          *string  `json:"unit"`
-	PurchasePrice *float64 `json:"purchase_price"`
-	SalePrice     *float64 `json:"sale_price"`
+	PurchasePrice *int64   `json:"purchase_price"`
+	SalePrice     *int64   `json:"sale_price"`
 	IsActive      *bool    `json:"is_active"`
 	CategoryIDs   *[]int64 `json:"category_ids"`
 }

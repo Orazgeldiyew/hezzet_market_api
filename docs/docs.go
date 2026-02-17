@@ -3197,11 +3197,11 @@ const docTemplate = `{
         "customer.AddSpentRequest": {
             "type": "object",
             "required": [
-                "amount"
+                "amount_cents"
             ],
             "properties": {
-                "amount": {
-                    "type": "number"
+                "amount_cents": {
+                    "type": "integer"
                 }
             }
         },
@@ -3231,6 +3231,7 @@ const docTemplate = `{
                     "type": "string",
                     "enum": [
                         "regular",
+                        "vip",
                         "wholesale"
                     ]
                 }
@@ -3240,7 +3241,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "bonus_points": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "created_at": {
                     "type": "string"
@@ -3267,7 +3268,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "total_spent": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "type": {
                     "type": "string"
@@ -3304,11 +3305,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "type": {
-                    "type": "string",
-                    "enum": [
-                        "regular",
-                        "wholesale"
-                    ]
+                    "type": "string"
                 }
             }
         },
@@ -3396,10 +3393,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "purchase_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sale_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sku": {
                     "type": "string"
@@ -3448,10 +3445,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "purchase_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sale_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sku": {
                     "type": "string"
@@ -3497,10 +3494,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "purchase_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sale_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sku": {
                     "type": "string"

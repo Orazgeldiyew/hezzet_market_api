@@ -19,6 +19,7 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
+// @BasePath /api
 // Create godoc
 // @Summary      Create product
 // @Description  Create a new product

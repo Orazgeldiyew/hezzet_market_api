@@ -226,10 +226,10 @@ definitions:
     type: object
   customer.AddSpentRequest:
     properties:
-      amount:
-        type: number
+      amount_cents:
+        type: integer
     required:
-    - amount
+    - amount_cents
     type: object
   customer.CreateRequest:
     properties:
@@ -248,6 +248,7 @@ definitions:
       type:
         enum:
         - regular
+        - vip
         - wholesale
         type: string
     required:
@@ -256,7 +257,7 @@ definitions:
   customer.Customer:
     properties:
       bonus_points:
-        type: number
+        type: integer
       created_at:
         type: string
       deleted_at:
@@ -274,7 +275,7 @@ definitions:
       phone:
         type: string
       total_spent:
-        type: number
+        type: integer
       type:
         type: string
       updated_at:
@@ -298,9 +299,6 @@ definitions:
       is_active:
         type: boolean
       type:
-        enum:
-        - regular
-        - wholesale
         type: string
     type: object
   customer.UpdateContactRequest:
@@ -357,9 +355,9 @@ definitions:
       name:
         type: string
       purchase_price:
-        type: number
+        type: integer
       sale_price:
-        type: number
+        type: integer
       sku:
         type: string
       unit:
@@ -394,9 +392,9 @@ definitions:
       name:
         type: string
       purchase_price:
-        type: number
+        type: integer
       sale_price:
-        type: number
+        type: integer
       sku:
         type: string
       unit:
@@ -426,9 +424,9 @@ definitions:
       name:
         type: string
       purchase_price:
-        type: number
+        type: integer
       sale_price:
-        type: number
+        type: integer
       sku:
         type: string
       unit:

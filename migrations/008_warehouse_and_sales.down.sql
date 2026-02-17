@@ -1,0 +1,9 @@
+BEGIN;
+
+DROP TABLE IF EXISTS sale_items;
+DROP TABLE IF EXISTS sales;
+
+DROP VIEW IF EXISTS v_product_stock;
+DROP TABLE IF EXISTS stock_movements;
+
+COMMIT;

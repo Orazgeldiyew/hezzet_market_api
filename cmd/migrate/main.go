@@ -1,79 +1,96 @@
-// cmd/migrate/main.go
 package main
 
 import (
+	"context"
+	"database/sql"
+	"flag"
 	"fmt"
 	"log"
-	"os"
+	"time"
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/config"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatalf("usage: migrate [up|down|drop|force|version]")
-	}
-	cmd := os.Args[1]
+	var (
+		path = flag.String("path", "./migrations", "migrations folder")
+		cmd  = flag.String("cmd", "up", "command: up | down | steps | version")
+		n    = flag.Int("n", 1, "steps for steps cmd (can be negative)")
+	)
+	flag.Parse()
 
 	cfg := config.Load()
-	dsn := cfg.DBDSN
 
-	m, err := migrate.New("file://migrations", dsn)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, cfg.DBDSN)
 	if err != nil {
-		log.Fatalf("migrate init: %v", err)
+		log.Fatal(err)
 	}
-	defer func() { _, _ = m.Close() }()
+	defer pool.Close()
 
-	switch cmd {
+	// Use stdlib *sql.DB driver via pgxpool's ConnString is not available directly,
+	// so simplest is open using database/sql with lib/pq OR use pgx stdlib.
+	// Here we use pgx stdlib:
+	db, err := postgres.WithInstance(pgxStdlibDB(cfg.DBDSN), &postgres.Config{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://"+*path,
+		"postgres",
+		db,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	switch *cmd {
 	case "up":
-		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-			log.Fatalf("migrate up: %v", err)
-		}
-		fmt.Println("migrate up: OK")
-
+		err = m.Up()
 	case "down":
-		// по умолчанию откатываем 1 шаг
-		if err := m.Steps(-1); err != nil && err != migrate.ErrNoChange {
-			log.Fatalf("migrate down: %v", err)
-		}
-		fmt.Println("migrate down 1: OK")
-
-	case "drop":
-		if err := m.Drop(); err != nil {
-			log.Fatalf("migrate drop: %v", err)
-		}
-		fmt.Println("migrate drop: OK")
-
-	case "force":
-		if len(os.Args) < 3 {
-			log.Fatalf("usage: migrate force <version>")
-		}
-		var v int
-		_, err := fmt.Sscanf(os.Args[2], "%d", &v)
-		if err != nil {
-			log.Fatalf("force parse version: %v", err)
-		}
-		if err := m.Force(v); err != nil {
-			log.Fatalf("migrate force: %v", err)
-		}
-		fmt.Println("migrate force: OK")
-
+		err = m.Down()
+	case "steps":
+		err = m.Steps(*n)
 	case "version":
-		v, dirty, err := m.Version()
-		if err == migrate.ErrNilVersion {
-			fmt.Println("version: none (0), dirty=false")
+		v, dirty, verr := m.Version()
+		if verr == migrate.ErrNilVersion {
+			fmt.Println("version: nil")
 			return
 		}
-		if err != nil {
-			log.Fatalf("migrate version: %v", err)
+		if verr != nil {
+			log.Fatal(verr)
 		}
-		fmt.Printf("version: %d, dirty=%v\n", v, dirty)
-
+		fmt.Printf("version: %d dirty=%v\n", v, dirty)
+		return
 	default:
-		log.Fatalf("unknown command: %s", cmd)
+		log.Fatalf("unknown cmd: %s", *cmd)
 	}
+
+	if err != nil && err != migrate.ErrNoChange {
+		log.Fatal(err)
+	}
+
+	fmt.Println("ok")
+}
+
+// pgxStdlibDB returns *sql.DB using pgx stdlib (needed by golang-migrate postgres driver)
+func pgxStdlibDB(dsn string) *sql.DB {
+	// IMPORTANT: add imports: "database/sql" and "github.com/jackc/pgx/v5/stdlib"
+	// Use stdlib.OpenDB(*pgx.ConnConfig)
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return stdlib.OpenDB(*cfg)
 }

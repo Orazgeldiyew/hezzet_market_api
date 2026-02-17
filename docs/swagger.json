@@ -3193,11 +3193,11 @@
         "customer.AddSpentRequest": {
             "type": "object",
             "required": [
-                "amount"
+                "amount_cents"
             ],
             "properties": {
-                "amount": {
-                    "type": "number"
+                "amount_cents": {
+                    "type": "integer"
                 }
             }
         },
@@ -3227,6 +3227,7 @@
                     "type": "string",
                     "enum": [
                         "regular",
+                        "vip",
                         "wholesale"
                     ]
                 }
@@ -3236,7 +3237,7 @@
             "type": "object",
             "properties": {
                 "bonus_points": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "created_at": {
                     "type": "string"
@@ -3263,7 +3264,7 @@
                     "type": "string"
                 },
                 "total_spent": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "type": {
                     "type": "string"
@@ -3300,11 +3301,7 @@
                     "type": "boolean"
                 },
                 "type": {
-                    "type": "string",
-                    "enum": [
-                        "regular",
-                        "wholesale"
-                    ]
+                    "type": "string"
                 }
             }
         },
@@ -3392,10 +3389,10 @@
                     "type": "string"
                 },
                 "purchase_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sale_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sku": {
                     "type": "string"
@@ -3444,10 +3441,10 @@
                     "type": "string"
                 },
                 "purchase_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sale_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sku": {
                     "type": "string"
@@ -3493,10 +3490,10 @@
                     "type": "string"
                 },
                 "purchase_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sale_price": {
-                    "type": "number"
+                    "type": "integer"
                 },
                 "sku": {
                     "type": "string"

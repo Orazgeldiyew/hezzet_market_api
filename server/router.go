@@ -51,6 +51,19 @@ func NewRouter(deps Deps) *gin.Engine {
 	supplier.RegisterRoutes(api, deps.DB)
 	customer.RegisterRoutes(api, deps.DB)
 	workers.RegisterRoutes(api, deps.DB)
+	r.GET("/debug/routes", func(c *gin.Context) {
+	type R struct {
+		Method string `json:"method"`
+		Path   string `json:"path"`
+	}
+	rs := r.Routes()
+	out := make([]R, 0, len(rs))
+	for _, x := range rs {
+		out = append(out, R{Method: x.Method, Path: x.Path})
+	}
+	c.JSON(200, out)
+})
+
 
 	return r
 }

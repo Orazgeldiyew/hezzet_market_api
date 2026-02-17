@@ -216,7 +216,7 @@ func (h *Handler) AddSpent(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	out, err := h.svc.AddSpent(c.Request.Context(), id, req.Amount)
+	out, err := h.svc.AddSpent(c.Request.Context(), id, req.AmountCents)
 	if err != nil {
 		c.Error(err)
 		return
@@ -225,7 +225,7 @@ func (h *Handler) AddSpent(c *gin.Context) {
 }
 
 type AddSpentRequest struct {
-	Amount float64 `json:"amount" binding:"required,gt=0"`
+	AmountCents int64 `json:"amount_cents" binding:"required,gt=0"`
 }
 
 // UpdateContact godoc

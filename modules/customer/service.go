@@ -97,13 +97,13 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (s *Service) AddSpent(ctx context.Context, customerID int64, amount float64) (Customer, error) {
-	if amount <= 0 {
+func (s *Service) AddSpent(ctx context.Context, customerID int64, amountCents int64) (Customer, error) {
+	if amountCents <= 0 {
 		return Customer{}, apperr.Validation("amount must be positive")
 	}
-	bonus := amount * 0.01 // 1% bonus
+	bonusCents := amountCents / 100 // 1% bonus (integer division, no float math)
 
-	c, err := s.repo.AddSpent(ctx, customerID, amount, bonus)
+	c, err := s.repo.AddSpent(ctx, customerID, amountCents, bonusCents)
 	if err != nil {
 		if IsNotFound(err) {
 			return Customer{}, apperr.NotFound("NOT_FOUND", "customer not found")

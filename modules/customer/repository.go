@@ -132,7 +132,7 @@ func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (r *Repository) AddSpent(ctx context.Context, id int64, amount float64, bonus float64) (Customer, error) {
+func (r *Repository) AddSpent(ctx context.Context, id int64, amountCents int64, bonusCents int64) (Customer, error) {
 	q := `
 		UPDATE customers SET
 			total_spent  = total_spent + $1,
@@ -143,7 +143,7 @@ func (r *Repository) AddSpent(ctx context.Context, id int64, amount float64, bon
 		          is_active, notes, created_at, updated_at, deleted_at
 	`
 	var c Customer
-	err := r.db.QueryRow(ctx, q, amount, bonus, id).Scan(
+	err := r.db.QueryRow(ctx, q, amountCents, bonusCents, id).Scan(
 		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints,
 		&c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
 	)
