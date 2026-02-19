@@ -14,7 +14,9 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/category"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customer"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/product"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/stock"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/supplier"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/warehouse"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workers"
 	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/response"
 )
@@ -45,12 +47,15 @@ func NewRouter(deps Deps) *gin.Engine {
 	// Protected API
 	api := r.Group("/api")
 	api.Use(middleware.AuthRequired(deps.Cfg))
+	api.Use(middleware.PaginationMiddleware())
 
 	category.RegisterRoutes(api, deps.DB)
 	product.RegisterRoutes(api, deps.DB)
 	supplier.RegisterRoutes(api, deps.DB)
 	customer.RegisterRoutes(api, deps.DB)
 	workers.RegisterRoutes(api, deps.DB)
+	warehouse.RegisterRoutes(api, deps.DB)
+	stock.RegisterRoutes(api, deps.DB)
 	r.GET("/debug/routes", func(c *gin.Context) {
 	type R struct {
 		Method string `json:"method"`

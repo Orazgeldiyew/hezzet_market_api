@@ -1,0 +1,113 @@
+package stock
+
+import (
+	"context"
+	"time"
+
+	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
+)
+
+type Service struct {
+	repo *Repository
+}
+
+func NewService(repo *Repository) *Service { return &Service{repo: repo} }
+
+func (s *Service) StockIn(ctx context.Context, req InRequest, userID int64) (MovementResult, error) {
+	d, it, err := s.repo.StockIn(ctx, req, userID)
+	if err != nil {
+		if isAppError(err) {
+			return MovementResult{}, err
+		}
+		return MovementResult{}, apperr.Internal(err)
+	}
+	return MovementResult{Detail: d, Item: it}, nil
+}
+
+func (s *Service) StockOut(ctx context.Context, req OutRequest, userID int64) (MovementResult, error) {
+	d, it, err := s.repo.StockOut(ctx, req, userID)
+	if err != nil {
+		if isAppError(err) {
+			return MovementResult{}, err
+		}
+		return MovementResult{}, apperr.Internal(err)
+	}
+	return MovementResult{Detail: d, Item: it}, nil
+}
+
+func (s *Service) Transfer(ctx context.Context, req TransferRequest, userID int64) (TransferResult, error) {
+	if req.FromWarehouseID == req.ToWarehouseID {
+		return TransferResult{}, apperr.Validation("source and destination warehouses must differ")
+	}
+	res, err := s.repo.Transfer(ctx, req, userID)
+	if err != nil {
+		if isAppError(err) {
+			return TransferResult{}, err
+		}
+		return TransferResult{}, apperr.Internal(err)
+	}
+	return res, nil
+}
+
+func (s *Service) Move(ctx context.Context, req MoveRequest, userID int64) (MovementResult, error) {
+	d, it, err := s.repo.Move(ctx, req, userID)
+	if err != nil {
+		if isAppError(err) {
+			return MovementResult{}, err
+		}
+		return MovementResult{}, apperr.Internal(err)
+	}
+	return MovementResult{Detail: d, Item: it}, nil
+}
+
+func (s *Service) GetItems(ctx context.Context, warehouseID, productID *int64) ([]WarehouseItem, error) {
+	items, err := s.repo.GetItems(ctx, warehouseID, productID)
+	if err != nil {
+		return nil, apperr.Internal(err)
+	}
+	if items == nil {
+		items = []WarehouseItem{}
+	}
+	return items, nil
+}
+
+func (s *Service) GetDetails(
+	ctx context.Context,
+	warehouseID, productID *int64,
+	mType *string,
+	dateFrom, dateTo *time.Time,
+	limit, offset int,
+) (DetailsListResult, error) {
+
+	items, total, err := s.repo.GetDetails(ctx, warehouseID, productID, mType, dateFrom, dateTo, limit, offset)
+	if err != nil {
+		if isAppError(err) {
+			return DetailsListResult{}, err
+		}
+		return DetailsListResult{}, apperr.Internal(err)
+	}
+	if items == nil {
+		items = []WarehouseItemDetail{}
+	}
+	return DetailsListResult{
+		Items:  items,
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	}, nil
+}
+
+func isAppError(err error) bool {
+	_, ok := err.(*apperr.AppError)
+	return ok
+}
+func (s *Service) OpeningBalance(ctx context.Context, req OpeningBalanceRequest, userID int64) (MovementResult, error) {
+	d, it, err := s.repo.OpeningBalance(ctx, req, userID)
+	if err != nil {
+		if isAppError(err) {
+			return MovementResult{}, err
+		}
+		return MovementResult{}, apperr.Internal(err)
+	}
+	return MovementResult{Detail: d, Item: it}, nil
+}

@@ -325,7 +325,7 @@ definitions:
       product:
         $ref: '#/definitions/product.Product'
       stock:
-        type: number
+        type: integer
       supplier_ids:
         items:
           type: integer
@@ -476,6 +476,89 @@ definitions:
       total_pages:
         type: integer
     type: object
+  stock.InRequest:
+    properties:
+      idempotency_key:
+        type: string
+      price_cents:
+        type: integer
+      product_id:
+        type: integer
+      qty_milli:
+        type: integer
+      warehouse_id:
+        type: integer
+      worker_id:
+        type: integer
+    required:
+    - idempotency_key
+    - product_id
+    - qty_milli
+    - warehouse_id
+    type: object
+  stock.MoveRequest:
+    properties:
+      delta_milli:
+        type: integer
+      idempotency_key:
+        type: string
+      price_cents:
+        type: integer
+      product_id:
+        type: integer
+      type:
+        description: damaged | adjustment | etc.
+        type: string
+      warehouse_id:
+        type: integer
+      worker_id:
+        type: integer
+    required:
+    - delta_milli
+    - idempotency_key
+    - product_id
+    - type
+    - warehouse_id
+    type: object
+  stock.OutRequest:
+    properties:
+      idempotency_key:
+        type: string
+      price_cents:
+        type: integer
+      product_id:
+        type: integer
+      qty_milli:
+        type: integer
+      warehouse_id:
+        type: integer
+      worker_id:
+        type: integer
+    required:
+    - idempotency_key
+    - product_id
+    - qty_milli
+    - warehouse_id
+    type: object
+  stock.TransferRequest:
+    properties:
+      from_warehouse_id:
+        type: integer
+      idempotency_key:
+        type: string
+      product_id:
+        type: integer
+      qty_milli:
+        type: integer
+      to_warehouse_id:
+        type: integer
+    required:
+    - from_warehouse_id
+    - idempotency_key
+    - product_id
+    - qty_milli
+    - to_warehouse_id
+    type: object
   supplier.CreateRequest:
     properties:
       address:
@@ -538,6 +621,34 @@ definitions:
         type: string
       phone:
         maxLength: 50
+        type: string
+    type: object
+  warehouse.CreateRequest:
+    properties:
+      address:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  warehouse.Warehouse:
+    properties:
+      address:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      updated_at:
         type: string
     type: object
   workers.CreateRequest:
@@ -650,6 +761,446 @@ info:
   title: Hezzet Market API
   version: "1.0"
 paths:
+  /api/stock/balance:
+    get:
+      parameters:
+      - description: Warehouse ID
+        in: query
+        name: warehouse_id
+        type: integer
+      - description: Product ID
+        in: query
+        name: product_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Warehouse Items (balances)
+      tags:
+      - Stock
+  /api/stock/details:
+    get:
+      description: List warehouse_item_details with filters + pagination.
+      parameters:
+      - description: Warehouse ID
+        in: query
+        name: warehouse_id
+        type: integer
+      - description: Product ID
+        in: query
+        name: product_id
+        type: integer
+      - description: Movement type (in/out/transfer_in/transfer_out/damaged/adjustment)
+        in: query
+        name: type
+        type: string
+      - description: RFC3339 datetime (inclusive)
+        in: query
+        name: date_from
+        type: string
+      - description: RFC3339 datetime (inclusive)
+        in: query
+        name: date_to
+        type: string
+      - description: page
+        in: query
+        name: page
+        type: integer
+      - description: limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Stock Details (ledger)
+      tags:
+      - Stock
+  /api/stock/in:
+    post:
+      consumes:
+      - application/json
+      description: Add stock to a warehouse (qty_milli, SCALE=1000). Strict idempotency.
+      parameters:
+      - description: Stock In Request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/stock.InRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Stock In
+      tags:
+      - Stock
+  /api/stock/move:
+    post:
+      consumes:
+      - application/json
+      description: Universal move endpoint writing to warehouse_item_details + applying
+        delta to warehouse_items.
+      parameters:
+      - description: Move Request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/stock.MoveRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Stock Move (adjustment/damaged/etc)
+      tags:
+      - Stock
+  /api/stock/out:
+    post:
+      consumes:
+      - application/json
+      description: Remove stock from a warehouse (qty_milli, SCALE=1000). Strict idempotency.
+      parameters:
+      - description: Stock Out Request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/stock.OutRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Stock Out
+      tags:
+      - Stock
+  /api/stock/transfer:
+    post:
+      consumes:
+      - application/json
+      description: Transfer stock between warehouses. Strict idempotency.
+      parameters:
+      - description: Transfer Request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/stock.TransferRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Transfer Stock
+      tags:
+      - Stock
+  /api/warehouses:
+    get:
+      description: Returns active (not deleted) warehouses with pagination.
+      parameters:
+      - description: Page number
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/warehouse.Warehouse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+      summary: List warehouses
+      tags:
+      - Warehouses
+    post:
+      consumes:
+      - application/json
+      description: Creates a new warehouse (soft-delete supported). Requires manager
+        role.
+      parameters:
+      - description: Create warehouse request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/warehouse.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/warehouse.Warehouse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+      summary: Create warehouse
+      tags:
+      - Warehouses
+  /api/warehouses/{id}:
+    get:
+      description: Returns a single warehouse by ID (not deleted).
+      parameters:
+      - description: Warehouse ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/warehouse.Warehouse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+      summary: Get warehouse by ID
+      tags:
+      - Warehouses
   /auth/login:
     post:
       consumes:

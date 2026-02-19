@@ -15,6 +15,8 @@ type Product struct {
 	IsActive      bool      `json:"is_active"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	UnitType      string    `json:"unit_type"`  // piece|kg|liter|meter|box
+	UnitScale     int       `json:"unit_scale"` // 1000
 }
 
 type CreateRequest struct {
@@ -22,10 +24,11 @@ type CreateRequest struct {
 	SKU           string  `json:"sku"`
 	Barcode       string  `json:"barcode"`
 	Unit          string  `json:"unit" binding:"required"`
-	PurchasePrice int64 `json:"purchase_price"`
-	SalePrice     int64 `json:"sale_price"`
-	IsActive      *bool `json:"is_active"`
+	PurchasePrice int64   `json:"purchase_price"`
+	SalePrice     int64   `json:"sale_price"`
+	IsActive      *bool   `json:"is_active"`
 	CategoryIDs   []int64 `json:"category_ids"`
+	UnitType      *string `json:"unit_type"` // optional, default piece
 }
 
 type UpdateRequest struct {
@@ -37,6 +40,7 @@ type UpdateRequest struct {
 	SalePrice     *int64   `json:"sale_price"`
 	IsActive      *bool    `json:"is_active"`
 	CategoryIDs   *[]int64 `json:"category_ids"`
+	UnitType      *string  `json:"unit_type"`
 }
 
 // ListResponse for paginated product list
@@ -49,7 +53,7 @@ type ListResponse struct {
 
 type Card struct {
 	Product    Product         `json:"product"`
-	Stock      float64         `json:"stock"`
+	Stock      int64           `json:"stock"`
 	Tags       []string        `json:"tags"`
 	Suppliers  []int64         `json:"supplier_ids"`
 	Categories []CategoryBrief `json:"categories"`
