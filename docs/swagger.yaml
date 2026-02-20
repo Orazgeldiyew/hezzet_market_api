@@ -1,5 +1,12 @@
 basePath: /
 definitions:
+  auth.BlockUserRequest:
+    properties:
+      reason:
+        type: string
+    required:
+    - reason
+    type: object
   auth.ChangePasswordRequest:
     properties:
       password:
@@ -24,7 +31,6 @@ definitions:
       roles:
         items:
           type: string
-        minItems: 1
         type: array
       username:
         maxLength: 50
@@ -32,7 +38,6 @@ definitions:
         type: string
     required:
     - password
-    - roles
     - username
     type: object
   auth.ListResponse:
@@ -82,6 +87,25 @@ definitions:
     required:
     - refresh_token
     type: object
+  auth.RegisterRequest:
+    properties:
+      email:
+        type: string
+      full_name:
+        type: string
+      password:
+        minLength: 6
+        type: string
+      phone:
+        type: string
+      username:
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
   auth.TokenResponse:
     properties:
       access_token:
@@ -114,6 +138,10 @@ definitions:
     type: object
   auth.UserDTO:
     properties:
+      blocked_at:
+        type: string
+      blocked_reason:
+        type: string
       created_at:
         type: string
       email:
@@ -124,6 +152,10 @@ definitions:
         type: integer
       is_active:
         type: boolean
+      last_login_at:
+        type: string
+      password_changed_at:
+        type: string
       phone:
         type: string
       updated_at:
@@ -133,6 +165,10 @@ definitions:
     type: object
   auth.UserWithRoles:
     properties:
+      blocked_at:
+        type: string
+      blocked_reason:
+        type: string
       created_at:
         type: string
       email:
@@ -143,6 +179,10 @@ definitions:
         type: integer
       is_active:
         type: boolean
+      last_login_at:
+        type: string
+      password_changed_at:
+        type: string
       phone:
         type: string
       roles:
@@ -362,6 +402,9 @@ definitions:
         type: string
       unit:
         type: string
+      unit_type:
+        description: optional, default piece
+        type: string
     required:
     - name
     - unit
@@ -399,6 +442,12 @@ definitions:
         type: string
       unit:
         type: string
+      unit_scale:
+        description: "1000"
+        type: integer
+      unit_type:
+        description: piece|kg|liter|meter|box
+        type: string
       updated_at:
         type: string
     type: object
@@ -430,6 +479,8 @@ definitions:
       sku:
         type: string
       unit:
+        type: string
+      unit_type:
         type: string
     type: object
   response.APIError:
@@ -518,6 +569,30 @@ definitions:
     - idempotency_key
     - product_id
     - type
+    - warehouse_id
+    type: object
+  stock.OpeningBalanceRequest:
+    properties:
+      idempotency_key:
+        type: string
+      price_cents:
+        description: |-
+          ВАЖНО: price_cents = цена за 1.000 единицу (за 1 “unit” в твоей системе SCALE=1000)
+          пример: qty_milli=1000 и price_cents=5000 => партия стоила 5000 центов
+        type: integer
+      product_id:
+        type: integer
+      qty_milli:
+        type: integer
+      warehouse_id:
+        type: integer
+      worker_id:
+        type: integer
+    required:
+    - idempotency_key
+    - price_cents
+    - product_id
+    - qty_milli
     - warehouse_id
     type: object
   stock.OutRequest:
@@ -929,6 +1004,46 @@ paths:
       summary: Stock Move (adjustment/damaged/etc)
       tags:
       - Stock
+  /api/stock/opening-balance:
+    post:
+      consumes:
+      - application/json
+      description: Set opening balance for stock (qty_milli, SCALE=1000). Strict idempotency.
+      parameters:
+      - description: Opening Balance Request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/stock.OpeningBalanceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Opening Balance
+      tags:
+      - Stock
   /api/stock/out:
     post:
       consumes:
@@ -1271,6 +1386,41 @@ paths:
       summary: Refresh tokens
       tags:
       - Auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new account (public, no roles assigned)
+      parameters:
+      - description: Registration data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.UserWithRoles'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Self-register
+      tags:
+      - Auth
   /auth/users:
     get:
       description: Get paginated list of users (admin only)
@@ -1498,11 +1648,61 @@ paths:
       summary: Update user
       tags:
       - Auth
+  /auth/users/{id}/block:
+    post:
+      consumes:
+      - application/json
+      description: Block a user account (admin only). Invalidates all existing tokens.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Block reason
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.BlockUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.UserWithRoles'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Block user
+      tags:
+      - Auth
   /auth/users/{id}/password:
     post:
       consumes:
       - application/json
-      description: Change password (admin or self)
+      description: Change password (admin or self). Invalidates all existing tokens.
       parameters:
       - description: User ID
         in: path
@@ -1546,6 +1746,44 @@ paths:
       security:
       - BearerAuth: []
       summary: Change user password
+      tags:
+      - Auth
+  /auth/users/{id}/unblock:
+    post:
+      description: Unblock a user account (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.UserWithRoles'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Unblock user
       tags:
       - Auth
   /categories:

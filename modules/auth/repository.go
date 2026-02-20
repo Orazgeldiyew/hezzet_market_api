@@ -4,6 +4,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,75 +18,72 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
 func isNotFound(err error) bool { return err == pgx.ErrNoRows }
 
+// userScanDest returns the ordered scan destinations for a User row.
+func userScanDest(u *User) []any {
+	return []any{
+		&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Phone, &u.Email,
+		&u.IsActive, &u.BlockedAt, &u.BlockedReason, &u.PasswordChangedAt,
+		&u.TokenVersion, &u.LastLoginAt, &u.CreatedBy, &u.UpdatedBy,
+		&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
+	}
+}
+
+const userCols = `id, username, password_hash, full_name, phone, email,
+       is_active, blocked_at, blocked_reason, password_changed_at,
+       token_version, last_login_at, created_by, updated_by,
+       created_at, updated_at, deleted_at`
+
 // ---------- User CRUD ----------
 
 func (r *Repository) CreateUser(ctx context.Context, u *User) error {
 	q := `
-		INSERT INTO users (username, password_hash, full_name, phone, email, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO users (username, password_hash, full_name, phone, email, is_active, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at, updated_at
 	`
 	return r.db.QueryRow(ctx, q,
-		u.Username, u.PasswordHash, u.FullName, u.Phone, u.Email, u.IsActive,
+		u.Username, u.PasswordHash, u.FullName, u.Phone, u.Email, u.IsActive, u.CreatedBy,
 	).Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
 }
 
 func (r *Repository) GetByUsername(ctx context.Context, username string) (User, error) {
+	q := fmt.Sprintf(`SELECT %s FROM users WHERE username = $1 AND deleted_at IS NULL`, userCols)
 	var u User
-	q := `
-		SELECT id, username, password_hash, full_name, phone, email,
-		       is_active, created_at, updated_at, deleted_at
-		FROM users
-		WHERE username = $1 AND deleted_at IS NULL
-	`
-	err := r.db.QueryRow(ctx, q, username).Scan(
-		&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Phone, &u.Email,
-		&u.IsActive, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
-	)
+	err := r.db.QueryRow(ctx, q, username).Scan(userScanDest(&u)...)
 	return u, err
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
+	q := fmt.Sprintf(`SELECT %s FROM users WHERE id = $1 AND deleted_at IS NULL`, userCols)
 	var u User
-	q := `
-		SELECT id, username, password_hash, full_name, phone, email,
-		       is_active, created_at, updated_at, deleted_at
-		FROM users
-		WHERE id = $1 AND deleted_at IS NULL
-	`
-	err := r.db.QueryRow(ctx, q, id).Scan(
-		&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Phone, &u.Email,
-		&u.IsActive, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
-	)
+	err := r.db.QueryRow(ctx, q, id).Scan(userScanDest(&u)...)
 	return u, err
 }
 
-func (r *Repository) Update(ctx context.Context, id int64, req UpdateUserRequest) (User, error) {
-	q := `
+func (r *Repository) Update(ctx context.Context, id int64, req UpdateUserRequest, updatedBy *int64) (User, error) {
+	q := fmt.Sprintf(`
 		UPDATE users SET
-			username  = COALESCE($1, username),
-			full_name = COALESCE($2, full_name),
-			phone     = COALESCE($3, phone),
-			email     = COALESCE($4, email),
-			is_active = COALESCE($5, is_active),
+			username   = COALESCE($1, username),
+			full_name  = COALESCE($2, full_name),
+			phone      = COALESCE($3, phone),
+			email      = COALESCE($4, email),
+			is_active  = COALESCE($5, is_active),
+			updated_by = $6,
 			updated_at = now()
-		WHERE id = $6 AND deleted_at IS NULL
-		RETURNING id, username, password_hash, full_name, phone, email,
-		          is_active, created_at, updated_at, deleted_at
-	`
+		WHERE id = $7 AND deleted_at IS NULL
+		RETURNING %s
+	`, userCols)
+
 	var u User
 	err := r.db.QueryRow(ctx, q,
-		req.Username, req.FullName, req.Phone, req.Email, req.IsActive, id,
-	).Scan(
-		&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Phone, &u.Email,
-		&u.IsActive, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
-	)
+		req.Username, req.FullName, req.Phone, req.Email, req.IsActive, updatedBy, id,
+	).Scan(userScanDest(&u)...)
 	return u, err
 }
 
 func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
 	ct, err := r.db.Exec(ctx,
-		`UPDATE users SET deleted_at = now(), is_active=false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
+		`UPDATE users SET deleted_at = now(), is_active = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
 	if err != nil {
 		return err
 	}
@@ -95,9 +93,16 @@ func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (r *Repository) UpdatePassword(ctx context.Context, id int64, hash string) error {
-	ct, err := r.db.Exec(ctx,
-		`UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2 AND deleted_at IS NULL`, hash, id)
+func (r *Repository) UpdatePasswordAndBumpVersion(ctx context.Context, id int64, hash string, updatedBy int64) error {
+	ct, err := r.db.Exec(ctx, `
+		UPDATE users SET
+			password_hash       = $1,
+			password_changed_at = now(),
+			token_version       = token_version + 1,
+			updated_by          = $2,
+			updated_at          = now()
+		WHERE id = $3 AND deleted_at IS NULL
+	`, hash, updatedBy, id)
 	if err != nil {
 		return err
 	}
@@ -105,6 +110,75 @@ func (r *Repository) UpdatePassword(ctx context.Context, id int64, hash string) 
 		return pgx.ErrNoRows
 	}
 	return nil
+}
+
+func (r *Repository) UpdateLastLogin(ctx context.Context, id int64) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE users SET last_login_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
+	return err
+}
+
+// ---------- Block / Unblock ----------
+
+func (r *Repository) BlockUser(ctx context.Context, id int64, reason string, updatedBy int64) (User, error) {
+	q := fmt.Sprintf(`
+		UPDATE users SET
+			blocked_at     = now(),
+			blocked_reason = $1,
+			token_version  = token_version + 1,
+			updated_by     = $2,
+			updated_at     = now()
+		WHERE id = $3 AND deleted_at IS NULL
+		RETURNING %s
+	`, userCols)
+
+	var u User
+	err := r.db.QueryRow(ctx, q, reason, updatedBy, id).Scan(userScanDest(&u)...)
+	return u, err
+}
+
+func (r *Repository) UnblockUser(ctx context.Context, id int64, updatedBy int64) (User, error) {
+	// SECURITY: unblock changes security-state; bump token_version to invalidate tokens
+	q := fmt.Sprintf(`
+		UPDATE users SET
+			blocked_at     = NULL,
+			blocked_reason = NULL,
+			token_version  = token_version + 1,
+			updated_by     = $1,
+			updated_at     = now()
+		WHERE id = $2 AND deleted_at IS NULL
+		RETURNING %s
+	`, userCols)
+
+	var u User
+	err := r.db.QueryRow(ctx, q, updatedBy, id).Scan(userScanDest(&u)...)
+	return u, err
+}
+
+// ---------- Token version (used by middleware) ----------
+
+// GetTokenVersion loads the user's current token_version.
+// Returns an error if the user is deleted, disabled or blocked.
+func (r *Repository) GetTokenVersion(ctx context.Context, userID int64) (int, error) {
+	var version int
+	var isActive bool
+	var blockedAt *time.Time
+
+	err := r.db.QueryRow(ctx, `
+		SELECT token_version, is_active, blocked_at
+		FROM users
+		WHERE id = $1 AND deleted_at IS NULL
+	`, userID).Scan(&version, &isActive, &blockedAt)
+	if err != nil {
+		return 0, err
+	}
+	if !isActive {
+		return 0, fmt.Errorf("user disabled")
+	}
+	if blockedAt != nil {
+		return 0, fmt.Errorf("user blocked")
+	}
+	return version, nil
 }
 
 // ---------- List ----------
@@ -141,14 +215,13 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	q := fmt.Sprintf(`
-		SELECT id, username, password_hash, full_name, phone, email,
-		       is_active, created_at, updated_at, deleted_at
+		SELECT %s
 		FROM users
 		WHERE deleted_at IS NULL
 		  AND ($1 = '' OR username ILIKE '%%' || $1 || '%%' OR full_name ILIKE '%%' || $1 || '%%')
 		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
-	`, col, dir)
+	`, userCols, col, dir)
 
 	rows, err := r.db.Query(ctx, q, search, limit, offset)
 	if err != nil {
@@ -159,10 +232,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(
-			&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Phone, &u.Email,
-			&u.IsActive, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
-		); err != nil {
+		if err := rows.Scan(userScanDest(&u)...); err != nil {
 			return nil, 0, err
 		}
 		users = append(users, u)

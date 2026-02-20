@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -24,7 +25,47 @@ type Service struct {
 
 func NewService(repo *Repository, cfg config.Config) *Service { return &Service{repo: repo, cfg: cfg} }
 
-// ---------- Login ----------
+// -------------------- Roles helpers --------------------
+
+const DefaultStaffRole = "operator"
+
+func normalizeRoles(in []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(in))
+	for _, r := range in {
+		if r == "" {
+			continue
+		}
+		if _, ok := seen[r]; ok {
+			continue
+		}
+		seen[r] = struct{}{}
+		out = append(out, r)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func validateAdminExclusive(roles []string) error {
+	for _, r := range roles {
+		if r == "admin" {
+			if len(roles) > 1 {
+				return apperr.Validation("admin role must be exclusive (cannot combine with other roles)")
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+func applyDefaultRole(roles []string) []string {
+	if len(roles) == 0 {
+		return []string{DefaultStaffRole}
+	}
+	return roles
+}
+
+// -------------------- Login --------------------
 
 func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, error) {
 	accessSecret := s.getAccessSecret()
@@ -43,6 +84,9 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 	if !u.IsActive {
 		return LoginResponse{}, apperr.Unauthorized("account is disabled")
 	}
+	if u.BlockedAt != nil {
+		return LoginResponse{}, apperr.Unauthorized("account is blocked")
+	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)); err != nil {
 		return LoginResponse{}, apperr.Unauthorized("invalid credentials")
@@ -52,14 +96,13 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 	if err != nil {
 		return LoginResponse{}, apperr.Internal(err)
 	}
-	if roles == nil {
-		roles = []string{}
-	}
+	roles = normalizeRoles(roles)
 
 	payload := JWTPayload{
-		UserID:   u.ID,
-		Username: u.Username,
-		Role:     roles,
+		UserID:       u.ID,
+		Username:     u.Username,
+		Role:         roles,
+		TokenVersion: u.TokenVersion,
 	}
 
 	accessToken, accessExp, err := s.generateToken(payload, "access", s.getAccessExpiration(), accessSecret)
@@ -72,6 +115,9 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 		return LoginResponse{}, apperr.Internal(err)
 	}
 
+	// Best-effort: update last_login_at
+	_ = s.repo.UpdateLastLogin(ctx, u.ID)
+
 	return LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
@@ -82,14 +128,54 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 	}, nil
 }
 
-// ---------- User CRUD ----------
+// -------------------- Register (public, no roles) --------------------
 
-func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest) (UserWithRoles, error) {
-	n, err := s.repo.CountRolesByCodes(ctx, req.Roles)
+func (s *Service) Register(ctx context.Context, req RegisterRequest) (UserWithRoles, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return UserWithRoles{}, apperr.Internal(err)
 	}
-	if n != len(req.Roles) {
+
+	u := User{
+		Username:     req.Username,
+		PasswordHash: string(hash),
+		FullName:     req.FullName,
+		Phone:        req.Phone,
+		Email:        req.Email,
+		IsActive:     true,
+	}
+
+	if err := s.repo.CreateUser(ctx, &u); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return UserWithRoles{}, &apperr.AppError{
+				Code:       "USERNAME_ALREADY_EXISTS",
+				Message:    "username already exists",
+				HTTPStatus: http.StatusConflict,
+				Err:        err,
+			}
+		}
+		return UserWithRoles{}, apperr.Internal(err)
+	}
+
+	return UserWithRoles{UserDTO: toDTO(u), Roles: []string{}}, nil
+}
+
+// -------------------- User CRUD --------------------
+
+func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, createdBy int64) (UserWithRoles, error) {
+	roles := normalizeRoles(req.Roles)
+	roles = applyDefaultRole(roles)
+
+	if err := validateAdminExclusive(roles); err != nil {
+		return UserWithRoles{}, err
+	}
+
+	n, err := s.repo.CountRolesByCodes(ctx, roles)
+	if err != nil {
+		return UserWithRoles{}, apperr.Internal(err)
+	}
+	if n != len(roles) {
 		return UserWithRoles{}, apperr.Validation("unknown role in roles[]")
 	}
 
@@ -105,6 +191,7 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest) (UserWi
 		Phone:        req.Phone,
 		Email:        req.Email,
 		IsActive:     true,
+		CreatedBy:    &createdBy,
 	}
 	if req.IsActive != nil {
 		u.IsActive = *req.IsActive
@@ -123,14 +210,14 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest) (UserWi
 		return UserWithRoles{}, apperr.Internal(err)
 	}
 
-	if err := s.repo.SetUserRoles(ctx, u.ID, req.Roles); err != nil {
+	if err := s.repo.SetUserRoles(ctx, u.ID, roles); err != nil {
 		if err == pgx.ErrNoRows {
 			return UserWithRoles{}, apperr.Validation("unknown role in roles[]")
 		}
 		return UserWithRoles{}, apperr.Internal(err)
 	}
 
-	return UserWithRoles{UserDTO: toDTO(u), Roles: req.Roles}, nil
+	return UserWithRoles{UserDTO: toDTO(u), Roles: roles}, nil
 }
 
 func (s *Service) GetUser(ctx context.Context, id int64) (UserWithRoles, error) {
@@ -146,9 +233,7 @@ func (s *Service) GetUser(ctx context.Context, id int64) (UserWithRoles, error) 
 	if err != nil {
 		return UserWithRoles{}, apperr.Internal(err)
 	}
-	if roles == nil {
-		roles = []string{}
-	}
+	roles = normalizeRoles(roles)
 
 	return UserWithRoles{UserDTO: toDTO(u), Roles: roles}, nil
 }
@@ -184,10 +269,7 @@ func (s *Service) ListUsers(ctx context.Context, limit, offset int, orderBy, ord
 
 	items := make([]UserWithRoles, 0, len(users))
 	for _, u := range users {
-		roles := rolesMap[u.ID]
-		if roles == nil {
-			roles = []string{}
-		}
+		roles := normalizeRoles(rolesMap[u.ID])
 		items = append(items, UserWithRoles{UserDTO: toDTO(u), Roles: roles})
 	}
 
@@ -199,8 +281,9 @@ func (s *Service) ListUsers(ctx context.Context, limit, offset int, orderBy, ord
 	}, nil
 }
 
-func (s *Service) UpdateUser(ctx context.Context, id int64, req UpdateUserRequest) (UserWithRoles, error) {
-	u, err := s.repo.Update(ctx, id, req)
+func (s *Service) UpdateUser(ctx context.Context, id int64, req UpdateUserRequest, updatedBy int64) (UserWithRoles, error) {
+	byPtr := &updatedBy
+	u, err := s.repo.Update(ctx, id, req, byPtr)
 	if err != nil {
 		if isNotFound(err) {
 			return UserWithRoles{}, apperr.NotFound("NOT_FOUND", "user not found")
@@ -218,14 +301,24 @@ func (s *Service) UpdateUser(ctx context.Context, id int64, req UpdateUserReques
 	}
 
 	if req.Roles != nil {
-		n, err := s.repo.CountRolesByCodes(ctx, req.Roles)
+		roles := normalizeRoles(*req.Roles)
+
+		if len(roles) == 0 {
+			return UserWithRoles{}, apperr.Validation("roles cannot be empty")
+		}
+		if err := validateAdminExclusive(roles); err != nil {
+			return UserWithRoles{}, err
+		}
+
+		n, err := s.repo.CountRolesByCodes(ctx, roles)
 		if err != nil {
 			return UserWithRoles{}, apperr.Internal(err)
 		}
-		if n != len(req.Roles) {
+		if n != len(roles) {
 			return UserWithRoles{}, apperr.Validation("unknown role in roles[]")
 		}
-		if err := s.repo.SetUserRoles(ctx, u.ID, req.Roles); err != nil {
+
+		if err := s.repo.SetUserRoles(ctx, u.ID, roles); err != nil {
 			if err == pgx.ErrNoRows {
 				return UserWithRoles{}, apperr.Validation("unknown role in roles[]")
 			}
@@ -237,14 +330,23 @@ func (s *Service) UpdateUser(ctx context.Context, id int64, req UpdateUserReques
 	if err != nil {
 		return UserWithRoles{}, apperr.Internal(err)
 	}
-	if roles == nil {
-		roles = []string{}
-	}
+	roles = normalizeRoles(roles)
 
 	return UserWithRoles{UserDTO: toDTO(u), Roles: roles}, nil
 }
 
-func (s *Service) DeleteUser(ctx context.Context, id int64) error {
+// DeleteUser: admin-only in routes; security: forbid self-delete
+func (s *Service) DeleteUser(ctx context.Context, id int64, actorID int64) error {
+	if id <= 0 {
+		return apperr.Validation("invalid user id")
+	}
+	if actorID <= 0 {
+		return apperr.Unauthorized("unauthorized")
+	}
+	if id == actorID {
+		return apperr.Validation("cannot delete yourself")
+	}
+
 	if err := s.repo.SoftDelete(ctx, id); err != nil {
 		if isNotFound(err) {
 			return apperr.NotFound("NOT_FOUND", "user not found")
@@ -254,7 +356,7 @@ func (s *Service) DeleteUser(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (s *Service) ChangePassword(ctx context.Context, id int64, password string) error {
+func (s *Service) ChangePassword(ctx context.Context, id int64, password string, updatedBy int64) error {
 	_, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if isNotFound(err) {
@@ -268,7 +370,7 @@ func (s *Service) ChangePassword(ctx context.Context, id int64, password string)
 		return apperr.Internal(err)
 	}
 
-	if err := s.repo.UpdatePassword(ctx, id, string(hash)); err != nil {
+	if err := s.repo.UpdatePasswordAndBumpVersion(ctx, id, string(hash), updatedBy); err != nil {
 		if isNotFound(err) {
 			return apperr.NotFound("NOT_FOUND", "user not found")
 		}
@@ -277,7 +379,54 @@ func (s *Service) ChangePassword(ctx context.Context, id int64, password string)
 	return nil
 }
 
-// ---------- Refresh Token ----------
+// -------------------- Block / Unblock --------------------
+
+func (s *Service) BlockUser(ctx context.Context, id int64, reason string, updatedBy int64) (UserWithRoles, error) {
+	if id == updatedBy {
+		return UserWithRoles{}, apperr.Validation("cannot block yourself")
+	}
+
+	u, err := s.repo.BlockUser(ctx, id, reason, updatedBy)
+	if err != nil {
+		if isNotFound(err) {
+			return UserWithRoles{}, apperr.NotFound("NOT_FOUND", "user not found")
+		}
+		return UserWithRoles{}, apperr.Internal(err)
+	}
+
+	roles, err := s.repo.GetUserRoles(ctx, u.ID)
+	if err != nil {
+		return UserWithRoles{}, apperr.Internal(err)
+	}
+	roles = normalizeRoles(roles)
+
+	return UserWithRoles{UserDTO: toDTO(u), Roles: roles}, nil
+}
+
+func (s *Service) UnblockUser(ctx context.Context, id int64, updatedBy int64) (UserWithRoles, error) {
+	// unblock self technically harmless, but keep strict symmetry with block
+	if id == updatedBy {
+		return UserWithRoles{}, apperr.Validation("cannot unblock yourself")
+	}
+
+	u, err := s.repo.UnblockUser(ctx, id, updatedBy)
+	if err != nil {
+		if isNotFound(err) {
+			return UserWithRoles{}, apperr.NotFound("NOT_FOUND", "user not found")
+		}
+		return UserWithRoles{}, apperr.Internal(err)
+	}
+
+	roles, err := s.repo.GetUserRoles(ctx, u.ID)
+	if err != nil {
+		return UserWithRoles{}, apperr.Internal(err)
+	}
+	roles = normalizeRoles(roles)
+
+	return UserWithRoles{UserDTO: toDTO(u), Roles: roles}, nil
+}
+
+// -------------------- Refresh Token --------------------
 
 func (s *Service) RefreshToken(ctx context.Context, refreshTokenStr string) (TokenResponse, error) {
 	refreshSecret := s.getRefreshSecret()
@@ -311,6 +460,17 @@ func (s *Service) RefreshToken(ctx context.Context, refreshTokenStr string) (Tok
 		return TokenResponse{}, apperr.Unauthorized("invalid refresh token")
 	}
 
+	// token_version: FAIL-CLOSED
+	rawTV, exists := claims["token_version"]
+	if !exists {
+		return TokenResponse{}, apperr.Unauthorized("token missing token_version")
+	}
+	tvFloat, ok := rawTV.(float64)
+	if !ok {
+		return TokenResponse{}, apperr.Unauthorized("invalid token_version type")
+	}
+	claimVersion := int(tvFloat)
+
 	u, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
 		if isNotFound(err) {
@@ -322,19 +482,24 @@ func (s *Service) RefreshToken(ctx context.Context, refreshTokenStr string) (Tok
 	if !u.IsActive {
 		return TokenResponse{}, apperr.Unauthorized("account is disabled")
 	}
+	if u.BlockedAt != nil {
+		return TokenResponse{}, apperr.Unauthorized("account is blocked")
+	}
+	if claimVersion != u.TokenVersion {
+		return TokenResponse{}, apperr.Unauthorized("token revoked")
+	}
 
 	roles, err := s.repo.GetUserRoles(ctx, u.ID)
 	if err != nil {
 		return TokenResponse{}, apperr.Internal(err)
 	}
-	if roles == nil {
-		roles = []string{}
-	}
+	roles = normalizeRoles(roles)
 
 	payload := JWTPayload{
-		UserID:   u.ID,
-		Username: u.Username,
-		Role:     roles,
+		UserID:       u.ID,
+		Username:     u.Username,
+		Role:         roles,
+		TokenVersion: u.TokenVersion,
 	}
 
 	newAccessToken, accessExp, err := s.generateToken(payload, "access", s.getAccessExpiration(), s.getAccessSecret())
@@ -355,17 +520,18 @@ func (s *Service) RefreshToken(ctx context.Context, refreshTokenStr string) (Tok
 	}, nil
 }
 
-// ---------- Token helpers ----------
+// -------------------- Token helpers --------------------
 
 func (s *Service) generateToken(payload JWTPayload, tokenType string, expDuration time.Duration, secret string) (string, time.Duration, error) {
 	now := time.Now()
 	claims := jwt.MapClaims{
-		"sub":      strconv.FormatInt(payload.UserID, 10),
-		"username": payload.Username,
-		"role":     payload.Role,
-		"type":     tokenType,
-		"iat":      now.Unix(),
-		"exp":      now.Add(expDuration).Unix(),
+		"sub":           strconv.FormatInt(payload.UserID, 10),
+		"username":      payload.Username,
+		"role":          payload.Role,
+		"type":          tokenType,
+		"iat":           now.Unix(),
+		"exp":           now.Add(expDuration).Unix(),
+		"token_version": payload.TokenVersion,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

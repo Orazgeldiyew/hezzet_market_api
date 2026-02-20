@@ -18,6 +18,56 @@ type Handler struct {
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
+// helper: extract current user_id from context (set by JWT middleware)
+func currentUserID(c *gin.Context) (int64, bool) {
+	raw, ok := c.Get("user_id")
+	if !ok {
+		return 0, false
+	}
+	id, ok := raw.(int64)
+	return id, ok
+}
+
+func currentRoles(c *gin.Context) []string {
+	v, _ := c.Get("roles")
+	roles, _ := v.([]string)
+	return roles
+}
+
+func isAdmin(roles []string) bool {
+	for _, r := range roles {
+		if r == "admin" {
+			return true
+		}
+	}
+	return false
+}
+
+// Register godoc
+// @Summary      Self-register
+// @Description  Create a new account (public, no roles assigned)
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      RegisterRequest  true  "Registration data"
+// @Success      201   {object}  response.APIResponse{data=UserWithRoles}
+// @Failure      400   {object}  response.APIResponse
+// @Failure      409   {object}  response.APIResponse
+// @Router       /auth/register [post]
+func (h *Handler) Register(c *gin.Context) {
+	var req RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	out, err := h.svc.Register(c.Request.Context(), req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.Created(c, out)
+}
+
 // Login godoc
 // @Summary      User login
 // @Description  Authenticate with username and password
@@ -83,12 +133,18 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 // @Failure      409   {object}  response.APIResponse
 // @Router       /auth/users [post]
 func (h *Handler) CreateUser(c *gin.Context) {
+	callerID, ok := currentUserID(c)
+	if !ok {
+		c.Error(apperr.Unauthorized("unauthorized"))
+		return
+	}
+
 	var req CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Error(err)
 		return
 	}
-	out, err := h.svc.CreateUser(c.Request.Context(), req)
+	out, err := h.svc.CreateUser(c.Request.Context(), req, callerID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -180,7 +236,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 		return
 	}
 
-	response.List(c, out, page, out.Limit, out.Offset, out.Total)
+	response.List(c, out.Items, page, out.Limit, out.Offset, out.Total)
 }
 
 // GetUser godoc
@@ -221,13 +277,19 @@ func (h *Handler) GetUser(c *gin.Context) {
 // @Failure      404   {object}  response.APIResponse
 // @Router       /auth/users/{id} [patch]
 func (h *Handler) UpdateUser(c *gin.Context) {
+	callerID, ok := currentUserID(c)
+	if !ok {
+		c.Error(apperr.Unauthorized("unauthorized"))
+		return
+	}
+
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var req UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Error(err)
 		return
 	}
-	out, err := h.svc.UpdateUser(c.Request.Context(), id, req)
+	out, err := h.svc.UpdateUser(c.Request.Context(), id, req, callerID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -248,8 +310,14 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 // @Failure      404  {object}  response.APIResponse
 // @Router       /auth/users/{id} [delete]
 func (h *Handler) DeleteUser(c *gin.Context) {
+	actorID, ok := currentUserID(c)
+	if !ok {
+		c.Error(apperr.Unauthorized("unauthorized"))
+		return
+	}
+
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := h.svc.DeleteUser(c.Request.Context(), id); err != nil {
+	if err := h.svc.DeleteUser(c.Request.Context(), id, actorID); err != nil {
 		c.Error(err)
 		return
 	}
@@ -258,7 +326,7 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 
 // ChangePassword godoc
 // @Summary      Change user password
-// @Description  Change password (admin or self)
+// @Description  Change password (admin or self). Invalidates all existing tokens.
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
@@ -274,29 +342,13 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 func (h *Handler) ChangePassword(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 
-	// Safe read current user id
-	curRaw, ok := c.Get("user_id")
-	if !ok {
-		c.Error(apperr.Unauthorized("unauthorized"))
-		return
-	}
-	currentUserID, ok := curRaw.(int64)
+	currentUID, ok := currentUserID(c)
 	if !ok {
 		c.Error(apperr.Unauthorized("unauthorized"))
 		return
 	}
 
-	rolesVal, _ := c.Get("roles")
-	userRoles, _ := rolesVal.([]string)
-
-	isAdmin := false
-	for _, r := range userRoles {
-		if r == "admin" {
-			isAdmin = true
-			break
-		}
-	}
-	if !isAdmin && currentUserID != id {
+	if !isAdmin(currentRoles(c)) && currentUID != id {
 		c.Error(apperr.Forbidden("forbidden"))
 		return
 	}
@@ -307,9 +359,76 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.ChangePassword(c.Request.Context(), id, req.Password); err != nil {
+	if err := h.svc.ChangePassword(c.Request.Context(), id, req.Password, currentUID); err != nil {
 		c.Error(err)
 		return
 	}
 	response.OK(c, gin.H{"changed": true})
+}
+
+// BlockUser godoc
+// @Summary      Block user
+// @Description  Block a user account (admin only). Invalidates all existing tokens.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      int               true  "User ID"
+// @Param        body  body      BlockUserRequest  true  "Block reason"
+// @Success      200   {object}  response.APIResponse{data=UserWithRoles}
+// @Failure      400   {object}  response.APIResponse
+// @Failure      401   {object}  response.APIResponse
+// @Failure      403   {object}  response.APIResponse
+// @Failure      404   {object}  response.APIResponse
+// @Router       /auth/users/{id}/block [post]
+func (h *Handler) BlockUser(c *gin.Context) {
+	callerID, ok := currentUserID(c)
+	if !ok {
+		c.Error(apperr.Unauthorized("unauthorized"))
+		return
+	}
+
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+
+	var req BlockUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+
+	out, err := h.svc.BlockUser(c.Request.Context(), id, req.Reason, callerID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
+// UnblockUser godoc
+// @Summary      Unblock user
+// @Description  Unblock a user account (admin only)
+// @Tags         Auth
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "User ID"
+// @Success      200  {object}  response.APIResponse{data=UserWithRoles}
+// @Failure      401  {object}  response.APIResponse
+// @Failure      403  {object}  response.APIResponse
+// @Failure      404  {object}  response.APIResponse
+// @Router       /auth/users/{id}/unblock [post]
+func (h *Handler) UnblockUser(c *gin.Context) {
+	callerID, ok := currentUserID(c)
+	if !ok {
+		c.Error(apperr.Unauthorized("unauthorized"))
+		return
+	}
+
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+
+	out, err := h.svc.UnblockUser(c.Request.Context(), id, callerID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
 }

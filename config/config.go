@@ -4,6 +4,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -24,6 +25,26 @@ type Config struct {
 	TokenType             string
 	AccessTokenExpiresIn  string
 	RefreshTokenExpiresIn string
+
+	// Swagger (prod-safe)
+	SwaggerUser     string
+	SwaggerPass     string
+	SwaggerAllowIPs string // comma-separated CIDRs
+	SwaggerHost     string // e.g. localhost:5000
+	SwaggerSchemes  string // e.g. http or https
+
+	// CORS
+	CORSAllowedOrigins []string
+
+	// Notification / SMS
+	RedisURL            string
+	SMSProvider         string // "log" | "twilio"
+	SMSFrom             string
+	SMSWorkers          int
+	LowStockDefault     int64 // threshold in regular units (not milli)
+	LowStockDedupTTL    time.Duration
+	SMSRateLimitPerHour int
+	AdminPhones         []string
 }
 
 func Load() Config {
@@ -40,6 +61,13 @@ func Load() Config {
 		TokenType:             getenv("TOKEN_TYPE", "Bearer"),
 		AccessTokenExpiresIn:  getenv("ACCESS_TOKEN_EXPIRES_IN", "15m"),
 		RefreshTokenExpiresIn: getenv("REFRESH_TOKEN_EXPIRES_IN", "168h"),
+		SwaggerUser:           getenv("SWAGGER_USER", ""),
+		SwaggerPass:           getenv("SWAGGER_PASS", ""),
+		SwaggerAllowIPs:       getenv("SWAGGER_ALLOW_IPS", ""),
+		SwaggerHost:           getenv("SWAGGER_HOST", ""),
+		SwaggerSchemes:        getenv("SWAGGER_SCHEMES", ""),
+		
+		
 	}
 
 	// Fallback: if separate secrets are empty, use JWTSecret
@@ -50,7 +78,55 @@ func Load() Config {
 		cfg.RefreshTokenSecret = cfg.JWTSecret
 	}
 
+	// ── CORS ──
+	cfg.CORSAllowedOrigins = splitEnvCSV(getenv("CORS_ALLOWED_ORIGINS", ""))
+	if cfg.Env == "dev" && len(cfg.CORSAllowedOrigins) == 0 {
+		cfg.CORSAllowedOrigins = []string{"http://localhost:5000"}
+	}
+
+	// ── Notification / SMS ──
+	cfg.RedisURL = getenv("REDIS_URL", "")
+	cfg.SMSProvider = getenv("SMS_PROVIDER", "log")
+	cfg.SMSFrom = getenv("SMS_FROM", "HezzetMarket")
+	cfg.AdminPhones = splitEnvCSV(getenv("ADMIN_PHONES", ""))
+
+	if n, err := strconv.Atoi(getenv("SMS_WORKERS", "1")); err == nil && n > 0 {
+		cfg.SMSWorkers = n
+	} else {
+		cfg.SMSWorkers = 1
+	}
+	if n, err := strconv.ParseInt(getenv("LOW_STOCK_DEFAULT", "10"), 10, 64); err == nil && n > 0 {
+		cfg.LowStockDefault = n
+	} else {
+		cfg.LowStockDefault = 10
+	}
+	if n, err := strconv.Atoi(getenv("SMS_RATE_LIMIT_PER_HOUR", "3")); err == nil && n > 0 {
+		cfg.SMSRateLimitPerHour = n
+	} else {
+		cfg.SMSRateLimitPerHour = 3
+	}
+	if d, err := ParseDuration(getenv("LOW_STOCK_DEDUP_TTL", "6h")); err == nil {
+		cfg.LowStockDedupTTL = d
+	} else {
+		cfg.LowStockDedupTTL = 6 * time.Hour
+	}
+
 	return cfg
+}
+
+func splitEnvCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getenv(k, def string) string {

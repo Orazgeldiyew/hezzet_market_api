@@ -251,6 +251,20 @@ func (h *Handler) GetDetails(c *gin.Context) {
 
 	response.List(c, out.Items, page, out.Limit, out.Offset, out.Total)
 }
+
+// OpeningBalance godoc
+// @Summary Opening Balance
+// @Description Set opening balance for stock (qty_milli, SCALE=1000). Strict idempotency.
+// @Tags Stock
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param body body OpeningBalanceRequest true "Opening Balance Request"
+// @Success 201 {object} response.APIResponse
+// @Failure 400 {object} response.APIResponse
+// @Failure 401 {object} response.APIResponse
+// @Failure 409 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
 // @Router /api/stock/opening-balance [post]
 func (h *Handler) OpeningBalance(c *gin.Context) {
 	var req OpeningBalanceRequest

@@ -278,6 +278,69 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/stock/opening-balance": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Set opening balance for stock (qty_milli, SCALE=1000). Strict idempotency.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Stock"
+                ],
+                "summary": "Opening Balance",
+                "parameters": [
+                    {
+                        "description": "Opening Balance Request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/stock.OpeningBalanceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/stock/out": {
             "post": {
                 "security": [
@@ -874,6 +937,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/register": {
+            "post": {
+                "description": "Create a new account (public, no roles assigned)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Self-register",
+                "parameters": [
+                    {
+                        "description": "Registration data",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/auth.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/auth.UserWithRoles"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/users": {
             "get": {
                 "security": [
@@ -1248,6 +1369,88 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/users/{id}/block": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Block a user account (admin only). Invalidates all existing tokens.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Block user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Block reason",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/auth.BlockUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/auth.UserWithRoles"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/users/{id}/password": {
             "post": {
                 "security": [
@@ -1255,7 +1458,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Change password (admin or self)",
+                "description": "Change password (admin or self). Invalidates all existing tokens.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1307,6 +1510,70 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/users/{id}/unblock": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Unblock a user account (admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Unblock user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/auth.UserWithRoles"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "401": {
@@ -3600,6 +3867,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "auth.BlockUserRequest": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
         "auth.ChangePasswordRequest": {
             "type": "object",
             "required": [
@@ -3616,7 +3894,6 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "password",
-                "roles",
                 "username"
             ],
             "properties": {
@@ -3638,7 +3915,6 @@ const docTemplate = `{
                 },
                 "roles": {
                     "type": "array",
-                    "minItems": 1,
                     "items": {
                         "type": "string"
                     }
@@ -3722,6 +3998,33 @@ const docTemplate = `{
                 }
             }
         },
+        "auth.RegisterRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 6
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 3
+                }
+            }
+        },
         "auth.TokenResponse": {
             "type": "object",
             "properties": {
@@ -3770,6 +4073,12 @@ const docTemplate = `{
         "auth.UserDTO": {
             "type": "object",
             "properties": {
+                "blocked_at": {
+                    "type": "string"
+                },
+                "blocked_reason": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -3784,6 +4093,12 @@ const docTemplate = `{
                 },
                 "is_active": {
                     "type": "boolean"
+                },
+                "last_login_at": {
+                    "type": "string"
+                },
+                "password_changed_at": {
+                    "type": "string"
                 },
                 "phone": {
                     "type": "string"
@@ -3799,6 +4114,12 @@ const docTemplate = `{
         "auth.UserWithRoles": {
             "type": "object",
             "properties": {
+                "blocked_at": {
+                    "type": "string"
+                },
+                "blocked_reason": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -3813,6 +4134,12 @@ const docTemplate = `{
                 },
                 "is_active": {
                     "type": "boolean"
+                },
+                "last_login_at": {
+                    "type": "string"
+                },
+                "password_changed_at": {
+                    "type": "string"
                 },
                 "phone": {
                     "type": "string"
@@ -4146,6 +4473,10 @@ const docTemplate = `{
                 },
                 "unit": {
                     "type": "string"
+                },
+                "unit_type": {
+                    "description": "optional, default piece",
+                    "type": "string"
                 }
             }
         },
@@ -4199,6 +4530,14 @@ const docTemplate = `{
                 "unit": {
                     "type": "string"
                 },
+                "unit_scale": {
+                    "description": "1000",
+                    "type": "integer"
+                },
+                "unit_type": {
+                    "description": "piece|kg|liter|meter|box",
+                    "type": "string"
+                },
                 "updated_at": {
                     "type": "string"
                 }
@@ -4246,6 +4585,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "unit": {
+                    "type": "string"
+                },
+                "unit_type": {
                     "type": "string"
                 }
             }
@@ -4371,6 +4713,37 @@ const docTemplate = `{
                 "type": {
                     "description": "damaged | adjustment | etc.",
                     "type": "string"
+                },
+                "warehouse_id": {
+                    "type": "integer"
+                },
+                "worker_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "stock.OpeningBalanceRequest": {
+            "type": "object",
+            "required": [
+                "idempotency_key",
+                "price_cents",
+                "product_id",
+                "qty_milli",
+                "warehouse_id"
+            ],
+            "properties": {
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "price_cents": {
+                    "description": "ВАЖНО: price_cents = цена за 1.000 единицу (за 1 “unit” в твоей системе SCALE=1000)\nпример: qty_milli=1000 и price_cents=5000 =\u003e партия стоила 5000 центов",
+                    "type": "integer"
+                },
+                "product_id": {
+                    "type": "integer"
+                },
+                "qty_milli": {
+                    "type": "integer"
                 },
                 "warehouse_id": {
                     "type": "integer"
@@ -4743,6 +5116,7 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Market backend (products, stock, income, sales)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
+
 }
 
 func init() {

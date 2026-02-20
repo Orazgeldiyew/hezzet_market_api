@@ -4,14 +4,18 @@ import (
 	"context"
 	"time"
 
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/notification"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
 type Service struct {
-	repo *Repository
+	repo     *Repository
+	notifSvc *notification.Service // nil-safe
 }
 
-func NewService(repo *Repository) *Service { return &Service{repo: repo} }
+func NewService(repo *Repository, notifSvc *notification.Service) *Service {
+	return &Service{repo: repo, notifSvc: notifSvc}
+}
 
 func (s *Service) StockIn(ctx context.Context, req InRequest, userID int64) (MovementResult, error) {
 	d, it, err := s.repo.StockIn(ctx, req, userID)
@@ -32,6 +36,10 @@ func (s *Service) StockOut(ctx context.Context, req OutRequest, userID int64) (M
 		}
 		return MovementResult{}, apperr.Internal(err)
 	}
+
+	// Async low-stock check (non-blocking, best-effort)
+	go s.notifSvc.NotifyAdminLowStock(context.Background(), req.ProductID, req.WarehouseID, it.QtyMilli)
+
 	return MovementResult{Detail: d, Item: it}, nil
 }
 
@@ -46,6 +54,10 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest, userID int6
 		}
 		return TransferResult{}, apperr.Internal(err)
 	}
+
+	// Async low-stock check on source warehouse
+	go s.notifSvc.NotifyAdminLowStock(context.Background(), req.ProductID, req.FromWarehouseID, res.FromItem.QtyMilli)
+
 	return res, nil
 }
 
@@ -57,6 +69,12 @@ func (s *Service) Move(ctx context.Context, req MoveRequest, userID int64) (Move
 		}
 		return MovementResult{}, apperr.Internal(err)
 	}
+
+	// Async low-stock check only for stock-decreasing moves
+	if req.DeltaMilli < 0 {
+		go s.notifSvc.NotifyAdminLowStock(context.Background(), req.ProductID, req.WarehouseID, it.QtyMilli)
+	}
+
 	return MovementResult{Detail: d, Item: it}, nil
 }
 

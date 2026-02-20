@@ -5,11 +5,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/notification"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, notifSvc *notification.Service) {
 	repo := NewRepository(db)
-	svc := NewService(repo)
+	svc := NewService(repo, notifSvc)
 	h := NewHandler(svc)
 
 	s := rg.Group("/stock")

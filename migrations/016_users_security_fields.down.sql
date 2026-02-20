@@ -1,0 +1,9 @@
+ALTER TABLE users DROP CONSTRAINT IF EXISTS fk_users_created_by;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS fk_users_updated_by;
+ALTER TABLE users DROP COLUMN IF EXISTS blocked_at;
+ALTER TABLE users DROP COLUMN IF EXISTS blocked_reason;
+ALTER TABLE users DROP COLUMN IF EXISTS password_changed_at;
+ALTER TABLE users DROP COLUMN IF EXISTS token_version;
+ALTER TABLE users DROP COLUMN IF EXISTS last_login_at;
+ALTER TABLE users DROP COLUMN IF EXISTS created_by;
+ALTER TABLE users DROP COLUMN IF EXISTS updated_by;

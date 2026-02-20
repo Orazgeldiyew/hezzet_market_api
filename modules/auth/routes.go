@@ -9,18 +9,23 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config) {
+// RegisterRoutes sets up all auth routes and returns the token-version
+// checker so the caller can reuse it for other protected route groups.
+func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config) middleware.TokenVersionFunc {
 	repo := NewRepository(db)
 	svc := NewService(repo, cfg)
 	h := NewHandler(svc)
 
 	g := r.Group("/auth")
 	{
+		// Public
 		g.POST("/login", h.Login)
 		g.POST("/refresh", h.RefreshToken)
+		g.POST("/register", h.Register)
 
+		// Admin-only user management
 		admin := g.Group("/users")
-		admin.Use(middleware.AuthRequired(cfg))
+		admin.Use(middleware.AuthRequired(cfg, repo.GetTokenVersion))
 		admin.Use(middleware.RequireRoles()) // empty = admin only
 		{
 			admin.POST("", h.CreateUser)
@@ -28,12 +33,17 @@ func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config) {
 			admin.GET("/:id", h.GetUser)
 			admin.PATCH("/:id", h.UpdateUser)
 			admin.DELETE("/:id", h.DeleteUser)
+			admin.POST("/:id/block", h.BlockUser)
+			admin.POST("/:id/unblock", h.UnblockUser)
 		}
 
+		// Authenticated (admin or self)
 		self := g.Group("/users")
-		self.Use(middleware.AuthRequired(cfg))
+		self.Use(middleware.AuthRequired(cfg, repo.GetTokenVersion))
 		{
 			self.POST("/:id/password", h.ChangePassword)
 		}
 	}
+
+	return repo.GetTokenVersion
 }

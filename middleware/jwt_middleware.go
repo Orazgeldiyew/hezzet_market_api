@@ -2,6 +2,7 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,7 +14,11 @@ import (
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
-func AuthRequired(cfg config.Config) gin.HandlerFunc {
+// TokenVersionFunc loads the user's current token_version from the DB.
+// It must return an error if the user is deleted, disabled, or blocked.
+type TokenVersionFunc func(ctx context.Context, userID int64) (int, error)
+
+func AuthRequired(cfg config.Config, getTokenVersion TokenVersionFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" || !strings.HasPrefix(header, "Bearer ") {
@@ -66,6 +71,35 @@ func AuthRequired(cfg config.Config) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+
+		// token_version: FAIL-CLOSED (must exist and be numeric)
+		rawTV, exists := claims["token_version"]
+		if !exists {
+			c.Error(apperr.Unauthorized("token missing token_version"))
+			c.Abort()
+			return
+		}
+		tvFloat, ok := rawTV.(float64)
+		if !ok {
+			c.Error(apperr.Unauthorized("invalid token_version type"))
+			c.Abort()
+			return
+		}
+		claimVersion := int(tvFloat)
+
+		// Verify token_version against DB (also checks blocked/disabled/deleted)
+		dbVersion, err := getTokenVersion(c.Request.Context(), userID)
+		if err != nil {
+			c.Error(apperr.Unauthorized("unauthorized"))
+			c.Abort()
+			return
+		}
+		if claimVersion != dbVersion {
+			c.Error(apperr.Unauthorized("token revoked"))
+			c.Abort()
+			return
+		}
+
 		c.Set("user_id", userID)
 
 		if username, ok := claims["username"].(string); ok {
@@ -75,12 +109,16 @@ func AuthRequired(cfg config.Config) gin.HandlerFunc {
 		var roles []string
 		if rolesRaw, ok := claims["role"].([]interface{}); ok {
 			for _, r := range rolesRaw {
-				if s, ok := r.(string); ok {
+				if s, ok := r.(string); ok && s != "" {
 					roles = append(roles, s)
 				}
 			}
 		} else if rolesStr, ok := claims["role"].([]string); ok {
-			roles = append(roles, rolesStr...)
+			for _, s := range rolesStr {
+				if s != "" {
+					roles = append(roles, s)
+				}
+			}
 		}
 		if roles == nil {
 			roles = []string{}
