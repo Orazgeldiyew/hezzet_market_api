@@ -3,6 +3,7 @@ module github.com/Orazgeldiyew/hezzet_market_backend
 go 1.25.6
 
 require (
+	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -18,7 +19,6 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/gin-contrib/cors v1.7.6 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 )
 

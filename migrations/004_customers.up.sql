@@ -1,4 +1,14 @@
-CREATE TABLE customers (
+-- 004_customers.up.sql
+-- NOTE: 'vip' is included here because migration 006 removes it later.
+-- Keep enum values in sync with that migration.
+
+DO $$ BEGIN
+  CREATE TYPE customer_type AS ENUM ('regular', 'vip', 'wholesale');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS customers (
     id            BIGSERIAL PRIMARY KEY,
     name          VARCHAR(255) NOT NULL,
     phone         VARCHAR(50),
@@ -13,7 +23,7 @@ CREATE TABLE customers (
     deleted_at    TIMESTAMPTZ
 );
 
-CREATE INDEX idx_customers_deleted_at ON customers(deleted_at);
-CREATE INDEX idx_customers_phone ON customers(phone);
-CREATE INDEX idx_customers_email ON customers(email);
-CREATE INDEX idx_customers_type ON customers(type);
+CREATE INDEX IF NOT EXISTS idx_customers_deleted_at ON customers(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_customers_phone      ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_customers_email      ON customers(email);
+CREATE INDEX IF NOT EXISTS idx_customers_type       ON customers(type);

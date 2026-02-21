@@ -7,21 +7,33 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// APIResponse is the standard JSON envelope for every response.
+//
+// Success responses:
+//
+//	{ "success": true,  "status_code": 200, "data": <any>, "meta": <optional> }
+//
+// Error responses (written by ErrorMiddleware, not by handlers directly):
+//
+//	{ "success": false, "status_code": 4xx/5xx, "error": { ... } }
 type APIResponse struct {
 	Success    bool        `json:"success"`
 	StatusCode int         `json:"status_code"`
-	Data       interface{} `json:"data,omitempty"`
+	Data       any         `json:"data,omitempty"`
 	Error      *APIError   `json:"error,omitempty"`
 	Meta       *Meta       `json:"meta,omitempty"`
 }
 
+// APIError is the structured error payload inside an error envelope.
+// Details and RequestID are omitted from JSON when empty.
 type APIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Details   any    `json:"details,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
 }
 
 type Meta struct {
-	// Useful for frontend debugging / UX
 	Timestamp  string          `json:"timestamp,omitempty"`
 	Pagination *PaginationMeta `json:"pagination,omitempty"`
 }
@@ -36,7 +48,8 @@ type PaginationMeta struct {
 	TotalPages int  `json:"total_pages"`
 }
 
-func OK(c *gin.Context, data interface{}) {
+// OK writes a 200 success response.
+func OK(c *gin.Context, data any) {
 	c.JSON(http.StatusOK, APIResponse{
 		Success:    true,
 		StatusCode: http.StatusOK,
@@ -44,7 +57,8 @@ func OK(c *gin.Context, data interface{}) {
 	})
 }
 
-func Created(c *gin.Context, data interface{}) {
+// Created writes a 201 success response.
+func Created(c *gin.Context, data any) {
 	c.JSON(http.StatusCreated, APIResponse{
 		Success:    true,
 		StatusCode: http.StatusCreated,
@@ -52,6 +66,9 @@ func Created(c *gin.Context, data interface{}) {
 	})
 }
 
+// Error writes a structured error response directly.
+// Prefer using c.Error(err) in handlers and letting ErrorMiddleware handle it.
+// Use this only from middleware or places where the middleware cannot intercept.
 func Error(c *gin.Context, status int, code, msg string) {
 	c.JSON(status, APIResponse{
 		Success:    false,
@@ -60,8 +77,8 @@ func Error(c *gin.Context, status int, code, msg string) {
 	})
 }
 
-// OKMeta returns 200 with data + meta
-func OKMeta(c *gin.Context, data interface{}, meta *Meta) {
+// OKMeta writes 200 with data + arbitrary meta.
+func OKMeta(c *gin.Context, data any, meta *Meta) {
 	if meta != nil && meta.Timestamp == "" {
 		meta.Timestamp = time.Now().UTC().Format(time.RFC3339)
 	}
@@ -73,8 +90,8 @@ func OKMeta(c *gin.Context, data interface{}, meta *Meta) {
 	})
 }
 
-// List is a standard helper for list endpoints: 200 with data + pagination meta
-func List(c *gin.Context, data interface{}, page, limit, offset, total int) {
+// List writes 200 with data + pagination meta.
+func List(c *gin.Context, data any, page, limit, offset, total int) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -82,7 +99,6 @@ func List(c *gin.Context, data interface{}, page, limit, offset, total int) {
 		offset = 0
 	}
 	if page <= 0 {
-		// fallback derived from offset/limit
 		page = (offset / limit) + 1
 	}
 

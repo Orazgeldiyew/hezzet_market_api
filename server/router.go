@@ -35,6 +35,9 @@ func NewRouter(deps Deps) *gin.Engine {
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 
+	// ── Request ID ── (must be before ErrorMiddleware so the ID is in context)
+	r.Use(middleware.RequestID())
+
 	// ── CORS ──
 
 	// r.Use(cors.New(cors.Config{
