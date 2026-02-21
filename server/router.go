@@ -2,7 +2,6 @@ package server
 
 import (
 	"strings"
-	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -37,15 +36,16 @@ func NewRouter(deps Deps) *gin.Engine {
 	r.Use(gin.Recovery())
 
 	// ── CORS ──
-	if len(deps.Cfg.CORSAllowedOrigins) > 0 {
-		r.Use(cors.New(cors.Config{
-			AllowOrigins:     deps.Cfg.CORSAllowedOrigins,
-			AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowHeaders:     []string{"Authorization", "Content-Type"},
-			AllowCredentials: true,
-			MaxAge:           12 * time.Hour,
-		}))
-	}
+
+	// r.Use(cors.New(cors.Config{
+	// 	AllowOrigins:     *,
+	// 	AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+	// 	AllowHeaders:     []string{"Authorization", "Content-Type"},
+	// 	AllowCredentials: true,
+	// 	MaxAge:           12 * time.Hour,
+	// }))
+
+	r.Use(cors.Default())
 
 	r.Use(ErrorMiddleware())
 
