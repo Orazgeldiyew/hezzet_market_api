@@ -51,7 +51,7 @@ func Load() Config {
 	_ = godotenv.Load()
 
 	cfg := Config{
-		Env:                   getenv("APP_ENV", "dev"),
+		Env:                   getenv("APP_ENV", "dev"), 
 		HTTPAddr:              getenv("HTTP_ADDR", ":8080"),
 		DBDSN:                 getenv("DB_DSN", ""),
 		JWTSecret:             os.Getenv("JWT_SECRET"),
