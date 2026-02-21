@@ -30,7 +30,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      409   {object}  response.APIResponse
-// @Router       /customers [post]
+// @Router       /api/customers [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -63,7 +63,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Failure      401              {object}  response.APIResponse
 // @Failure      403              {object}  response.APIResponse
 // @Failure      500              {object}  response.APIResponse
-// @Router       /customers [get]
+// @Router       /api/customers [get]
 func (h *Handler) List(c *gin.Context) {
 	page := 1
 	limit := 10
@@ -162,7 +162,7 @@ func (h *Handler) List(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /customers/{id} [get]
+// @Router       /api/customers/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	out, err := h.svc.Get(c.Request.Context(), id)
@@ -184,7 +184,7 @@ func (h *Handler) Get(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /customers/{id} [delete]
+// @Router       /api/customers/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
@@ -208,7 +208,7 @@ func (h *Handler) Delete(c *gin.Context) {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /customers/{id}/spent [post]
+// @Router       /api/customers/{id}/spent [post]
 func (h *Handler) AddSpent(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var req AddSpentRequest
@@ -242,7 +242,7 @@ type AddSpentRequest struct {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /customers/{id}/contact [patch]
+// @Router       /api/customers/{id}/contact [patch]
 func (h *Handler) UpdateContact(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var req UpdateContactRequest
@@ -272,7 +272,7 @@ func (h *Handler) UpdateContact(c *gin.Context) {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /customers/{id}/admin [patch]
+// @Router       /api/customers/{id}/admin [patch]
 func (h *Handler) UpdateAdmin(c *gin.Context) {
 
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)

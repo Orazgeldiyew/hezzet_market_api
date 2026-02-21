@@ -31,7 +31,7 @@ func NewHandler(svc *Service) *Handler {
 // @Failure      400   {object}  response.APIResponse
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
-// @Router       /suppliers [post]
+// @Router       /api/suppliers [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -61,7 +61,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Success      200              {object}  response.APIResponse{data=ListResponse}
 // @Failure      400              {object}  response.APIResponse
 // @Failure      500              {object}  response.APIResponse
-// @Router       /suppliers [get]
+// @Router       /api/suppliers [get]
 func (h *Handler) List(c *gin.Context) {
 	// Defaults from pagination middleware (page+limit -> offset)
 	page := 1
@@ -145,7 +145,7 @@ func (h *Handler) List(c *gin.Context) {
 // @Param        id   path      int  true  "Supplier ID"
 // @Success      200  {object}  response.APIResponse{data=Supplier}
 // @Failure      404  {object}  response.APIResponse
-// @Router       /suppliers/{id} [get]
+// @Router       /api/suppliers/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	out, err := h.svc.Get(c.Request.Context(), id)
@@ -168,7 +168,7 @@ func (h *Handler) Get(c *gin.Context) {
 // @Success      200   {object}  response.APIResponse{data=Supplier}
 // @Failure      400   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /suppliers/{id} [patch]
+// @Router       /api/suppliers/{id} [patch]
 func (h *Handler) Update(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var req UpdateRequest
@@ -195,7 +195,7 @@ func (h *Handler) Update(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /suppliers/{id} [delete]
+// @Router       /api/suppliers/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	if err := h.svc.Delete(c.Request.Context(), id); err != nil {

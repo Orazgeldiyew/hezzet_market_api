@@ -24,6 +24,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 //	@Tags			Warehouses
 //	@Accept			json
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			body	body		CreateRequest	true	"Create warehouse request"
 //	@Success		201		{object}	response.APIResponse{data=Warehouse}
 //	@Failure		400		{object}	response.APIResponse{error=response.APIError}
@@ -51,6 +52,7 @@ func (h *Handler) Create(c *gin.Context) {
 //	@Description	Returns active (not deleted) warehouses with pagination.
 //	@Tags			Warehouses
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			page	query		int	false	"Page number"		minimum(1)
 //	@Param			limit	query		int	false	"Page size"			minimum(1)	maximum(200)
 //	@Success		200		{object}	response.APIResponse{data=[]Warehouse}
@@ -85,6 +87,7 @@ func (h *Handler) List(c *gin.Context) {
 //	@Description	Returns a single warehouse by ID (not deleted).
 //	@Tags			Warehouses
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			id	path		int64	true	"Warehouse ID"
 //	@Success		200	{object}	response.APIResponse{data=Warehouse}
 //	@Failure		400	{object}	response.APIResponse{error=response.APIError}

@@ -32,7 +32,7 @@ func NewHandler(svc *Service) *Handler {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      409   {object}  response.APIResponse
-// @Router       /categories [post]
+// @Router       /api/categories [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -64,7 +64,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Success      200              {object}  response.APIResponse{data=ListResponse}
 // @Failure      400              {object}  response.APIResponse
 // @Failure      500              {object}  response.APIResponse
-// @Router       /categories [get]
+// @Router       /api/categories [get]
 func (h *Handler) List(c *gin.Context) {
 	// Defaults from pagination middleware (page+limit -> offset)
 	page := 1
@@ -148,7 +148,7 @@ func (h *Handler) List(c *gin.Context) {
 // @Security     BearerAuth
 // @Success      200  {object}  response.APIResponse{data=TreeResponse}
 // @Failure      500  {object}  response.APIResponse
-// @Router       /categories/tree [get]
+// @Router       /api/categories/tree [get]
 func (h *Handler) Tree(c *gin.Context) {
 	out, err := h.svc.Tree(c.Request.Context())
 	if err != nil {
@@ -167,7 +167,7 @@ func (h *Handler) Tree(c *gin.Context) {
 // @Param        id   path      int  true  "Category ID"
 // @Success      200  {object}  response.APIResponse{data=Category}
 // @Failure      404  {object}  response.APIResponse
-// @Router       /categories/{id} [get]
+// @Router       /api/categories/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	out, err := h.svc.Get(c.Request.Context(), id)
@@ -190,7 +190,7 @@ func (h *Handler) Get(c *gin.Context) {
 // @Success      200   {object}  response.APIResponse{data=Category}
 // @Failure      400   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /categories/{id} [patch]
+// @Router       /api/categories/{id} [patch]
 func (h *Handler) Update(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
@@ -219,7 +219,7 @@ func (h *Handler) Update(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /categories/{id} [delete]
+// @Router       /api/categories/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	if err := h.svc.Delete(c.Request.Context(), id); err != nil {

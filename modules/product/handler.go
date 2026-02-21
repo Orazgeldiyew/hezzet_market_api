@@ -19,7 +19,6 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// @BasePath /api
 // Create godoc
 // @Summary      Create product
 // @Description  Create a new product
@@ -33,7 +32,7 @@ func NewHandler(svc *Service) *Handler {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      409   {object}  response.APIResponse
-// @Router       /products [post]
+// @Router       /api/products [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -63,7 +62,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Success      200              {object}  response.APIResponse{data=ListResponse}
 // @Failure      400              {object}  response.APIResponse
 // @Failure      500              {object}  response.APIResponse
-// @Router       /products [get]
+// @Router       /api/products [get]
 func (h *Handler) List(c *gin.Context) {
 	// Defaults from pagination middleware (page+limit -> offset)
 	page := 1
@@ -147,7 +146,7 @@ func (h *Handler) List(c *gin.Context) {
 // @Param        id   path      int  true  "Product ID"
 // @Success      200  {object}  response.APIResponse{data=Product}
 // @Failure      404  {object}  response.APIResponse
-// @Router       /products/{id} [get]
+// @Router       /api/products/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	p, err := h.svc.Get(c.Request.Context(), id)
@@ -171,7 +170,7 @@ func (h *Handler) Get(c *gin.Context) {
 // @Failure      400   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
 // @Failure      409   {object}  response.APIResponse
-// @Router       /products/{id} [patch]
+// @Router       /api/products/{id} [patch]
 func (h *Handler) Update(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var req UpdateRequest
@@ -198,7 +197,7 @@ func (h *Handler) Update(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /products/{id} [delete]
+// @Router       /api/products/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
@@ -217,7 +216,7 @@ func (h *Handler) Delete(c *gin.Context) {
 // @Param        id   path      int  true  "Product ID"
 // @Success      200  {object}  response.APIResponse{data=Card}
 // @Failure      404  {object}  response.APIResponse
-// @Router       /products/{id}/card [get]
+// @Router       /api/products/{id}/card [get]
 func (h *Handler) GetCard(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	card, err := h.svc.GetCard(c.Request.Context(), id)
@@ -237,7 +236,7 @@ func (h *Handler) GetCard(c *gin.Context) {
 // @Param        id   path      int  true  "Product ID"
 // @Success      200  {object}  response.APIResponse{data=[]CategoryBrief}
 // @Failure      404  {object}  response.APIResponse
-// @Router       /products/{id}/categories [get]
+// @Router       /api/products/{id}/categories [get]
 func (h *Handler) GetCategories(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	cats, err := h.svc.GetCategories(c.Request.Context(), id)
@@ -260,7 +259,7 @@ func (h *Handler) GetCategories(c *gin.Context) {
 // @Success      200   {object}  response.APIResponse{data=[]CategoryBrief}
 // @Failure      400   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /products/{id}/categories [put]
+// @Router       /api/products/{id}/categories [put]
 func (h *Handler) SetCategories(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var req SetCategoriesRequest
@@ -286,7 +285,7 @@ func (h *Handler) SetCategories(c *gin.Context) {
 // @Param        categoryId  path      int  true  "Category ID"
 // @Success      200         {object}  response.APIResponse{data=object}
 // @Failure      404         {object}  response.APIResponse
-// @Router       /products/{id}/categories/{categoryId} [delete]
+// @Router       /api/products/{id}/categories/{categoryId} [delete]
 func (h *Handler) RemoveCategory(c *gin.Context) {
 	productID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	categoryID, _ := strconv.ParseInt(c.Param("categoryId"), 10, 64)

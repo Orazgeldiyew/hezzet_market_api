@@ -59,6 +59,7 @@ type UpdateUserRequest struct {
 	Roles    *[]string `json:"roles"`
 }
 
+
 type ChangePasswordRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 }

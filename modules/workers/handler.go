@@ -29,7 +29,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 // @Failure      400   {object}  response.APIResponse
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
-// @Router       /workers [post]
+// @Router       /api/workers [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -61,7 +61,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Failure      400              {object}  response.APIResponse
 // @Failure      401              {object}  response.APIResponse
 // @Failure      403              {object}  response.APIResponse
-// @Router       /workers [get]
+// @Router       /api/workers [get]
 func (h *Handler) List(c *gin.Context) {
 	page := 1
 	limit := 10
@@ -152,7 +152,7 @@ func (h *Handler) List(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /workers/{id} [get]
+// @Router       /api/workers/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	out, err := h.svc.Get(c.Request.Context(), id)
@@ -177,7 +177,7 @@ func (h *Handler) Get(c *gin.Context) {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /workers/{id} [patch]
+// @Router       /api/workers/{id} [patch]
 func (h *Handler) Update(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var req UpdateRequest
@@ -204,7 +204,7 @@ func (h *Handler) Update(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /workers/{id} [delete]
+// @Router       /api/workers/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := h.svc.Delete(c.Request.Context(), id); err != nil {

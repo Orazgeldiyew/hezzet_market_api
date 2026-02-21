@@ -56,19 +56,29 @@ func NewRouter(deps Deps) *gin.Engine {
 		response.OK(c, gin.H{"status": "ok"})
 	})
 
-	// ---- Swagger route (host/scheme dynamic per request) ----
+	// ---- Swagger route (host/scheme from config or dynamic per request) ----
 	swaggerHandler := func(c *gin.Context) {
-		// Host должен быть тем же, где открыт swagger UI (например: erkingurlushyk.com.tm:8080)
-		docs.SwaggerInfo.Host = c.Request.Host
-
-		// Scheme: учитываем reverse-proxy (nginx) через X-Forwarded-Proto
-		scheme := "http"
-		if xf := c.GetHeader("X-Forwarded-Proto"); xf != "" {
-			scheme = strings.ToLower(strings.TrimSpace(xf))
-		} else if c.Request.TLS != nil {
-			scheme = "https"
+		if deps.Cfg.SwaggerHost != "" {
+			docs.SwaggerInfo.Host = deps.Cfg.SwaggerHost
+		} else {
+			docs.SwaggerInfo.Host = c.Request.Host
 		}
-		docs.SwaggerInfo.Schemes = []string{scheme}
+
+		if deps.Cfg.SwaggerSchemes != "" {
+			schemes := strings.Split(deps.Cfg.SwaggerSchemes, ",")
+			for i := range schemes {
+				schemes[i] = strings.TrimSpace(schemes[i])
+			}
+			docs.SwaggerInfo.Schemes = schemes
+		} else {
+			scheme := "http"
+			if xf := c.GetHeader("X-Forwarded-Proto"); xf != "" {
+				scheme = strings.ToLower(strings.TrimSpace(xf))
+			} else if c.Request.TLS != nil {
+				scheme = "https"
+			}
+			docs.SwaggerInfo.Schemes = []string{scheme}
+		}
 
 		ginSwagger.WrapHandler(swaggerFiles.Handler)(c)
 	}
