@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS warehouses (
 
 CREATE INDEX IF NOT EXISTS idx_warehouses_deleted_at ON warehouses(deleted_at);
 
-ALTER TABLE warehouses
-  ADD CONSTRAINT warehouses_name_unique UNIQUE (name);
+CREATE UNIQUE INDEX IF NOT EXISTS warehouses_name_unique ON warehouses(name);
 
 COMMIT;

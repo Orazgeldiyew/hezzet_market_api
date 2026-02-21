@@ -1,47 +1,39 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"flag"
 	"fmt"
 	"log"
-	"time"
-
-	"github.com/Orazgeldiyew/hezzet_market_backend/config"
+	"os"
+	"path/filepath"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
 )
 
 func main() {
 	var (
 		path = flag.String("path", "./migrations", "migrations folder")
-		cmd  = flag.String("cmd", "up", "command: up | down | steps | version")
-		n    = flag.Int("n", 1, "steps for steps cmd (can be negative)")
+		cmd  = flag.String("cmd", "up", "command: up | down | steps | version | force")
+		n    = flag.Int("n", 1, "steps for steps/force cmd (can be negative)")
 	)
 	flag.Parse()
 
-	cfg := config.Load()
+	// Load .env: try CWD first, then walk up to find project root
+	loadEnv()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	pool, err := pgxpool.New(ctx, cfg.DBDSN)
-	if err != nil {
-		log.Fatal(err)
+	dsn := os.Getenv("DB_DSN")
+	if dsn == "" {
+		log.Fatal("DB_DSN is not set. Check your .env file or environment variables.")
 	}
-	defer pool.Close()
 
-	// Use stdlib *sql.DB driver via pgxpool's ConnString is not available directly,
-	// so simplest is open using database/sql with lib/pq OR use pgx stdlib.
-	// Here we use pgx stdlib:
-	db, err := postgres.WithInstance(pgxStdlibDB(cfg.DBDSN), &postgres.Config{})
+	db, err := postgres.WithInstance(pgxStdlibDB(dsn), &postgres.Config{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -62,6 +54,8 @@ func main() {
 		err = m.Down()
 	case "steps":
 		err = m.Steps(*n)
+	case "force":
+		err = m.Force(*n)
 	case "version":
 		v, dirty, verr := m.Version()
 		if verr == migrate.ErrNilVersion {
@@ -84,10 +78,35 @@ func main() {
 	fmt.Println("ok")
 }
 
+// loadEnv tries to load .env from the current directory, then walks up parent
+// directories until it finds one (so `go run ./cmd/migrate` works from any level).
+func loadEnv() {
+	// Try CWD first
+	if err := godotenv.Load(); err == nil {
+		return
+	}
+
+	dir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+
+	for {
+		envPath := filepath.Join(dir, ".env")
+		if _, err := os.Stat(envPath); err == nil {
+			_ = godotenv.Load(envPath)
+			return
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+}
+
 // pgxStdlibDB returns *sql.DB using pgx stdlib (needed by golang-migrate postgres driver)
 func pgxStdlibDB(dsn string) *sql.DB {
-	// IMPORTANT: add imports: "database/sql" and "github.com/jackc/pgx/v5/stdlib"
-	// Use stdlib.OpenDB(*pgx.ConnConfig)
 	cfg, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		log.Fatal(err)
