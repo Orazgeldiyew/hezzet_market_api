@@ -53,42 +53,36 @@ func NewRouter(deps Deps) *gin.Engine {
 		response.OK(c, gin.H{"status": "ok"})
 	})
 
-	// ---- Swagger host/schemes (important for localhost:5000) ----
-	// Works only if we import docs as a normal package (not blank import).
-	if deps.Cfg.SwaggerHost != "" {
-		docs.SwaggerInfo.Host = deps.Cfg.SwaggerHost // e.g. localhost:5000
-	}
-	if deps.Cfg.SwaggerSchemes != "" {
-		// allow "http,https" OR single "http"
-		parts := strings.Split(deps.Cfg.SwaggerSchemes, ",")
-		out := make([]string, 0, len(parts))
-		for _, p := range parts {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				out = append(out, p)
-			}
+	// ---- Swagger route (host/scheme dynamic per request) ----
+	swaggerHandler := func(c *gin.Context) {
+		// Host должен быть тем же, где открыт swagger UI (например: erkingurlushyk.com.tm:8080)
+		docs.SwaggerInfo.Host = c.Request.Host
+
+		// Scheme: учитываем reverse-proxy (nginx) через X-Forwarded-Proto
+		scheme := "http"
+		if xf := c.GetHeader("X-Forwarded-Proto"); xf != "" {
+			scheme = strings.ToLower(strings.TrimSpace(xf))
+		} else if c.Request.TLS != nil {
+			scheme = "https"
 		}
-		if len(out) > 0 {
-			docs.SwaggerInfo.Schemes = out
-		}
+		docs.SwaggerInfo.Schemes = []string{scheme}
+
+		ginSwagger.WrapHandler(swaggerFiles.Handler)(c)
 	}
 
-	// ---- Swagger route ----
-	{
-		if deps.Cfg.Env == "dev" {
-			// dev: open
-			r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-		} else {
-			// prod/stage: guarded (IP allowlist + basic auth)
-			allow := splitCSV(deps.Cfg.SwaggerAllowIPs)
-			user := deps.Cfg.SwaggerUser
-			pass := deps.Cfg.SwaggerPass
+	if deps.Cfg.Env == "dev" {
+		// dev: open
+		r.GET("/swagger/*any", swaggerHandler)
+	} else {
+		// prod/stage: guarded (IP allowlist + basic auth)
+		allow := splitCSV(deps.Cfg.SwaggerAllowIPs)
+		user := deps.Cfg.SwaggerUser
+		pass := deps.Cfg.SwaggerPass
 
-			r.GET("/swagger/*any",
-				middleware.SwaggerGuard(allow, user, pass),
-				ginSwagger.WrapHandler(swaggerFiles.Handler),
-			)
-		}
+		r.GET("/swagger/*any",
+			middleware.SwaggerGuard(allow, user, pass),
+			swaggerHandler,
+		)
 	}
 
 	// Auth routes
@@ -124,12 +118,12 @@ func NewRouter(deps Deps) *gin.Engine {
 }
 
 func splitCSV(s string) []string {
-    out := []string{}
-    for _, x := range strings.Split(s, ",") {
-        x = strings.TrimSpace(x)
-        if x != "" {
-            out = append(out, x)
-        }
-    }
-    return out
+	out := []string{}
+	for _, x := range strings.Split(s, ",") {
+		x = strings.TrimSpace(x)
+		if x != "" {
+			out = append(out, x)
+		}
+	}
+	return out
 }
