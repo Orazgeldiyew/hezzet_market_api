@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/response"
-	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
 
@@ -30,6 +30,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 //	@Failure		400		{object}	response.APIResponse{error=response.APIError}
 //	@Failure		401		{object}	response.APIResponse{error=response.APIError}
 //	@Failure		403		{object}	response.APIResponse{error=response.APIError}
+//	@Failure		409		{object}	response.APIResponse{error=response.APIError}
 //	@Failure		500		{object}	response.APIResponse{error=response.APIError}
 //	@Router			/api/warehouses [post]
 func (h *Handler) Create(c *gin.Context) {
@@ -110,13 +111,3 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 	response.OK(c, out)
 }
-
-
-// responseErrorBadRequest creates a plain error that your global error middleware should map.
-// If you already have apperr.Validation(...) available here, replace this helper with it.
-// func responseErrorBadRequest(msg string) error {
-// 	// Using gin.Error would work too, but you already use c.Error(err) pattern.
-// 	// If your project has apperr.Validation, prefer that:
-// 	// return apperr.Validation(msg)
-// 	return &gin.Error{Err: strconv.ErrSyntax, Type: gin.ErrorTypeBind, Meta: msg}
-// }

@@ -22,7 +22,8 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const detailCols = `id, idempotency_key::text, warehouse_id, product_id,
-	delta_milli, type::text, price_cents, worker_id, created_by, created_at`
+	delta_milli, type::text, price_cents, worker_id, created_by, created_at,
+	supplier_id, note`
 
 // ✅ добавили avg_cost_cents + total_cost_cents
 const itemCols = `warehouse_id, product_id, qty_milli, avg_cost_cents, total_cost_cents, updated_at`
@@ -32,6 +33,7 @@ func scanDetail(row pgx.Row) (WarehouseItemDetail, error) {
 	err := row.Scan(
 		&d.ID, &d.IdempotencyKey, &d.WarehouseID, &d.ProductID,
 		&d.DeltaMilli, &d.Type, &d.PriceCents, &d.WorkerID, &d.CreatedBy, &d.CreatedAt,
+		&d.SupplierID, &d.Note,
 	)
 	return d, err
 }
@@ -456,11 +458,12 @@ func (r *Repository) Move(ctx context.Context, req MoveRequest, userID int64) (W
 	// insert detail
 	detail, err := scanDetail(tx.QueryRow(ctx, `
 		INSERT INTO warehouse_item_details
-			(idempotency_key, warehouse_id, product_id, delta_milli, type, price_cents, worker_id, created_by)
-		VALUES ($1, $2, $3, $4, $5::movement_type, $6, $7, $8)
+			(idempotency_key, warehouse_id, product_id, delta_milli, type, price_cents, worker_id, created_by, supplier_id, note)
+		VALUES ($1, $2, $3, $4, $5::movement_type, $6, $7, $8, $9, $10)
 		RETURNING `+detailCols,
 		req.IdempotencyKey, req.WarehouseID, req.ProductID,
 		req.DeltaMilli, t, req.PriceCents, req.WorkerID, userID,
+		req.SupplierID, req.Note,
 	))
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -541,6 +544,7 @@ func (r *Repository) GetDetails(
 	ctx context.Context,
 	warehouseID, productID *int64,
 	mType *string,
+	supplierID *int64,
 	dateFrom, dateTo *time.Time,
 	limit, offset int,
 ) ([]WarehouseItemDetail, int, error) {
@@ -564,6 +568,7 @@ func (r *Repository) GetDetails(
 		  AND ($3::text   IS NULL OR type::text = $3)
 		  AND ($4::timestamptz IS NULL OR created_at >= $4)
 		  AND ($5::timestamptz IS NULL OR created_at <= $5)
+		  AND ($6::bigint IS NULL OR supplier_id = $6)
 	`
 
 	var total int
@@ -571,7 +576,7 @@ func (r *Repository) GetDetails(
 		SELECT COUNT(*)
 		FROM warehouse_item_details
 		`+where,
-		warehouseID, productID, t, dateFrom, dateTo,
+		warehouseID, productID, t, dateFrom, dateTo, supplierID,
 	).Scan(&total); err != nil {
 		return nil, 0, err
 	}
@@ -581,8 +586,8 @@ func (r *Repository) GetDetails(
 		FROM warehouse_item_details
 		`+where+`
 		ORDER BY created_at DESC, id DESC
-		LIMIT $6 OFFSET $7
-	`, warehouseID, productID, t, dateFrom, dateTo, limit, offset)
+		LIMIT $7 OFFSET $8
+	`, warehouseID, productID, t, dateFrom, dateTo, supplierID, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -594,6 +599,7 @@ func (r *Repository) GetDetails(
 		if err := rows.Scan(
 			&d.ID, &d.IdempotencyKey, &d.WarehouseID, &d.ProductID,
 			&d.DeltaMilli, &d.Type, &d.PriceCents, &d.WorkerID, &d.CreatedBy, &d.CreatedAt,
+			&d.SupplierID, &d.Note,
 		); err != nil {
 			return nil, 0, err
 		}

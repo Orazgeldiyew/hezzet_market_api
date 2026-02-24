@@ -15,6 +15,8 @@ type WarehouseItemDetail struct {
 	WorkerID       *int64    `json:"worker_id,omitempty"`
 	CreatedBy      *int64    `json:"created_by,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
+	SupplierID     *int64    `json:"supplier_id,omitempty"`
+	Note           *string   `json:"note,omitempty"`
 }
 
 type WarehouseItem struct {
@@ -77,8 +79,10 @@ type MoveRequest struct {
 	Type           string `json:"type" binding:"required"` // damaged | adjustment | etc.
 	IdempotencyKey string `json:"idempotency_key" binding:"required,uuid"`
 
-	PriceCents *int64 `json:"price_cents"`
-	WorkerID   *int64 `json:"worker_id"`
+	PriceCents *int64  `json:"price_cents"`
+	WorkerID   *int64  `json:"worker_id"`
+	SupplierID *int64  `json:"supplier_id"`
+	Note       *string `json:"note"`
 }
 
 // ---------- Responses ----------

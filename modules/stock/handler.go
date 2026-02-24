@@ -108,8 +108,8 @@ func (h *Handler) Transfer(c *gin.Context) {
 }
 
 // Move godoc
-// @Summary Stock Move (adjustment/damaged/etc)
-// @Description Universal move endpoint writing to warehouse_item_details + applying delta to warehouse_items.
+// @Summary Stock Move (adjustment/damaged/return_to_supplier/etc)
+// @Description Universal move endpoint. For return_to_supplier: delta_milli must be negative, supplier_id is required. Optional note field for comments.
 // @Tags Stock
 // @Accept json
 // @Produce json
@@ -184,7 +184,8 @@ func extractUserID(c *gin.Context) int64 {
 // @Security     BearerAuth
 // @Param warehouse_id query int false "Warehouse ID"
 // @Param product_id query int false "Product ID"
-// @Param type query string false "Movement type (in/out/transfer_in/transfer_out/damaged/adjustment)"
+// @Param type query string false "Movement type (in/out/transfer_in/transfer_out/damaged/adjustment/opening_balance/return_to_supplier)"
+// @Param supplier_id query int false "Supplier ID (filter return_to_supplier movements)"
 // @Param date_from query string false "RFC3339 datetime (inclusive)"
 // @Param date_to query string false "RFC3339 datetime (inclusive)"
 // @Param page query int false "page"
@@ -213,6 +214,12 @@ func (h *Handler) GetDetails(c *gin.Context) {
 	if v := c.Query("type"); v != "" {
 		s := v
 		mType = &s
+	}
+	var supplierID *int64
+	if v := c.Query("supplier_id"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			supplierID = &n
+		}
 	}
 	if v := c.Query("date_from"); v != "" {
 		tm, err := time.Parse(time.RFC3339, v)
@@ -243,7 +250,7 @@ func (h *Handler) GetDetails(c *gin.Context) {
 		}
 	}
 
-	out, err := h.svc.GetDetails(c.Request.Context(), warehouseID, productID, mType, dateFrom, dateTo, limit, offset)
+	out, err := h.svc.GetDetails(c.Request.Context(), warehouseID, productID, mType, supplierID, dateFrom, dateTo, limit, offset)
 	if err != nil {
 		c.Error(err)
 		return

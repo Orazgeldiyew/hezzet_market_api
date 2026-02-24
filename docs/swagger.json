@@ -84,7 +84,10 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/category.ListResponse"
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/category.CategoryResponse"
+                                            }
                                         }
                                     }
                                 }
@@ -258,7 +261,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/category.Category"
+                                            "$ref": "#/definitions/category.CategoryResponse"
                                         }
                                     }
                                 }
@@ -1856,8 +1859,14 @@
                     },
                     {
                         "type": "string",
-                        "description": "Movement type (in/out/transfer_in/transfer_out/damaged/adjustment)",
+                        "description": "Movement type (in/out/transfer_in/transfer_out/damaged/adjustment/opening_balance/return_to_supplier)",
                         "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Supplier ID (filter return_to_supplier movements)",
+                        "name": "supplier_id",
                         "in": "query"
                     },
                     {
@@ -1983,7 +1992,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Universal move endpoint writing to warehouse_item_details + applying delta to warehouse_items.",
+                "description": "Universal move endpoint. For return_to_supplier: delta_milli must be negative, supplier_id is required. Optional note field for comments.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1993,7 +2002,7 @@
                 "tags": [
                     "Stock"
                 ],
-                "summary": "Stock Move (adjustment/damaged/etc)",
+                "summary": "Stock Move (adjustment/damaged/return_to_supplier/etc)",
                 "parameters": [
                     {
                         "description": "Move Request",
@@ -2767,6 +2776,24 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "$ref": "#/definitions/response.APIError"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "allOf": [
                                 {
@@ -4126,6 +4153,7 @@
             "type": "object",
             "required": [
                 "password",
+                "roles",
                 "username"
             ],
             "properties": {
@@ -4147,8 +4175,15 @@
                 },
                 "roles": {
                     "type": "array",
+                    "minItems": 1,
                     "items": {
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                            "admin",
+                            "cashier",
+                            "operator",
+                            "manager"
+                        ]
                     }
                 },
                 "username": {
@@ -4410,6 +4445,29 @@
                 }
             }
         },
+        "category.CategoryResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "parent_id": {
+                    "type": "integer"
+                },
+                "parent_name": {
+                    "type": "string"
+                }
+            }
+        },
         "category.CategoryTree": {
             "type": "object",
             "properties": {
@@ -4445,26 +4503,6 @@
                     "minLength": 1
                 },
                 "parent_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "category.ListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/category.Category"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "offset": {
-                    "type": "integer"
-                },
-                "total": {
                     "type": "integer"
                 }
             }
@@ -4939,10 +4977,16 @@
                 "idempotency_key": {
                     "type": "string"
                 },
+                "note": {
+                    "type": "string"
+                },
                 "price_cents": {
                     "type": "integer"
                 },
                 "product_id": {
+                    "type": "integer"
+                },
+                "supplier_id": {
                     "type": "integer"
                 },
                 "type": {

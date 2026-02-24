@@ -30,7 +30,13 @@ definitions:
         type: string
       roles:
         items:
+          enum:
+          - admin
+          - cashier
+          - operator
+          - manager
           type: string
+        minItems: 1
         type: array
       username:
         maxLength: 50
@@ -38,6 +44,7 @@ definitions:
         type: string
     required:
     - password
+    - roles
     - username
     type: object
   auth.ListResponse:
@@ -207,6 +214,21 @@ definitions:
       parent_id:
         type: integer
     type: object
+  category.CategoryResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      parent_id:
+        type: integer
+      parent_name:
+        type: string
+    type: object
   category.CategoryTree:
     properties:
       children:
@@ -232,19 +254,6 @@ definitions:
         type: integer
     required:
     - name
-    type: object
-  category.ListResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/category.Category'
-        type: array
-      limit:
-        type: integer
-      offset:
-        type: integer
-      total:
-        type: integer
     type: object
   category.TreeResponse:
     properties:
@@ -555,9 +564,13 @@ definitions:
         type: integer
       idempotency_key:
         type: string
+      note:
+        type: string
       price_cents:
         type: integer
       product_id:
+        type: integer
+      supplier_id:
         type: integer
       type:
         description: damaged | adjustment | etc.
@@ -882,7 +895,9 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/category.ListResponse'
+                  items:
+                    $ref: '#/definitions/category.CategoryResponse'
+                  type: array
               type: object
         "400":
           description: Bad Request
@@ -997,7 +1012,7 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/category.Category'
+                  $ref: '#/definitions/category.CategoryResponse'
               type: object
         "404":
           description: Not Found
@@ -1957,10 +1972,14 @@ paths:
         in: query
         name: product_id
         type: integer
-      - description: Movement type (in/out/transfer_in/transfer_out/damaged/adjustment)
+      - description: Movement type (in/out/transfer_in/transfer_out/damaged/adjustment/opening_balance/return_to_supplier)
         in: query
         name: type
         type: string
+      - description: Supplier ID (filter return_to_supplier movements)
+        in: query
+        name: supplier_id
+        type: integer
       - description: RFC3339 datetime (inclusive)
         in: query
         name: date_from
@@ -2045,8 +2064,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Universal move endpoint writing to warehouse_item_details + applying
-        delta to warehouse_items.
+      description: 'Universal move endpoint. For return_to_supplier: delta_milli must
+        be negative, supplier_id is required. Optional note field for comments.'
       parameters:
       - description: Move Request
         in: body
@@ -2079,7 +2098,7 @@ paths:
             $ref: '#/definitions/response.APIResponse'
       security:
       - BearerAuth: []
-      summary: Stock Move (adjustment/damaged/etc)
+      summary: Stock Move (adjustment/damaged/return_to_supplier/etc)
       tags:
       - Stock
   /api/stock/opening-balance:
@@ -2515,6 +2534,15 @@ paths:
               type: object
         "403":
           description: Forbidden
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "409":
+          description: Conflict
           schema:
             allOf:
             - $ref: '#/definitions/response.APIResponse'

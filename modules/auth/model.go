@@ -47,7 +47,7 @@ type CreateUserRequest struct {
 	Phone    string   `json:"phone"`
 	Email    string   `json:"email"`
 	IsActive *bool    `json:"is_active"`
-	Roles    []string `json:"roles"`
+	Roles    []string `json:"roles" binding:"required,min=1,dive,required" enums:"admin,cashier,operator,manager"`
 }
 
 type UpdateUserRequest struct {
@@ -58,7 +58,6 @@ type UpdateUserRequest struct {
 	IsActive *bool     `json:"is_active"`
 	Roles    *[]string `json:"roles"`
 }
-
 
 type ChangePasswordRequest struct {
 	Password string `json:"password" binding:"required,min=6"`

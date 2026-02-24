@@ -30,19 +30,20 @@ func (r *Repository) Create(ctx context.Context, c *Category) error {
 		Scan(&c.ID, &c.IsActive, &c.CreatedAt)
 }
 
-func (r *Repository) GetByID(ctx context.Context, id int) (Category, error) {
-	var c Category
+func (r *Repository) GetByID(ctx context.Context, id int) (CategoryResponse, error) {
+	var c CategoryResponse
 	q := `
-		SELECT id, name, parent_id, is_active, created_at
-		FROM categories
-		WHERE id=$1
+		SELECT c.id, c.name, c.parent_id, c.is_active, c.created_at, p.name
+		FROM categories c
+		LEFT JOIN categories p ON p.id = c.parent_id
+		WHERE c.id=$1
 	`
 	err := r.db.QueryRow(ctx, q, id).
-		Scan(&c.ID, &c.Name, &c.ParentID, &c.IsActive, &c.CreatedAt)
+		Scan(&c.ID, &c.Name, &c.ParentID, &c.IsActive, &c.CreatedAt, &c.ParentName)
 	return c, err
 }
 
-func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, orderDir, q string) ([]Category, int, error) {
+func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, orderDir, q string) ([]CategoryResponse, int, error) {
 	// defaults + bounds
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -66,9 +67,9 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	col := "created_at"
 	switch orderBy {
 	case "name":
-		col = "name"
+		col = "c.name"
 	case "created_at":
-		col = "created_at"
+		col = "c.created_at"
 	}
 
 	dir := "DESC"
@@ -77,10 +78,11 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT id, name, parent_id, is_active, created_at
-		FROM categories
-		WHERE is_active = true
-		  AND ($1 = '' OR name ILIKE '%%' || $1 || '%%')
+		SELECT c.id, c.name, c.parent_id, c.is_active, c.created_at, p.name
+		FROM categories c
+		LEFT JOIN categories p ON p.id = c.parent_id
+		WHERE c.is_active = true
+		  AND ($1 = '' OR c.name ILIKE '%%' || $1 || '%%')
 		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
 	`, col, dir)
@@ -91,10 +93,10 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 	defer rows.Close()
 
-	var out []Category
+	var out []CategoryResponse
 	for rows.Next() {
-		var c Category
-		if err := rows.Scan(&c.ID, &c.Name, &c.ParentID, &c.IsActive, &c.CreatedAt); err != nil {
+		var c CategoryResponse
+		if err := rows.Scan(&c.ID, &c.Name, &c.ParentID, &c.IsActive, &c.CreatedAt, &c.ParentName); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, c)

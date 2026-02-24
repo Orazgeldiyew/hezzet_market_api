@@ -19,6 +19,16 @@ type CategoryBrief struct {
 	Name string `json:"name"`
 }
 
+// CategoryResponse is the enriched response DTO with parent_name resolved via JOIN
+type CategoryResponse struct {
+	ID         int       `json:"id"`
+	Name       string    `json:"name"`
+	ParentID   *int      `json:"parent_id"`
+	ParentName *string   `json:"parent_name"`
+	IsActive   bool      `json:"is_active"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 // CategoryTree represents category with children
 type CategoryTree struct {
 	ID       int             `json:"id"`
@@ -43,10 +53,10 @@ type UpdateRequest struct {
 
 // ListResponse for paginated category list
 type ListResponse struct {
-	Items  []Category `json:"items"`
-	Total  int        `json:"total"`
-	Limit  int        `json:"limit"`
-	Offset int        `json:"offset"`
+	Items  []CategoryResponse `json:"items"`
+	Total  int                `json:"total"`
+	Limit  int                `json:"limit"`
+	Offset int                `json:"offset"`
 }
 
 // TreeResponse for category tree

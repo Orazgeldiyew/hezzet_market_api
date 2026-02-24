@@ -62,6 +62,16 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest, userID int6
 }
 
 func (s *Service) Move(ctx context.Context, req MoveRequest, userID int64) (MovementResult, error) {
+	// Business rules for return_to_supplier
+	if normalizeType(req.Type) == "return_to_supplier" {
+		if req.DeltaMilli >= 0 {
+			return MovementResult{}, apperr.Validation("delta_milli must be negative for return_to_supplier")
+		}
+		if req.SupplierID == nil {
+			return MovementResult{}, apperr.Validation("supplier_id is required for return_to_supplier")
+		}
+	}
+
 	d, it, err := s.repo.Move(ctx, req, userID)
 	if err != nil {
 		if isAppError(err) {
@@ -93,11 +103,12 @@ func (s *Service) GetDetails(
 	ctx context.Context,
 	warehouseID, productID *int64,
 	mType *string,
+	supplierID *int64,
 	dateFrom, dateTo *time.Time,
 	limit, offset int,
 ) (DetailsListResult, error) {
 
-	items, total, err := s.repo.GetDetails(ctx, warehouseID, productID, mType, dateFrom, dateTo, limit, offset)
+	items, total, err := s.repo.GetDetails(ctx, warehouseID, productID, mType, supplierID, dateFrom, dateTo, limit, offset)
 	if err != nil {
 		if isAppError(err) {
 			return DetailsListResult{}, err

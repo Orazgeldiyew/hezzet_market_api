@@ -2,6 +2,10 @@ package warehouse
 
 import (
 	"context"
+	"errors"
+	"net/http"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
@@ -18,6 +22,15 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Warehouse, err
 		Address: req.Address,
 	}
 	if err := s.repo.Create(ctx, &w); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return Warehouse{}, &apperr.AppError{
+				Code:       "WAREHOUSE_ALREADY_EXISTS",
+				Message:    "warehouse with this name already exists",
+				HTTPStatus: http.StatusConflict,
+				Err:        err,
+			}
+		}
 		return Warehouse{}, apperr.Internal(err)
 	}
 	return w, nil

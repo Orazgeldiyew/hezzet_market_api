@@ -45,13 +45,13 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Category, erro
 	return c, nil
 }
 
-func (s *Service) Get(ctx context.Context, id int) (Category, error) {
+func (s *Service) Get(ctx context.Context, id int) (CategoryResponse, error) {
 	c, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if IsNotFound(err) {
-			return Category{}, apperr.NotFound("NOT_FOUND", "category not found")
+			return CategoryResponse{}, apperr.NotFound("NOT_FOUND", "category not found")
 		}
-		return Category{}, apperr.Internal(err)
+		return CategoryResponse{}, apperr.Internal(err)
 	}
 	return c, nil
 }
@@ -76,7 +76,7 @@ func (s *Service) List(ctx context.Context, limit, offset int, orderBy, orderDir
 		return ListResponse{}, apperr.Internal(err)
 	}
 	if items == nil {
-		items = []Category{}
+		items = []CategoryResponse{}
 	}
 
 	return ListResponse{

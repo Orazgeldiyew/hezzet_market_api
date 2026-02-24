@@ -88,7 +88,10 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/category.ListResponse"
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/category.CategoryResponse"
+                                            }
                                         }
                                     }
                                 }
@@ -262,7 +265,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/category.Category"
+                                            "$ref": "#/definitions/category.CategoryResponse"
                                         }
                                     }
                                 }
@@ -1860,8 +1863,14 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Movement type (in/out/transfer_in/transfer_out/damaged/adjustment)",
+                        "description": "Movement type (in/out/transfer_in/transfer_out/damaged/adjustment/opening_balance/return_to_supplier)",
                         "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Supplier ID (filter return_to_supplier movements)",
+                        "name": "supplier_id",
                         "in": "query"
                     },
                     {
@@ -1987,7 +1996,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Universal move endpoint writing to warehouse_item_details + applying delta to warehouse_items.",
+                "description": "Universal move endpoint. For return_to_supplier: delta_milli must be negative, supplier_id is required. Optional note field for comments.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1997,7 +2006,7 @@ const docTemplate = `{
                 "tags": [
                     "Stock"
                 ],
-                "summary": "Stock Move (adjustment/damaged/etc)",
+                "summary": "Stock Move (adjustment/damaged/return_to_supplier/etc)",
                 "parameters": [
                     {
                         "description": "Move Request",
@@ -4130,6 +4139,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "password",
+                "roles",
                 "username"
             ],
             "properties": {
@@ -4151,8 +4161,15 @@ const docTemplate = `{
                 },
                 "roles": {
                     "type": "array",
+                    "minItems": 1,
                     "items": {
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                            "admin",
+                            "cashier",
+                            "operator",
+                            "manager"
+                        ]
                     }
                 },
                 "username": {
@@ -4414,6 +4431,29 @@ const docTemplate = `{
                 }
             }
         },
+        "category.CategoryResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "parent_id": {
+                    "type": "integer"
+                },
+                "parent_name": {
+                    "type": "string"
+                }
+            }
+        },
         "category.CategoryTree": {
             "type": "object",
             "properties": {
@@ -4449,26 +4489,6 @@ const docTemplate = `{
                     "minLength": 1
                 },
                 "parent_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "category.ListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/category.Category"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "offset": {
-                    "type": "integer"
-                },
-                "total": {
                     "type": "integer"
                 }
             }
@@ -4943,10 +4963,16 @@ const docTemplate = `{
                 "idempotency_key": {
                     "type": "string"
                 },
+                "note": {
+                    "type": "string"
+                },
                 "price_cents": {
                     "type": "integer"
                 },
                 "product_id": {
+                    "type": "integer"
+                },
+                "supplier_id": {
                     "type": "integer"
                 },
                 "type": {
@@ -5356,6 +5382,8 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Market backend (products, stock, income, sales)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
+	// LeftDelim:        "{{",
+	// RightDelim:       "}}",
 }
 
 func init() {

@@ -61,7 +61,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Param        search           query  string  false  "Search by name"
 // @Param        order_by         query  string  false  "Order by field (name, created_at)" Enums(name,created_at)
 // @Param        order_direction  query  string  false  "Order direction (asc/desc)" Enums(asc,desc)
-// @Success      200              {object}  response.APIResponse{data=ListResponse}
+// @Success      200              {object}  response.APIResponse{data=[]CategoryResponse}
 // @Failure      400              {object}  response.APIResponse
 // @Failure      500              {object}  response.APIResponse
 // @Router       /api/categories [get]
@@ -165,7 +165,7 @@ func (h *Handler) Tree(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        id   path      int  true  "Category ID"
-// @Success      200  {object}  response.APIResponse{data=Category}
+// @Success      200  {object}  response.APIResponse{data=CategoryResponse}
 // @Failure      404  {object}  response.APIResponse
 // @Router       /api/categories/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
