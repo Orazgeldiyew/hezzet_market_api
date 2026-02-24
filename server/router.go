@@ -26,9 +26,10 @@ import (
 )
 
 type Deps struct {
-	DB       *pgxpool.Pool
-	Cfg      config.Config
-	NotifSvc *notification.Service // nil-safe — notifications disabled when nil
+	DB         *pgxpool.Pool
+	Cfg        config.Config
+	NotifSvc   *notification.Service // nil-safe — notifications disabled when nil
+	NotifQueue *notification.Queue   // nil when Redis is not configured
 }
 
 func NewRouter(deps Deps) *gin.Engine {
@@ -110,6 +111,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	workers.RegisterRoutes(api, deps.DB)
 	warehouse.RegisterRoutes(api, deps.DB)
 	stock.RegisterRoutes(api, deps.DB, deps.NotifSvc)
+	notification.RegisterRoutes(api, deps.DB, deps.NotifQueue)
 
 	r.GET("/debug/routes", func(c *gin.Context) {
 		type R struct {

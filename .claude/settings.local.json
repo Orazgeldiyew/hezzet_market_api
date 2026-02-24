@@ -6,7 +6,8 @@
       "Bash(go build:*)",
       "Bash(go vet:*)",
       "Bash(ls:*)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(go run:*)"
     ]
   }
 }

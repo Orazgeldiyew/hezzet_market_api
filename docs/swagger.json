@@ -962,6 +962,227 @@
                 }
             }
         },
+        "/api/notifications/sms": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List SMS audit logs with filters and pagination (admin only).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "List SMS logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by status (queued|sending|sent|retrying|rate_limited|dlq|failed)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by notification type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by phone number",
+                        "name": "phone",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by job ID",
+                        "name": "job_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created at from (RFC3339)",
+                        "name": "from_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created at to (RFC3339)",
+                        "name": "to_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/notifications/sms/{job_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get a single SMS audit log entry by job ID (admin only).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Get SMS log by job ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/notifications/sms/{job_id}/requeue": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Re-enqueue a job from DLQ/failed back into the SMS queue (admin only).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Requeue a failed/DLQ SMS job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/products": {
             "get": {
                 "security": [

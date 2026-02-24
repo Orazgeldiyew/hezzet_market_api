@@ -13,24 +13,30 @@ const qtyMilliScale int64 = 1000
 // All methods are safe to call with a nil receiver (no-op) so callers
 // don't need nil-guards.
 type Service struct {
-	queue           *Queue
-	adminPhones     []string
-	smsFrom         string
+	queue        *Queue
+	logRepo      *LogRepository
+	adminPhones  []string
+	smsFrom      string
+	providerName string
 	lowStockDefault int64 // threshold in regular units (not milli)
 	dedupTTL        time.Duration
 }
 
 func NewService(
 	queue *Queue,
+	logRepo *LogRepository,
 	adminPhones []string,
 	smsFrom string,
+	providerName string,
 	lowStockDefault int64,
 	dedupTTL time.Duration,
 ) *Service {
 	return &Service{
 		queue:           queue,
+		logRepo:         logRepo,
 		adminPhones:     adminPhones,
 		smsFrom:         smsFrom,
+		providerName:    providerName,
 		lowStockDefault: lowStockDefault,
 		dedupTTL:        dedupTTL,
 	}
@@ -51,6 +57,7 @@ func (s *Service) NotifyCustomerOrderCreated(ctx context.Context, phone string, 
 	)
 
 	job := SMSJob{
+		JobID:       generateUUID(),
 		Type:        "customer_order_created",
 		ToPhone:     phone,
 		Message:     msg,
@@ -58,14 +65,7 @@ func (s *Service) NotifyCustomerOrderCreated(ctx context.Context, phone string, 
 		DedupKey:    fmt.Sprintf("order_created:%d", orderID),
 	}
 
-	enqueued, err := s.queue.Enqueue(ctx, job, s.dedupTTL)
-	if err != nil {
-		log.Printf("[notification] enqueue customer_order_created failed: %v", err)
-		return
-	}
-	if !enqueued {
-		log.Printf("[notification] customer_order_created deduped order=%d", orderID)
-	}
+	s.enqueueAndLog(ctx, job)
 }
 
 // NotifyCustomerPaymentReceived enqueues an SMS about payment confirmation.
@@ -79,6 +79,7 @@ func (s *Service) NotifyCustomerPaymentReceived(ctx context.Context, phone strin
 	)
 
 	job := SMSJob{
+		JobID:       generateUUID(),
 		Type:        "customer_payment_received",
 		ToPhone:     phone,
 		Message:     msg,
@@ -86,14 +87,7 @@ func (s *Service) NotifyCustomerPaymentReceived(ctx context.Context, phone strin
 		DedupKey:    fmt.Sprintf("payment_received:%d", orderID),
 	}
 
-	enqueued, err := s.queue.Enqueue(ctx, job, s.dedupTTL)
-	if err != nil {
-		log.Printf("[notification] enqueue customer_payment_received failed: %v", err)
-		return
-	}
-	if !enqueued {
-		log.Printf("[notification] customer_payment_received deduped order=%d", orderID)
-	}
+	s.enqueueAndLog(ctx, job)
 }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +115,7 @@ func (s *Service) NotifyAdminLowStock(ctx context.Context, productID, warehouseI
 
 	for _, phone := range s.adminPhones {
 		job := SMSJob{
+			JobID:       generateUUID(),
 			Type:        "admin_low_stock",
 			ToPhone:     phone,
 			Message:     msg,
@@ -128,13 +123,29 @@ func (s *Service) NotifyAdminLowStock(ctx context.Context, productID, warehouseI
 			DedupKey:    fmt.Sprintf("low_stock:%d:%d", productID, warehouseID),
 		}
 
-		enqueued, err := s.queue.Enqueue(ctx, job, s.dedupTTL)
-		if err != nil {
-			log.Printf("[notification] enqueue admin_low_stock failed phone=%s: %v", phone, err)
-			continue
-		}
-		if !enqueued {
-			log.Printf("[notification] admin_low_stock deduped product=%d warehouse=%d", productID, warehouseID)
-		}
+		s.enqueueAndLog(ctx, job)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// internal
+// ---------------------------------------------------------------------------
+
+// enqueueAndLog enqueues a job and logs it to the DB.
+// Deduped jobs are not logged. Failed enqueues are logged with status=failed.
+func (s *Service) enqueueAndLog(ctx context.Context, job SMSJob) {
+	enqueued, err := s.queue.Enqueue(ctx, job, s.dedupTTL)
+	if err != nil {
+		log.Printf("[notification] enqueue %s failed: %v", job.Type, err)
+		// Insert a failed row (no row exists yet, so we cannot UPDATE).
+		s.logRepo.InsertFailed(ctx, job, s.providerName, s.smsFrom, err.Error())
+		return
+	}
+	if !enqueued {
+		log.Printf("[notification] %s deduped job=%s", job.Type, job.JobID)
+		return // deduped — do not create a log row
+	}
+
+	// Successfully enqueued — persist the audit row.
+	s.logRepo.UpsertQueued(ctx, job, s.providerName, s.smsFrom)
 }

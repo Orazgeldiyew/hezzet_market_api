@@ -12,10 +12,11 @@ type Worker struct {
 	queue    *Queue
 	provider SMSProvider
 	from     string
+	logRepo  *LogRepository
 }
 
-func NewWorker(queue *Queue, provider SMSProvider, from string) *Worker {
-	return &Worker{queue: queue, provider: provider, from: from}
+func NewWorker(queue *Queue, provider SMSProvider, from string, logRepo *LogRepository) *Worker {
+	return &Worker{queue: queue, provider: provider, from: from, logRepo: logRepo}
 }
 
 // Start runs the consume loop until ctx is cancelled.
@@ -47,6 +48,9 @@ func (w *Worker) Start(ctx context.Context, id int) {
 }
 
 func (w *Worker) processJob(ctx context.Context, workerID int, job *SMSJob) {
+	// Mark as sending in the audit log.
+	w.logRepo.MarkSending(ctx, job.JobID)
+
 	// Rate-limit check
 	allowed, err := w.queue.CheckRateLimit(ctx, job.ToPhone)
 	if err != nil {
@@ -58,6 +62,7 @@ func (w *Worker) processJob(ctx context.Context, workerID int, job *SMSJob) {
 		if e := w.queue.PushDLQ(ctx, *job); e != nil {
 			log.Printf("[worker-%d] dlq push error: %v", workerID, e)
 		}
+		w.logRepo.MarkRateLimited(ctx, job.JobID)
 		return
 	}
 
@@ -68,6 +73,7 @@ func (w *Worker) processJob(ctx context.Context, workerID int, job *SMSJob) {
 
 	if err == nil {
 		log.Printf("[worker-%d] sent job=%s type=%s to=%s", workerID, job.JobID, job.Type, job.ToPhone)
+		w.logRepo.MarkSent(ctx, job.JobID)
 		return
 	}
 
@@ -83,6 +89,7 @@ func (w *Worker) processJob(ctx context.Context, workerID int, job *SMSJob) {
 		if e := w.queue.PushDLQ(ctx, *job); e != nil {
 			log.Printf("[worker-%d] dlq push error: %v", workerID, e)
 		}
+		w.logRepo.MarkDLQ(ctx, job.JobID, job.LastError)
 		return
 	}
 
@@ -91,6 +98,7 @@ func (w *Worker) processJob(ctx context.Context, workerID int, job *SMSJob) {
 	if err := w.queue.EnqueueDelayed(ctx, *job, time.Now().Add(backoff)); err != nil {
 		log.Printf("[worker-%d] delayed enqueue error: %v", workerID, err)
 	}
+	w.logRepo.MarkRetrying(ctx, job.JobID, job.Attempt, job.LastError)
 }
 
 // RunDelayedPromoter periodically moves ready delayed jobs back to the main queue.
@@ -120,9 +128,9 @@ func RunDelayedPromoter(ctx context.Context, queue *Queue) {
 
 // StartWorkers launches n worker goroutines + the delayed-job promoter.
 // All goroutines respect ctx cancellation for graceful shutdown.
-func StartWorkers(ctx context.Context, n int, queue *Queue, provider SMSProvider, from string) {
+func StartWorkers(ctx context.Context, n int, queue *Queue, provider SMSProvider, from string, logRepo *LogRepository) {
 	for i := 0; i < n; i++ {
-		w := NewWorker(queue, provider, from)
+		w := NewWorker(queue, provider, from, logRepo)
 		go w.Start(ctx, i)
 	}
 	go RunDelayedPromoter(ctx, queue)

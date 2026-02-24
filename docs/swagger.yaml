@@ -1416,6 +1416,149 @@ paths:
       summary: Add spent amount
       tags:
       - Customers
+  /api/notifications/sms:
+    get:
+      description: List SMS audit logs with filters and pagination (admin only).
+      parameters:
+      - description: Filter by status (queued|sending|sent|retrying|rate_limited|dlq|failed)
+        in: query
+        name: status
+        type: string
+      - description: Filter by notification type
+        in: query
+        name: type
+        type: string
+      - description: Filter by phone number
+        in: query
+        name: phone
+        type: string
+      - description: Filter by job ID
+        in: query
+        name: job_id
+        type: string
+      - description: Created at from (RFC3339)
+        in: query
+        name: from_date
+        type: string
+      - description: Created at to (RFC3339)
+        in: query
+        name: to_date
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List SMS logs
+      tags:
+      - Notifications
+  /api/notifications/sms/{job_id}:
+    get:
+      description: Get a single SMS audit log entry by job ID (admin only).
+      parameters:
+      - description: Job ID
+        in: path
+        name: job_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get SMS log by job ID
+      tags:
+      - Notifications
+  /api/notifications/sms/{job_id}/requeue:
+    post:
+      description: Re-enqueue a job from DLQ/failed back into the SMS queue (admin
+        only).
+      parameters:
+      - description: Job ID
+        in: path
+        name: job_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Requeue a failed/DLQ SMS job
+      tags:
+      - Notifications
   /api/products:
     get:
       description: Get paginated list of active products with optional search
