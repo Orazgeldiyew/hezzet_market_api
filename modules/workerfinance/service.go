@@ -16,11 +16,6 @@ func NewService(repo *Repository, financeRepo *finance.Repository) *Service {
 	return &Service{repo: repo, financeRepo: financeRepo}
 }
 
-func isAppError(err error) bool {
-	_, ok := err.(*apperr.AppError)
-	return ok
-}
-
 // ── compensation ────────────────────────────────────────────────────────────
 
 func (s *Service) SetCompensation(ctx context.Context, req SetCompensationRequest) (WorkerCompensation, error) {
