@@ -564,8 +564,10 @@ definitions:
     type: object
   product.CreateRequest:
     properties:
-      barcode:
-        type: string
+      barcodes:
+        items:
+          type: string
+        type: array
       category_ids:
         items:
           type: integer
@@ -604,8 +606,10 @@ definitions:
     type: object
   product.Product:
     properties:
-      barcode:
-        type: string
+      barcodes:
+        items:
+          type: string
+        type: array
       created_at:
         type: string
       id:
@@ -642,8 +646,10 @@ definitions:
     type: object
   product.UpdateRequest:
     properties:
-      barcode:
-        type: string
+      barcodes:
+        items:
+          type: string
+        type: array
       category_ids:
         items:
           type: integer
@@ -708,6 +714,69 @@ definitions:
         type: integer
       total_pages:
         type: integer
+    type: object
+  sale.CreateSaleItemRequest:
+    properties:
+      product_id:
+        type: integer
+      qty_milli:
+        type: integer
+    required:
+    - product_id
+    - qty_milli
+    type: object
+  sale.CreateSaleRequest:
+    properties:
+      customer_id:
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/sale.CreateSaleItemRequest'
+        minItems: 1
+        type: array
+      note:
+        type: string
+      payment_amount:
+        type: integer
+      payment_note:
+        type: string
+      payment_type_id:
+        type: integer
+      warehouse_id:
+        type: integer
+    required:
+    - items
+    - warehouse_id
+    type: object
+  stock.BulkInItem:
+    properties:
+      idempotency_key:
+        type: string
+      price_cents:
+        type: integer
+      product_id:
+        type: integer
+      qty_milli:
+        type: integer
+      worker_id:
+        type: integer
+    required:
+    - idempotency_key
+    - product_id
+    - qty_milli
+    type: object
+  stock.BulkInRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/stock.BulkInItem'
+        minItems: 1
+        type: array
+      warehouse_id:
+        type: integer
+    required:
+    - items
+    - warehouse_id
     type: object
   stock.InRequest:
     properties:
@@ -2380,6 +2449,140 @@ paths:
       summary: Remove product category
       tags:
       - Products
+  /api/sales:
+    get:
+      description: List sales with optional filters and pagination.
+      parameters:
+      - description: Warehouse ID
+        in: query
+        name: warehouse_id
+        type: integer
+      - description: Customer ID
+        in: query
+        name: customer_id
+        type: integer
+      - description: Cashier user ID
+        in: query
+        name: created_by
+        type: integer
+      - description: RFC3339 datetime (inclusive)
+        in: query
+        name: date_from
+        type: string
+      - description: RFC3339 datetime (inclusive)
+        in: query
+        name: date_to
+        type: string
+      - description: page
+        in: query
+        name: page
+        type: integer
+      - description: limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List sales
+      tags:
+      - Sales
+    post:
+      consumes:
+      - application/json
+      description: Create a sale from the POS. Prices are automatically from product
+        sale_price. Stock is automatically deducted. Finance transaction (income)
+        is created. Payment is optional.
+      parameters:
+      - description: Sale request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/sale.CreateSaleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create sale
+      tags:
+      - Sales
+  /api/sales/{id}:
+    get:
+      description: Returns a sale with all its items and transaction ID.
+      parameters:
+      - description: Sale ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get sale detail
+      tags:
+      - Sales
   /api/stock/balance:
     get:
       parameters:
@@ -2509,6 +2712,47 @@ paths:
       security:
       - BearerAuth: []
       summary: Stock In
+      tags:
+      - Stock
+  /api/stock/in/bulk:
+    post:
+      consumes:
+      - application/json
+      description: Add stock for multiple products at once in a single transaction.
+        Each item needs its own idempotency_key.
+      parameters:
+      - description: Bulk Stock In Request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/stock.BulkInRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Bulk Stock In
       tags:
       - Stock
   /api/stock/move:

@@ -28,6 +28,17 @@ func (s *Service) StockIn(ctx context.Context, req InRequest, userID int64) (Mov
 	return MovementResult{Detail: d, Item: it}, nil
 }
 
+func (s *Service) BulkStockIn(ctx context.Context, req BulkInRequest, userID int64) (BulkInResult, error) {
+	results, err := s.repo.BulkStockIn(ctx, req.WarehouseID, req.Items, userID)
+	if err != nil {
+		if isAppError(err) {
+			return BulkInResult{}, err
+		}
+		return BulkInResult{}, apperr.Internal(err)
+	}
+	return BulkInResult{Results: results}, nil
+}
+
 func (s *Service) StockOut(ctx context.Context, req OutRequest, userID int64) (MovementResult, error) {
 	d, it, err := s.repo.StockOut(ctx, req, userID)
 	if err != nil {

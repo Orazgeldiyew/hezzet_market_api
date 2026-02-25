@@ -19,6 +19,10 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, notifSvc *notificatio
 		middleware.RequireRoles("operator", "manager"),
 		h.StockIn,
 	)
+	s.POST("/in/bulk",
+		middleware.RequireRoles("operator", "manager"),
+		h.BulkStockIn,
+	)
 	s.POST("/out",
 		middleware.RequireRoles("operator", "manager"),
 		h.StockOut,

@@ -47,6 +47,36 @@ func (h *Handler) StockIn(c *gin.Context) {
 	response.Created(c, out)
 }
 
+// BulkStockIn godoc
+// @Summary Bulk Stock In
+// @Description Add stock for multiple products at once in a single transaction. Each item needs its own idempotency_key.
+// @Tags Stock
+// @Accept json
+// @Produce json
+// @Security     BearerAuth
+// @Param body body BulkInRequest true "Bulk Stock In Request"
+// @Success 201 {object} response.APIResponse
+// @Failure 400 {object} response.APIResponse
+// @Failure 401 {object} response.APIResponse
+// @Failure 409 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /api/stock/in/bulk [post]
+func (h *Handler) BulkStockIn(c *gin.Context) {
+	var req BulkInRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	userID := extractUserID(c)
+
+	out, err := h.svc.BulkStockIn(c.Request.Context(), req, userID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.Created(c, out)
+}
+
 // StockOut godoc
 // @Summary Stock Out
 // @Description Remove stock from a warehouse (qty_milli, SCALE=1000). Strict idempotency.

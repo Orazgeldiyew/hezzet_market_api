@@ -105,3 +105,22 @@ type DetailsListResult struct {
 	Limit  int                   `json:"limit"`
 	Offset int                   `json:"offset"`
 }
+
+// ---------- Bulk Stock In ----------
+
+type BulkInItem struct {
+	ProductID      int64  `json:"product_id" binding:"required,gt=0"`
+	QtyMilli       int64  `json:"qty_milli" binding:"required,gt=0"`
+	PriceCents     *int64 `json:"price_cents"`
+	IdempotencyKey string `json:"idempotency_key" binding:"required,uuid"`
+	WorkerID       *int64 `json:"worker_id"`
+}
+
+type BulkInRequest struct {
+	WarehouseID int64        `json:"warehouse_id" binding:"required,gt=0"`
+	Items       []BulkInItem `json:"items" binding:"required,min=1,dive"`
+}
+
+type BulkInResult struct {
+	Results []MovementResult `json:"results"`
+}

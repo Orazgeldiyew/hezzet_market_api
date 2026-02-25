@@ -1,0 +1,1 @@
+-- 024 down: Cannot remove enum value from Postgres. No-op.

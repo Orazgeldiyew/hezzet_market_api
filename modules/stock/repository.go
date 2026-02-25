@@ -3,6 +3,7 @@ package stock
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -180,6 +181,86 @@ func (r *Repository) StockIn(ctx context.Context, req InRequest, userID int64) (
 		return WarehouseItemDetail{}, WarehouseItem{}, err
 	}
 	return detail, item, nil
+}
+
+// ── BulkStockIn (cost-aware, single TX) ──────────────────────────────────────
+
+func (r *Repository) BulkStockIn(ctx context.Context, warehouseID int64, items []BulkInItem, userID int64) ([]MovementResult, error) {
+	// Pre-check idempotency for all items outside the TX
+	for i, item := range items {
+		if item.PriceCents == nil || *item.PriceCents < 0 {
+			return nil, apperr.Validation("price_cents is required for stock in (item index " + strconv.Itoa(i) + ")")
+		}
+		if existing, exists, err := r.checkIdempotencyStrict(ctx, item.IdempotencyKey, warehouseID, "in", item.ProductID, item.QtyMilli); err != nil {
+			return nil, err
+		} else if exists {
+			// If ALL items are idempotent replays, we could return cached results.
+			// But for mixed cases, reject to keep it simple.
+			_ = existing
+			return nil, apperr.Conflict("IDEMPOTENCY_KEY_EXISTS", "idempotency_key "+item.IdempotencyKey+" already used; use single /in endpoint for retries")
+		}
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	results := make([]MovementResult, 0, len(items))
+
+	for i, item := range items {
+		unitPrice := *item.PriceCents
+		inCost := lineTotalCents(item.QtyMilli, unitPrice)
+
+		// Insert detail
+		detail, err := scanDetail(tx.QueryRow(ctx, `
+			INSERT INTO warehouse_item_details
+				(idempotency_key, warehouse_id, product_id, delta_milli, type, price_cents, worker_id, created_by)
+			VALUES ($1, $2, $3, $4, 'in', $5, $6, $7)
+			RETURNING `+detailCols,
+			item.IdempotencyKey, warehouseID, item.ProductID,
+			item.QtyMilli, item.PriceCents, item.WorkerID, userID,
+		))
+		if err != nil {
+			if isDuplicateKey(err) {
+				return nil, apperr.Conflict("IDEMPOTENCY_KEY_CONFLICT", "duplicate idempotency_key at item index "+strconv.Itoa(i))
+			}
+			if isFKViolation(err) {
+				return nil, apperr.Validation("warehouse or product does not exist (item index " + strconv.Itoa(i) + ")")
+			}
+			return nil, err
+		}
+
+		// Upsert item cache + costing
+		wi, err := scanItem(tx.QueryRow(ctx, `
+			INSERT INTO warehouse_items (warehouse_id, product_id, qty_milli, avg_cost_cents, total_cost_cents, updated_at)
+			VALUES ($1, $2, $3, $4, $5, now())
+			ON CONFLICT (warehouse_id, product_id)
+			DO UPDATE SET
+				qty_milli = warehouse_items.qty_milli + EXCLUDED.qty_milli,
+				total_cost_cents = warehouse_items.total_cost_cents + $5,
+				avg_cost_cents = CASE
+					WHEN (warehouse_items.qty_milli + EXCLUDED.qty_milli) > 0
+						THEN ((warehouse_items.total_cost_cents + $5) * 1000) / (warehouse_items.qty_milli + EXCLUDED.qty_milli)
+					ELSE 0
+				END,
+				updated_at = now()
+			RETURNING `+itemCols,
+			warehouseID, item.ProductID, item.QtyMilli,
+			unitPrice, inCost,
+		))
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, MovementResult{Detail: detail, Item: wi})
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 // ── StockOut (cost-aware) ────────────────────────────────────────────────────

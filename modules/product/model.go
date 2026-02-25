@@ -8,7 +8,7 @@ type Product struct {
 	ID            int64     `json:"id"`
 	Name          string    `json:"name"`
 	SKU           string    `json:"sku"`
-	Barcode       string    `json:"barcode"`
+	Barcodes      []string  `json:"barcodes"`
 	Unit          string    `json:"unit"`
 	PurchasePrice int64     `json:"purchase_price"`
 	SalePrice     int64     `json:"sale_price"`
@@ -20,27 +20,27 @@ type Product struct {
 }
 
 type CreateRequest struct {
-	Name          string  `json:"name" binding:"required"`
-	SKU           string  `json:"sku"`
-	Barcode       string  `json:"barcode"`
-	Unit          string  `json:"unit" binding:"required"`
-	PurchasePrice int64   `json:"purchase_price"`
-	SalePrice     int64   `json:"sale_price"`
-	IsActive      *bool   `json:"is_active"`
-	CategoryIDs   []int64 `json:"category_ids"`
-	UnitType      *string `json:"unit_type"` // optional, default piece
+	Name          string   `json:"name" binding:"required"`
+	SKU           string   `json:"sku"`
+	Barcodes      []string `json:"barcodes"`
+	Unit          string   `json:"unit" binding:"required"`
+	PurchasePrice int64    `json:"purchase_price"`
+	SalePrice     int64    `json:"sale_price"`
+	IsActive      *bool    `json:"is_active"`
+	CategoryIDs   []int64  `json:"category_ids"`
+	UnitType      *string  `json:"unit_type"` // optional, default piece
 }
 
 type UpdateRequest struct {
-	Name          *string  `json:"name"`
-	SKU           *string  `json:"sku"`
-	Barcode       *string  `json:"barcode"`
-	Unit          *string  `json:"unit"`
-	PurchasePrice *int64   `json:"purchase_price"`
-	SalePrice     *int64   `json:"sale_price"`
-	IsActive      *bool    `json:"is_active"`
-	CategoryIDs   *[]int64 `json:"category_ids"`
-	UnitType      *string  `json:"unit_type"`
+	Name          *string   `json:"name"`
+	SKU           *string   `json:"sku"`
+	Barcodes      *[]string `json:"barcodes"`
+	Unit          *string   `json:"unit"`
+	PurchasePrice *int64    `json:"purchase_price"`
+	SalePrice     *int64    `json:"sale_price"`
+	IsActive      *bool     `json:"is_active"`
+	CategoryIDs   *[]int64  `json:"category_ids"`
+	UnitType      *string   `json:"unit_type"`
 }
 
 // ListResponse for paginated product list

@@ -15,26 +15,49 @@ type Repository struct {
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
 func (r *Repository) Create(ctx context.Context, p *Product) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	q := `
-		INSERT INTO products (name, sku, barcode, unit, purchase_price, sale_price, is_active)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		INSERT INTO products (name, sku, unit, purchase_price, sale_price, is_active)
+		VALUES ($1,$2,$3,$4,$5,$6)
 		RETURNING id, created_at, updated_at
 	`
-	return r.db.QueryRow(ctx, q,
-		p.Name, p.SKU, p.Barcode, p.Unit, p.PurchasePrice, p.SalePrice, p.IsActive,
-	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
+	if err := tx.QueryRow(ctx, q,
+		p.Name, p.SKU, p.Unit, p.PurchasePrice, p.SalePrice, p.IsActive,
+	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		return err
+	}
+
+	for _, bc := range p.Barcodes {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO product_barcodes (product_id, barcode) VALUES ($1, $2)`,
+			p.ID, bc,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 	q := `
-		SELECT id, name, sku, barcode, unit, purchase_price, sale_price, is_active, created_at, updated_at
+		SELECT id, name, sku, unit, purchase_price, sale_price, is_active, created_at, updated_at
 		FROM products WHERE id=$1
 	`
 	var p Product
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&p.ID, &p.Name, &p.SKU, &p.Barcode, &p.Unit,
+		&p.ID, &p.Name, &p.SKU, &p.Unit,
 		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
 	)
+	if err != nil {
+		return p, err
+	}
+	p.Barcodes, err = r.loadBarcodes(ctx, id)
 	return p, err
 }
 
@@ -43,23 +66,33 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 		UPDATE products SET
 			name = COALESCE($2, name),
 			sku = COALESCE($3, sku),
-			barcode = COALESCE($4, barcode),
-			unit = COALESCE($5, unit),
-			purchase_price = COALESCE($6, purchase_price),
-			sale_price = COALESCE($7, sale_price),
-			is_active = COALESCE($8, is_active),
+			unit = COALESCE($4, unit),
+			purchase_price = COALESCE($5, purchase_price),
+			sale_price = COALESCE($6, sale_price),
+			is_active = COALESCE($7, is_active),
 			updated_at = now()
 		WHERE id=$1
-		RETURNING id, name, sku, barcode, unit, purchase_price, sale_price, is_active, created_at, updated_at
+		RETURNING id, name, sku, unit, purchase_price, sale_price, is_active, created_at, updated_at
 	`
 	var p Product
 	err := r.db.QueryRow(ctx, q,
-		id, req.Name, req.SKU, req.Barcode, req.Unit,
+		id, req.Name, req.SKU, req.Unit,
 		req.PurchasePrice, req.SalePrice, req.IsActive,
 	).Scan(
-		&p.ID, &p.Name, &p.SKU, &p.Barcode, &p.Unit,
+		&p.ID, &p.Name, &p.SKU, &p.Unit,
 		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
 	)
+	if err != nil {
+		return p, err
+	}
+
+	if req.Barcodes != nil {
+		if err := r.ReplaceBarcodes(ctx, id, *req.Barcodes); err != nil {
+			return p, err
+		}
+	}
+
+	p.Barcodes, err = r.loadBarcodes(ctx, id)
 	return p, err
 }
 
@@ -73,12 +106,13 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 
 	// total count
 	countSQL := `
-		SELECT COUNT(*) FROM products
-		WHERE is_active = true
+		SELECT COUNT(DISTINCT p.id) FROM products p
+		LEFT JOIN product_barcodes pb ON pb.product_id = p.id
+		WHERE p.is_active = true
 		  AND ($1 = '' OR
-		       name ILIKE '%' || $1 || '%' OR
-		       sku ILIKE '%' || $1 || '%' OR
-		       barcode ILIKE '%' || $1 || '%')
+		       p.name ILIKE '%' || $1 || '%' OR
+		       p.sku ILIKE '%' || $1 || '%' OR
+		       pb.barcode ILIKE '%' || $1 || '%')
 	`
 	var total int
 	if err := r.db.QueryRow(ctx, countSQL, qstr).Scan(&total); err != nil {
@@ -86,12 +120,12 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	// whitelist order column
-	col := "created_at"
+	col := "p.created_at"
 	switch orderBy {
 	case "name":
-		col = "name"
+		col = "p.name"
 	case "created_at":
-		col = "created_at"
+		col = "p.created_at"
 	}
 
 	dir := "DESC"
@@ -100,13 +134,14 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT id, name, sku, barcode, unit, purchase_price, sale_price, is_active, created_at, updated_at
-		FROM products
-		WHERE is_active = true
+		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.is_active, p.created_at, p.updated_at
+		FROM products p
+		LEFT JOIN product_barcodes pb ON pb.product_id = p.id
+		WHERE p.is_active = true
 		  AND ($1 = '' OR
-		       name ILIKE '%%' || $1 || '%%' OR
-		       sku ILIKE '%%' || $1 || '%%' OR
-		       barcode ILIKE '%%' || $1 || '%%')
+		       p.name ILIKE '%%' || $1 || '%%' OR
+		       p.sku ILIKE '%%' || $1 || '%%' OR
+		       pb.barcode ILIKE '%%' || $1 || '%%')
 		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
 	`, col, dir)
@@ -117,18 +152,35 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 	defer rows.Close()
 
+	var ids []int64
 	var out []Product
 	for rows.Next() {
 		var p Product
 		if err := rows.Scan(
-			&p.ID, &p.Name, &p.SKU, &p.Barcode, &p.Unit,
+			&p.ID, &p.Name, &p.SKU, &p.Unit,
 			&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}
+		ids = append(ids, p.ID)
 		out = append(out, p)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	// batch-load barcodes
+	if len(ids) > 0 {
+		bcMap, err := r.loadBarcodesMap(ctx, ids)
+		if err != nil {
+			return nil, 0, err
+		}
+		for i := range out {
+			out[i].Barcodes = bcMap[out[i].ID]
+		}
+	}
+
+	return out, total, nil
 }
 
 func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
@@ -144,6 +196,79 @@ func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
 }
 
 func IsNoRows(err error) bool { return err == pgx.ErrNoRows }
+
+//
+// ===== Product ↔ Barcodes (one-to-many) =====
+//
+
+func (r *Repository) loadBarcodes(ctx context.Context, productID int64) ([]string, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT barcode FROM product_barcodes WHERE product_id = $1 ORDER BY id`, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var bc string
+		if err := rows.Scan(&bc); err != nil {
+			return nil, err
+		}
+		out = append(out, bc)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) loadBarcodesMap(ctx context.Context, productIDs []int64) (map[int64][]string, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT product_id, barcode FROM product_barcodes WHERE product_id = ANY($1) ORDER BY id`, productIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	m := make(map[int64][]string, len(productIDs))
+	for rows.Next() {
+		var pid int64
+		var bc string
+		if err := rows.Scan(&pid, &bc); err != nil {
+			return nil, err
+		}
+		m[pid] = append(m[pid], bc)
+	}
+	// ensure every requested ID has an entry
+	for _, id := range productIDs {
+		if _, ok := m[id]; !ok {
+			m[id] = []string{}
+		}
+	}
+	return m, rows.Err()
+}
+
+func (r *Repository) ReplaceBarcodes(ctx context.Context, productID int64, barcodes []string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `DELETE FROM product_barcodes WHERE product_id = $1`, productID); err != nil {
+		return err
+	}
+	for _, bc := range barcodes {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO product_barcodes (product_id, barcode) VALUES ($1, $2)`,
+			productID, bc,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
 
 //
 // ===== Product ↔ Categories (many-to-many) =====

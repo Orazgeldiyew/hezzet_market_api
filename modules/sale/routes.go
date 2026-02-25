@@ -1,0 +1,32 @@
+package sale
+
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
+)
+
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository) {
+	repo := NewRepository(db)
+	svc := NewService(repo, finRepo)
+	h := NewHandler(svc)
+
+	sales := rg.Group("/sales")
+
+	sales.POST("",
+		middleware.RequireRoles("cashier", "operator", "manager"),
+		h.CreateSale,
+	)
+
+	sales.GET("",
+		middleware.RequireRoles("cashier", "operator", "manager"),
+		h.ListSales,
+	)
+
+	sales.GET("/:id",
+		middleware.RequireRoles("cashier", "operator", "manager"),
+		h.GetSale,
+	)
+}

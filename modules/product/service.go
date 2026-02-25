@@ -21,10 +21,14 @@ func NewService(repo *Repository, stock *StockRepository) *Service {
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Product, error) {
+	barcodes := req.Barcodes
+	if barcodes == nil {
+		barcodes = []string{}
+	}
 	p := Product{
 		Name:          req.Name,
 		SKU:           req.SKU,
-		Barcode:       req.Barcode,
+		Barcodes:      barcodes,
 		Unit:          req.Unit,
 		PurchasePrice: req.PurchasePrice,
 		SalePrice:     req.SalePrice,

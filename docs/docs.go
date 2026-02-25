@@ -2073,6 +2073,212 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/sales": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List sales with optional filters and pagination.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sales"
+                ],
+                "summary": "List sales",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Warehouse ID",
+                        "name": "warehouse_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Customer ID",
+                        "name": "customer_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Cashier user ID",
+                        "name": "created_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 datetime (inclusive)",
+                        "name": "date_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 datetime (inclusive)",
+                        "name": "date_to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a sale from the POS. Prices are automatically from product sale_price. Stock is automatically deducted. Finance transaction (income) is created. Payment is optional.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sales"
+                ],
+                "summary": "Create sale",
+                "parameters": [
+                    {
+                        "description": "Sale request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/sale.CreateSaleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sales/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a sale with all its items and transaction ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sales"
+                ],
+                "summary": "Get sale detail",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Sale ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/stock/balance": {
             "get": {
                 "security": [
@@ -2242,6 +2448,69 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/stock.InRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/stock/in/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Add stock for multiple products at once in a single transaction. Each item needs its own idempotency_key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Stock"
+                ],
+                "summary": "Bulk Stock In",
+                "parameters": [
+                    {
+                        "description": "Bulk Stock In Request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/stock.BulkInRequest"
                         }
                     }
                 ],
@@ -6105,8 +6374,11 @@ const docTemplate = `{
                 "unit"
             ],
             "properties": {
-                "barcode": {
-                    "type": "string"
+                "barcodes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "category_ids": {
                     "type": "array",
@@ -6161,8 +6433,11 @@ const docTemplate = `{
         "product.Product": {
             "type": "object",
             "properties": {
-                "barcode": {
-                    "type": "string"
+                "barcodes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "created_at": {
                     "type": "string"
@@ -6218,8 +6493,11 @@ const docTemplate = `{
         "product.UpdateRequest": {
             "type": "object",
             "properties": {
-                "barcode": {
-                    "type": "string"
+                "barcodes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "category_ids": {
                     "type": "array",
@@ -6316,6 +6594,99 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "sale.CreateSaleItemRequest": {
+            "type": "object",
+            "required": [
+                "product_id",
+                "qty_milli"
+            ],
+            "properties": {
+                "product_id": {
+                    "type": "integer"
+                },
+                "qty_milli": {
+                    "type": "integer"
+                }
+            }
+        },
+        "sale.CreateSaleRequest": {
+            "type": "object",
+            "required": [
+                "items",
+                "warehouse_id"
+            ],
+            "properties": {
+                "customer_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/sale.CreateSaleItemRequest"
+                    }
+                },
+                "note": {
+                    "type": "string"
+                },
+                "payment_amount": {
+                    "type": "integer"
+                },
+                "payment_note": {
+                    "type": "string"
+                },
+                "payment_type_id": {
+                    "type": "integer"
+                },
+                "warehouse_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "stock.BulkInItem": {
+            "type": "object",
+            "required": [
+                "idempotency_key",
+                "product_id",
+                "qty_milli"
+            ],
+            "properties": {
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "price_cents": {
+                    "type": "integer"
+                },
+                "product_id": {
+                    "type": "integer"
+                },
+                "qty_milli": {
+                    "type": "integer"
+                },
+                "worker_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "stock.BulkInRequest": {
+            "type": "object",
+            "required": [
+                "items",
+                "warehouse_id"
+            ],
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/stock.BulkInItem"
+                    }
+                },
+                "warehouse_id": {
                     "type": "integer"
                 }
             }

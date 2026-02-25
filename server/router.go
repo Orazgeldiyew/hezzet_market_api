@@ -20,6 +20,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/notification"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/payroll"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/product"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/sale"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/stock"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/supplier"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/warehouse"
@@ -119,6 +120,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	finance.RegisterRoutes(api, deps.DB)
 	workerfinance.RegisterRoutes(api, deps.DB, finRepo)
 	payroll.RegisterRoutes(api, deps.DB, finRepo)
+	sale.RegisterRoutes(api, deps.DB, finRepo)
 
 	r.GET("/debug/routes", func(c *gin.Context) {
 		type R struct {

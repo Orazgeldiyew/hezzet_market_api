@@ -11,7 +11,8 @@
       "Bash(find:*)",
       "Bash(curl:*)",
       "Bash(PGPASSWORD=postgres123 psql:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(grep -r \"roles\\\\|Roles\" /home/rustem/Desktop/hezzet_market_backend/migrations/*.sql)"
     ]
   }
 }
