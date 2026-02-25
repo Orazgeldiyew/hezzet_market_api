@@ -137,7 +137,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	response.List(c, out, page, out.Limit, out.Offset, out.Total)
+	response.List(c, out.Items, page, out.Limit, out.Offset, out.Total)
 }
 
 // Tree godoc
