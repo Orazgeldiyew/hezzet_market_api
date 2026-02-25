@@ -22,15 +22,20 @@ func (r *Repository) Create(ctx context.Context, p *Product) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := `
-		INSERT INTO products (name, sku, unit, purchase_price, sale_price, is_active)
-		VALUES ($1,$2,$3,$4,$5,$6)
-		RETURNING id, created_at, updated_at
+		INSERT INTO products (name, sku, unit, purchase_price, sale_price, is_active, unit_type)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		RETURNING id, unit_scale, created_at, updated_at
 	`
+	unitType := p.UnitType
+	if unitType == "" {
+		unitType = "piece"
+	}
 	if err := tx.QueryRow(ctx, q,
-		p.Name, p.SKU, p.Unit, p.PurchasePrice, p.SalePrice, p.IsActive,
-	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		p.Name, p.SKU, p.Unit, p.PurchasePrice, p.SalePrice, p.IsActive, unitType,
+	).Scan(&p.ID, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		return err
 	}
+	p.UnitType = unitType
 
 	for _, bc := range p.Barcodes {
 		if _, err := tx.Exec(ctx,
@@ -46,13 +51,13 @@ func (r *Repository) Create(ctx context.Context, p *Product) error {
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 	q := `
-		SELECT id, name, sku, unit, purchase_price, sale_price, is_active, created_at, updated_at
-		FROM products WHERE id=$1
+		SELECT id, name, sku, unit, purchase_price, sale_price, is_active, unit_type, unit_scale, created_at, updated_at
+		FROM products WHERE id=$1 AND is_active=true
 	`
 	var p Product
 	err := r.db.QueryRow(ctx, q, id).Scan(
 		&p.ID, &p.Name, &p.SKU, &p.Unit,
-		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.UnitType, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
@@ -70,17 +75,18 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 			purchase_price = COALESCE($5, purchase_price),
 			sale_price = COALESCE($6, sale_price),
 			is_active = COALESCE($7, is_active),
+			unit_type = COALESCE($8::unit_type, unit_type),
 			updated_at = now()
 		WHERE id=$1
-		RETURNING id, name, sku, unit, purchase_price, sale_price, is_active, created_at, updated_at
+		RETURNING id, name, sku, unit, purchase_price, sale_price, is_active, unit_type, unit_scale, created_at, updated_at
 	`
 	var p Product
 	err := r.db.QueryRow(ctx, q,
 		id, req.Name, req.SKU, req.Unit,
-		req.PurchasePrice, req.SalePrice, req.IsActive,
+		req.PurchasePrice, req.SalePrice, req.IsActive, req.UnitType,
 	).Scan(
 		&p.ID, &p.Name, &p.SKU, &p.Unit,
-		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.UnitType, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
@@ -134,7 +140,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.is_active, p.created_at, p.updated_at
+		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.is_active, p.unit_type, p.unit_scale, p.created_at, p.updated_at
 		FROM products p
 		LEFT JOIN product_barcodes pb ON pb.product_id = p.id
 		WHERE p.is_active = true
@@ -158,7 +164,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		var p Product
 		if err := rows.Scan(
 			&p.ID, &p.Name, &p.SKU, &p.Unit,
-			&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+			&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.UnitType, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}

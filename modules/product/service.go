@@ -25,6 +25,10 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Product, error
 	if barcodes == nil {
 		barcodes = []string{}
 	}
+	unitType := "piece"
+	if req.UnitType != nil && *req.UnitType != "" {
+		unitType = *req.UnitType
+	}
 	p := Product{
 		Name:          req.Name,
 		SKU:           req.SKU,
@@ -33,6 +37,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Product, error
 		PurchasePrice: req.PurchasePrice,
 		SalePrice:     req.SalePrice,
 		IsActive:      true,
+		UnitType:      unitType,
 	}
 	if req.IsActive != nil {
 		p.IsActive = *req.IsActive
