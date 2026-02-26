@@ -15,20 +15,20 @@ type Product struct {
 	IsActive      bool      `json:"is_active"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
-	UnitType      string    `json:"unit_type"`  // piece|kg|liter|meter|box
-	UnitScale     int       `json:"unit_scale"` // 1000
+	UnitType      string    `json:"unit_type"`  // piece|kg|liter|meter|box 
+	UnitScale     int       `json:"unit_scale"` // 1000 
 }
 
 type CreateRequest struct {
 	Name          string   `json:"name" binding:"required"`
 	SKU           string   `json:"sku"`
 	Barcodes      []string `json:"barcodes"`
-	Unit          string   `json:"unit" binding:"required"`
+	Unit          string   `json:"unit" binding:"required"` // number bolsun
 	PurchasePrice int64    `json:"purchase_price"`
 	SalePrice     int64    `json:"sale_price"`
 	IsActive      *bool    `json:"is_active"`
 	CategoryIDs   []int64  `json:"category_ids"`
-	UnitType      *string  `json:"unit_type"` // optional, default piece
+	UnitType      *string  `json:"unit_type"` // optional, default piece enum etmeli
 }
 
 type UpdateRequest struct {

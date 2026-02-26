@@ -58,7 +58,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Param        search           query  string  false  "Search by name, phone, or email"
 // @Param        order_by         query  string  false  "Order by field (name, created_at)" Enums(name,created_at)
 // @Param        order_direction  query  string  false  "Order direction (asc/desc)" Enums(asc,desc)
-// @Success      200              {object}  response.APIResponse{data=ListResponse}
+// @Success      200              {object}  response.APIResponse{data=[]Supplier}
 // @Failure      400              {object}  response.APIResponse
 // @Failure      500              {object}  response.APIResponse
 // @Router       /api/suppliers [get]
@@ -133,7 +133,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	response.List(c, out, page, out.Limit, out.Offset, out.Total)
+	response.List(c, out.Items, page, out.Limit, out.Offset, out.Total)
 }
 
 // Get godoc

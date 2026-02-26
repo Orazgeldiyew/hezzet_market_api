@@ -57,7 +57,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Param        active_only      query  bool    false  "Only active workers (default true)"
 // @Param        order_by         query  string  false  "Order by field (name, created_at)" Enums(name,created_at)
 // @Param        order_direction  query  string  false  "Order direction (asc/desc)" Enums(asc,desc)
-// @Success      200              {object}  response.APIResponse{data=ListResponse}
+// @Success      200              {object}  response.APIResponse{data=[]Worker}
 // @Failure      400              {object}  response.APIResponse
 // @Failure      401              {object}  response.APIResponse
 // @Failure      403              {object}  response.APIResponse
@@ -138,7 +138,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	response.List(c, out, page, out.Limit, out.Offset, out.Total)
+	response.List(c, out.Items, page, out.Limit, out.Offset, out.Total)
 }
 
 // Get godoc
