@@ -1,3 +1,1 @@
--- 025 down: Drop sales tables
-DROP TABLE IF EXISTS sale_items;
-DROP TABLE IF EXISTS sales;
+-- 025 down: no-op (sales tables managed by 024_sales)

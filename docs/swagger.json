@@ -487,7 +487,10 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/customer.ListResponse"
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/customer.Customer"
+                                            }
                                         }
                                     }
                                 }
@@ -2869,7 +2872,10 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/supplier.ListResponse"
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/supplier.Supplier"
+                                            }
                                         }
                                     }
                                 }
@@ -4014,7 +4020,10 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/workers.ListResponse"
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/workers.Worker"
+                                            }
                                         }
                                     }
                                 }
@@ -6012,26 +6021,6 @@
                 }
             }
         },
-        "customer.ListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/customer.Customer"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "offset": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "customer.UpdateAdminRequest": {
             "type": "object",
             "properties": {
@@ -6367,7 +6356,8 @@
             "type": "object",
             "required": [
                 "name",
-                "unit"
+                "unit",
+                "unit_type"
             ],
             "properties": {
                 "barcodes": {
@@ -6398,11 +6388,30 @@
                     "type": "string"
                 },
                 "unit": {
-                    "type": "string"
+                    "enum": [
+                        "piece",
+                        "kg",
+                        "g",
+                        "l",
+                        "ml"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.Unit"
+                        }
+                    ]
                 },
                 "unit_type": {
-                    "description": "optional, default piece",
-                    "type": "string"
+                    "enum": [
+                        "piece",
+                        "weight",
+                        "volume"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.UnitType"
+                        }
+                    ]
                 }
             }
         },
@@ -6457,15 +6466,24 @@
                     "type": "string"
                 },
                 "unit": {
-                    "type": "string"
+                    "description": "piece | kg | g | l | ml",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.Unit"
+                        }
+                    ]
                 },
                 "unit_scale": {
-                    "description": "1000",
+                    "description": "always 1000 (1 display unit = 1000 milli-units)",
                     "type": "integer"
                 },
                 "unit_type": {
-                    "description": "piece|kg|liter|meter|box",
-                    "type": "string"
+                    "description": "piece | weight | volume",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.UnitType"
+                        }
+                    ]
                 },
                 "updated_at": {
                     "type": "string"
@@ -6485,6 +6503,46 @@
                     }
                 }
             }
+        },
+        "product.Unit": {
+            "type": "string",
+            "enum": [
+                "piece",
+                "kg",
+                "g",
+                "l",
+                "ml"
+            ],
+            "x-enum-varnames": [
+                "UnitPiece",
+                "UnitKg",
+                "UnitG",
+                "UnitL",
+                "UnitML"
+            ]
+        },
+        "product.UnitType": {
+            "type": "string",
+            "enum": [
+                "piece",
+                "weight",
+                "volume"
+            ],
+            "x-enum-comments": {
+                "UnitTypePiece": "countable items",
+                "UnitTypeVolume": "liquid items (l, ml)",
+                "UnitTypeWeight": "mass-based items (kg, g)"
+            },
+            "x-enum-descriptions": [
+                "countable items",
+                "mass-based items (kg, g)",
+                "liquid items (l, ml)"
+            ],
+            "x-enum-varnames": [
+                "UnitTypePiece",
+                "UnitTypeWeight",
+                "UnitTypeVolume"
+            ]
         },
         "product.UpdateRequest": {
             "type": "object",
@@ -6517,10 +6575,30 @@
                     "type": "string"
                 },
                 "unit": {
-                    "type": "string"
+                    "enum": [
+                        "piece",
+                        "kg",
+                        "g",
+                        "l",
+                        "ml"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.Unit"
+                        }
+                    ]
                 },
                 "unit_type": {
-                    "type": "string"
+                    "enum": [
+                        "piece",
+                        "weight",
+                        "volume"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.UnitType"
+                        }
+                    ]
                 }
             }
         },
@@ -6867,26 +6945,6 @@
                 }
             }
         },
-        "supplier.ListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/supplier.Supplier"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "offset": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "supplier.Supplier": {
             "type": "object",
             "properties": {
@@ -7170,26 +7228,6 @@
                 "salary": {
                     "type": "number",
                     "minimum": 0
-                }
-            }
-        },
-        "workers.ListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/workers.Worker"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "offset": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
                 }
             }
         },

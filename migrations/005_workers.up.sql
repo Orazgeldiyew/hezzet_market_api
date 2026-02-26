@@ -1,4 +1,4 @@
-CREATE TABLE workers (
+CREATE TABLE IF NOT EXISTS workers (
     id            BIGSERIAL PRIMARY KEY,
     name          VARCHAR(255) NOT NULL,
     position      VARCHAR(100),
@@ -15,6 +15,6 @@ CREATE TABLE workers (
     deleted_at    TIMESTAMPTZ
 );
 
-CREATE INDEX idx_workers_deleted_at ON workers(deleted_at);
-CREATE INDEX idx_workers_is_active ON workers(is_active);
-CREATE INDEX idx_workers_department ON workers(department);
+CREATE INDEX IF NOT EXISTS idx_workers_deleted_at ON workers(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_workers_is_active ON workers(is_active);
+CREATE INDEX IF NOT EXISTS idx_workers_department ON workers(department);

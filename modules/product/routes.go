@@ -17,7 +17,7 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 	read := rg.Group("/products")
 	read.Use(middleware.RequireRoles("operator", "cashier", "manager"))
 	{
-		read.GET("", middleware.PaginationMiddleware(), h.List)
+		read.GET("", h.List)
 		read.GET("/:id", h.Get)
 		read.GET("/:id/card", h.GetCard)
 		read.GET("/:id/categories", h.GetCategories)

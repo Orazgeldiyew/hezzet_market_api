@@ -1,4 +1,4 @@
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     parent_id BIGINT REFERENCES categories(id) ON DELETE SET NULL,
@@ -9,10 +9,10 @@ CREATE TABLE categories (
     UNIQUE (parent_id, name)
 );
 
-CREATE INDEX idx_categories_deleted_at ON categories(deleted_at);
-CREATE INDEX idx_categories_parent_id ON categories(parent_id);
+CREATE INDEX IF NOT EXISTS idx_categories_deleted_at ON categories(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id);
 
-CREATE TABLE suppliers (
+CREATE TABLE IF NOT EXISTS suppliers (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     phone TEXT,
@@ -24,9 +24,9 @@ CREATE TABLE suppliers (
     deleted_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_suppliers_deleted_at ON suppliers(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_suppliers_deleted_at ON suppliers(deleted_at);
 
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     sku TEXT UNIQUE,
@@ -40,10 +40,10 @@ CREATE TABLE products (
     deleted_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_products_deleted_at ON products(deleted_at);
-CREATE INDEX idx_products_name ON products(name);
+CREATE INDEX IF NOT EXISTS idx_products_deleted_at ON products(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
 
-CREATE TABLE product_categories (
+CREATE TABLE IF NOT EXISTS product_categories (
     product_id BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
     category_id BIGINT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

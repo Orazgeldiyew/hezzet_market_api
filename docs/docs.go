@@ -491,7 +491,10 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/customer.ListResponse"
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/customer.Customer"
+                                            }
                                         }
                                     }
                                 }
@@ -2873,7 +2876,10 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/supplier.ListResponse"
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/supplier.Supplier"
+                                            }
                                         }
                                     }
                                 }
@@ -4018,7 +4024,10 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/workers.ListResponse"
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/workers.Worker"
+                                            }
                                         }
                                     }
                                 }
@@ -6016,26 +6025,6 @@ const docTemplate = `{
                 }
             }
         },
-        "customer.ListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/customer.Customer"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "offset": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "customer.UpdateAdminRequest": {
             "type": "object",
             "properties": {
@@ -6371,7 +6360,8 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "name",
-                "unit"
+                "unit",
+                "unit_type"
             ],
             "properties": {
                 "barcodes": {
@@ -6402,11 +6392,30 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "unit": {
-                    "type": "string"
+                    "enum": [
+                        "piece",
+                        "kg",
+                        "g",
+                        "l",
+                        "ml"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.Unit"
+                        }
+                    ]
                 },
                 "unit_type": {
-                    "description": "optional, default piece",
-                    "type": "string"
+                    "enum": [
+                        "piece",
+                        "weight",
+                        "volume"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.UnitType"
+                        }
+                    ]
                 }
             }
         },
@@ -6461,15 +6470,24 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "unit": {
-                    "type": "string"
+                    "description": "piece | kg | g | l | ml",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.Unit"
+                        }
+                    ]
                 },
                 "unit_scale": {
-                    "description": "1000",
+                    "description": "always 1000 (1 display unit = 1000 milli-units)",
                     "type": "integer"
                 },
                 "unit_type": {
-                    "description": "piece|kg|liter|meter|box",
-                    "type": "string"
+                    "description": "piece | weight | volume",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.UnitType"
+                        }
+                    ]
                 },
                 "updated_at": {
                     "type": "string"
@@ -6489,6 +6507,46 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "product.Unit": {
+            "type": "string",
+            "enum": [
+                "piece",
+                "kg",
+                "g",
+                "l",
+                "ml"
+            ],
+            "x-enum-varnames": [
+                "UnitPiece",
+                "UnitKg",
+                "UnitG",
+                "UnitL",
+                "UnitML"
+            ]
+        },
+        "product.UnitType": {
+            "type": "string",
+            "enum": [
+                "piece",
+                "weight",
+                "volume"
+            ],
+            "x-enum-comments": {
+                "UnitTypePiece": "countable items",
+                "UnitTypeVolume": "liquid items (l, ml)",
+                "UnitTypeWeight": "mass-based items (kg, g)"
+            },
+            "x-enum-descriptions": [
+                "countable items",
+                "mass-based items (kg, g)",
+                "liquid items (l, ml)"
+            ],
+            "x-enum-varnames": [
+                "UnitTypePiece",
+                "UnitTypeWeight",
+                "UnitTypeVolume"
+            ]
         },
         "product.UpdateRequest": {
             "type": "object",
@@ -6521,10 +6579,30 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "unit": {
-                    "type": "string"
+                    "enum": [
+                        "piece",
+                        "kg",
+                        "g",
+                        "l",
+                        "ml"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.Unit"
+                        }
+                    ]
                 },
                 "unit_type": {
-                    "type": "string"
+                    "enum": [
+                        "piece",
+                        "weight",
+                        "volume"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/product.UnitType"
+                        }
+                    ]
                 }
             }
         },
@@ -6871,26 +6949,6 @@ const docTemplate = `{
                 }
             }
         },
-        "supplier.ListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/supplier.Supplier"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "offset": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "supplier.Supplier": {
             "type": "object",
             "properties": {
@@ -7177,26 +7235,6 @@ const docTemplate = `{
                 }
             }
         },
-        "workers.ListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/workers.Worker"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "offset": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "workers.UpdateRequest": {
             "type": "object",
             "properties": {
@@ -7307,6 +7345,7 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Market backend (products, stock, income, sales)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
+
 }
 
 func init() {

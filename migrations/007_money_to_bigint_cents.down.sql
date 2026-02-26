@@ -19,12 +19,12 @@ ALTER TABLE customers
   DROP COLUMN total_spent,
   DROP COLUMN bonus_points;
 
-ALTER TABLE customers
-  RENAME COLUMN total_spent_num  TO total_spent,
-  RENAME COLUMN bonus_points_num TO bonus_points;
+-- PostgreSQL requires one RENAME COLUMN per ALTER TABLE statement
+ALTER TABLE customers RENAME COLUMN total_spent_num  TO total_spent;
+ALTER TABLE customers RENAME COLUMN bonus_points_num TO bonus_points;
 
 ALTER TABLE customers
-  ADD CONSTRAINT customers_total_spent_check CHECK (total_spent >= 0),
+  ADD CONSTRAINT customers_total_spent_check  CHECK (total_spent  >= 0),
   ADD CONSTRAINT customers_bonus_points_check CHECK (bonus_points >= 0);
 
 
@@ -47,12 +47,12 @@ ALTER TABLE products
   DROP COLUMN purchase_price,
   DROP COLUMN sale_price;
 
-ALTER TABLE products
-  RENAME COLUMN purchase_price_num TO purchase_price,
-  RENAME COLUMN sale_price_num     TO sale_price;
+-- PostgreSQL requires one RENAME COLUMN per ALTER TABLE statement
+ALTER TABLE products RENAME COLUMN purchase_price_num TO purchase_price;
+ALTER TABLE products RENAME COLUMN sale_price_num     TO sale_price;
 
 ALTER TABLE products
   ADD CONSTRAINT products_purchase_price_check CHECK (purchase_price >= 0),
-  ADD CONSTRAINT products_sale_price_check CHECK (sale_price >= 0);
+  ADD CONSTRAINT products_sale_price_check     CHECK (sale_price     >= 0);
 
 COMMIT;

@@ -24,7 +24,6 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 	// List — read for cashier and above
 	txns.GET("",
 		middleware.RequireRoles("cashier", "operator", "manager"),
-		middleware.PaginationMiddleware(),
 		h.ListTransactions,
 	)
 

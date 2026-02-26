@@ -87,6 +87,7 @@ func (h *Handler) List(c *gin.Context) {
 	if v := c.Query("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			limit = n
+			offset = (page - 1) * limit // recalculate offset when limit is overridden
 		}
 	}
 	if v := c.Query("skip"); v != "" {

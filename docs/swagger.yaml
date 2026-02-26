@@ -330,19 +330,6 @@ definitions:
       updated_at:
         type: string
     type: object
-  customer.ListResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/customer.Customer'
-        type: array
-      limit:
-        type: integer
-      offset:
-        type: integer
-      total:
-        type: integer
-    type: object
   customer.UpdateAdminRequest:
     properties:
       is_active:
@@ -583,13 +570,25 @@ definitions:
       sku:
         type: string
       unit:
-        type: string
+        allOf:
+        - $ref: '#/definitions/product.Unit'
+        enum:
+        - piece
+        - kg
+        - g
+        - l
+        - ml
       unit_type:
-        description: optional, default piece
-        type: string
+        allOf:
+        - $ref: '#/definitions/product.UnitType'
+        enum:
+        - piece
+        - weight
+        - volume
     required:
     - name
     - unit
+    - unit_type
     type: object
   product.ListResponse:
     properties:
@@ -625,13 +624,16 @@ definitions:
       sku:
         type: string
       unit:
-        type: string
+        allOf:
+        - $ref: '#/definitions/product.Unit'
+        description: piece | kg | g | l | ml
       unit_scale:
-        description: "1000"
+        description: always 1000 (1 display unit = 1000 milli-units)
         type: integer
       unit_type:
-        description: piece|kg|liter|meter|box
-        type: string
+        allOf:
+        - $ref: '#/definitions/product.UnitType'
+        description: piece | weight | volume
       updated_at:
         type: string
     type: object
@@ -644,6 +646,38 @@ definitions:
     required:
     - category_ids
     type: object
+  product.Unit:
+    enum:
+    - piece
+    - kg
+    - g
+    - l
+    - ml
+    type: string
+    x-enum-varnames:
+    - UnitPiece
+    - UnitKg
+    - UnitG
+    - UnitL
+    - UnitML
+  product.UnitType:
+    enum:
+    - piece
+    - weight
+    - volume
+    type: string
+    x-enum-comments:
+      UnitTypePiece: countable items
+      UnitTypeVolume: liquid items (l, ml)
+      UnitTypeWeight: mass-based items (kg, g)
+    x-enum-descriptions:
+    - countable items
+    - mass-based items (kg, g)
+    - liquid items (l, ml)
+    x-enum-varnames:
+    - UnitTypePiece
+    - UnitTypeWeight
+    - UnitTypeVolume
   product.UpdateRequest:
     properties:
       barcodes:
@@ -665,9 +699,21 @@ definitions:
       sku:
         type: string
       unit:
-        type: string
+        allOf:
+        - $ref: '#/definitions/product.Unit'
+        enum:
+        - piece
+        - kg
+        - g
+        - l
+        - ml
       unit_type:
-        type: string
+        allOf:
+        - $ref: '#/definitions/product.UnitType'
+        enum:
+        - piece
+        - weight
+        - volume
     type: object
   response.APIError:
     properties:
@@ -906,19 +952,6 @@ definitions:
     required:
     - name
     type: object
-  supplier.ListResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/supplier.Supplier'
-        type: array
-      limit:
-        type: integer
-      offset:
-        type: integer
-      total:
-        type: integer
-    type: object
   supplier.Supplier:
     properties:
       address:
@@ -1112,19 +1145,6 @@ definitions:
         type: number
     required:
     - name
-    type: object
-  workers.ListResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/workers.Worker'
-        type: array
-      limit:
-        type: integer
-      offset:
-        type: integer
-      total:
-        type: integer
     type: object
   workers.UpdateRequest:
     properties:
@@ -1480,7 +1500,9 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/customer.ListResponse'
+                  items:
+                    $ref: '#/definitions/customer.Customer'
+                  type: array
               type: object
         "400":
           description: Bad Request
@@ -2961,7 +2983,9 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/supplier.ListResponse'
+                  items:
+                    $ref: '#/definitions/supplier.Supplier'
+                  type: array
               type: object
         "400":
           description: Bad Request
@@ -3632,7 +3656,9 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/workers.ListResponse'
+                  items:
+                    $ref: '#/definitions/workers.Worker'
+                  type: array
               type: object
         "400":
           description: Bad Request

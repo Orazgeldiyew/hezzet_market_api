@@ -1,49 +1,74 @@
 package product
 
-import (
-	"time"
+import "time"
+
+// ─── Measurement enums ───────────────────────────────────────────────────────
+
+// UnitType is the measurement category stored in products.unit_type (unit_type_enum).
+type UnitType string
+
+const (
+	UnitTypePiece  UnitType = "piece"  // countable items
+	UnitTypeWeight UnitType = "weight" // mass-based items (kg, g)
+	UnitTypeVolume UnitType = "volume" // liquid items (l, ml)
 )
+
+// Unit is the specific measurement unit stored in products.unit (unit_enum).
+type Unit string
+
+const (
+	UnitPiece Unit = "piece"
+	UnitKg    Unit = "kg"
+	UnitG     Unit = "g"
+	UnitL     Unit = "l"
+	UnitML    Unit = "ml"
+)
+
+// ─── Domain model ────────────────────────────────────────────────────────────
 
 type Product struct {
 	ID            int64     `json:"id"`
 	Name          string    `json:"name"`
 	SKU           string    `json:"sku"`
 	Barcodes      []string  `json:"barcodes"`
-	Unit          string    `json:"unit"`
+	UnitType      UnitType  `json:"unit_type"`  // piece | weight | volume
+	Unit          Unit      `json:"unit"`        // piece | kg | g | l | ml
+	UnitScale     int       `json:"unit_scale"`  // always 1000 (1 display unit = 1000 milli-units)
 	PurchasePrice int64     `json:"purchase_price"`
 	SalePrice     int64     `json:"sale_price"`
 	IsActive      bool      `json:"is_active"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
-	UnitType      string    `json:"unit_type"`  // piece|kg|liter|meter|box 
-	UnitScale     int       `json:"unit_scale"` // 1000 
 }
 
+// ─── Requests ────────────────────────────────────────────────────────────────
+
 type CreateRequest struct {
-	Name          string   `json:"name" binding:"required"`
+	Name          string   `json:"name"           binding:"required"`
 	SKU           string   `json:"sku"`
 	Barcodes      []string `json:"barcodes"`
-	Unit          string   `json:"unit" binding:"required"` // number bolsun
+	UnitType      UnitType `json:"unit_type"      binding:"required,oneof=piece weight volume"`
+	Unit          Unit     `json:"unit"           binding:"required,oneof=piece kg g l ml"`
 	PurchasePrice int64    `json:"purchase_price"`
 	SalePrice     int64    `json:"sale_price"`
 	IsActive      *bool    `json:"is_active"`
 	CategoryIDs   []int64  `json:"category_ids"`
-	UnitType      *string  `json:"unit_type"` // optional, default piece enum etmeli
 }
 
 type UpdateRequest struct {
 	Name          *string   `json:"name"`
 	SKU           *string   `json:"sku"`
 	Barcodes      *[]string `json:"barcodes"`
-	Unit          *string   `json:"unit"`
+	UnitType      *UnitType `json:"unit_type"  binding:"omitempty,oneof=piece weight volume"`
+	Unit          *Unit     `json:"unit"       binding:"omitempty,oneof=piece kg g l ml"`
 	PurchasePrice *int64    `json:"purchase_price"`
 	SalePrice     *int64    `json:"sale_price"`
 	IsActive      *bool     `json:"is_active"`
 	CategoryIDs   *[]int64  `json:"category_ids"`
-	UnitType      *string   `json:"unit_type"`
 }
 
-// ListResponse for paginated product list
+// ─── Responses ───────────────────────────────────────────────────────────────
+
 type ListResponse struct {
 	Items  []Product `json:"items"`
 	Total  int       `json:"total"`
@@ -63,6 +88,7 @@ type CategoryBrief struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 }
+
 type SetCategoriesRequest struct {
 	CategoryIDs []int64 `json:"category_ids" binding:"required"`
 }

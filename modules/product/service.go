@@ -3,6 +3,7 @@ package product
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
@@ -20,28 +21,56 @@ func NewService(repo *Repository, stock *StockRepository) *Service {
 	return &Service{repo: repo, stock: stock}
 }
 
+// ValidateUnit enforces the business rule:
+//
+//	piece  → unit must be "piece"
+//	weight → unit must be "kg" or "g"
+//	volume → unit must be "l"  or "ml"
+func ValidateUnit(unitType UnitType, unit Unit) error {
+	switch unitType {
+	case UnitTypePiece:
+		if unit != UnitPiece {
+			return fmt.Errorf("unit_type 'piece' requires unit 'piece', got '%s'", unit)
+		}
+	case UnitTypeWeight:
+		if unit != UnitKg && unit != UnitG {
+			return fmt.Errorf("unit_type 'weight' requires unit 'kg' or 'g', got '%s'", unit)
+		}
+	case UnitTypeVolume:
+		if unit != UnitL && unit != UnitML {
+			return fmt.Errorf("unit_type 'volume' requires unit 'l' or 'ml', got '%s'", unit)
+		}
+	default:
+		return fmt.Errorf("unknown unit_type '%s'", unitType)
+	}
+	return nil
+}
+
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Product, error) {
+	// Enforce unit_type ↔ unit compatibility before touching the DB.
+	if err := ValidateUnit(req.UnitType, req.Unit); err != nil {
+		return Product{}, apperr.Validation(err.Error())
+	}
+
 	barcodes := req.Barcodes
 	if barcodes == nil {
 		barcodes = []string{}
 	}
-	unitType := "piece"
-	if req.UnitType != nil && *req.UnitType != "" {
-		unitType = *req.UnitType
-	}
+
 	p := Product{
 		Name:          req.Name,
 		SKU:           req.SKU,
 		Barcodes:      barcodes,
+		UnitType:      req.UnitType,
 		Unit:          req.Unit,
 		PurchasePrice: req.PurchasePrice,
 		SalePrice:     req.SalePrice,
 		IsActive:      true,
-		UnitType:      unitType,
 	}
 	if req.IsActive != nil {
 		p.IsActive = *req.IsActive
 	}
+
 	if err := s.repo.Create(ctx, &p); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -55,7 +84,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Product, error
 		return Product{}, apperr.Internal(err)
 	}
 
-	// link categories if provided
+	// Link categories if provided.
 	if len(req.CategoryIDs) > 0 {
 		uniq := uniqueInt64(req.CategoryIDs)
 		n, err := s.repo.CountActiveCategoriesByIDs(ctx, uniq)
@@ -113,6 +142,33 @@ func (s *Service) GetCard(ctx context.Context, id int64) (Card, error) {
 }
 
 func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest) (Product, error) {
+	// When unit_type or unit is being changed we must validate the combined
+	// (effective) state: either field may be absent in the request, so we load
+	// the current product and merge before validating.
+	if req.UnitType != nil || req.Unit != nil {
+		current, err := s.repo.GetByID(ctx, id)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return Product{}, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found")
+			}
+			return Product{}, apperr.Internal(err)
+		}
+
+		effectiveUnitType := current.UnitType
+		if req.UnitType != nil {
+			effectiveUnitType = *req.UnitType
+		}
+
+		effectiveUnit := current.Unit
+		if req.Unit != nil {
+			effectiveUnit = *req.Unit
+		}
+
+		if err := ValidateUnit(effectiveUnitType, effectiveUnit); err != nil {
+			return Product{}, apperr.Validation(err.Error())
+		}
+	}
+
 	p, err := s.repo.Update(ctx, id, req)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -130,7 +186,7 @@ func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest) (Prod
 		return Product{}, apperr.Internal(err)
 	}
 
-	// update categories if provided
+	// Update categories if provided.
 	if req.CategoryIDs != nil {
 		uniq := uniqueInt64(*req.CategoryIDs)
 		if len(uniq) > 0 {
@@ -190,19 +246,15 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-//
-// ===== Product ↔ Categories endpoints support =====
-//
+// ─── Category helpers ────────────────────────────────────────────────────────
 
 func (s *Service) GetCategories(ctx context.Context, productID int64) ([]CategoryBrief, error) {
-	// product must exist
 	if _, err := s.repo.GetByID(ctx, productID); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found")
 		}
 		return nil, apperr.Internal(err)
 	}
-
 	out, err := s.repo.ListCategories(ctx, productID)
 	if err != nil {
 		return nil, apperr.Internal(err)
@@ -211,7 +263,6 @@ func (s *Service) GetCategories(ctx context.Context, productID int64) ([]Categor
 }
 
 func (s *Service) SetCategories(ctx context.Context, productID int64, ids []int64) ([]CategoryBrief, error) {
-	// product must exist
 	if _, err := s.repo.GetByID(ctx, productID); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found")
@@ -220,8 +271,6 @@ func (s *Service) SetCategories(ctx context.Context, productID int64, ids []int6
 	}
 
 	uniq := uniqueInt64(ids)
-
-	// allow empty => clear all
 	if len(uniq) > 0 {
 		n, err := s.repo.CountActiveCategoriesByIDs(ctx, uniq)
 		if err != nil {
@@ -244,7 +293,6 @@ func (s *Service) SetCategories(ctx context.Context, productID int64, ids []int6
 }
 
 func (s *Service) RemoveCategory(ctx context.Context, productID, categoryID int64) error {
-	// product must exist
 	if _, err := s.repo.GetByID(ctx, productID); err != nil {
 		if err == pgx.ErrNoRows {
 			return apperr.NotFound("PRODUCT_NOT_FOUND", "product not found")
@@ -261,6 +309,8 @@ func (s *Service) RemoveCategory(ctx context.Context, productID, categoryID int6
 	}
 	return nil
 }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 func uniqueInt64(in []int64) []int64 {
 	seen := make(map[int64]struct{}, len(in))

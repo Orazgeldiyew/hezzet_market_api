@@ -23,19 +23,16 @@ func (r *Repository) Create(ctx context.Context, p *Product) error {
 
 	q := `
 		INSERT INTO products (name, sku, unit, purchase_price, sale_price, is_active, unit_type)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		VALUES ($1,$2,$3::unit_enum,$4,$5,$6,$7::unit_type_enum)
 		RETURNING id, unit_scale, created_at, updated_at
 	`
-	unitType := p.UnitType
-	if unitType == "" {
-		unitType = "piece"
-	}
+	// Pass typed enums as plain strings — pgx sends them as text which PostgreSQL
+	// accepts for enum parameters when combined with an explicit cast in the query.
 	if err := tx.QueryRow(ctx, q,
-		p.Name, p.SKU, p.Unit, p.PurchasePrice, p.SalePrice, p.IsActive, unitType,
+		p.Name, p.SKU, string(p.Unit), p.PurchasePrice, p.SalePrice, p.IsActive, string(p.UnitType),
 	).Scan(&p.ID, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		return err
 	}
-	p.UnitType = unitType
 
 	for _, bc := range p.Barcodes {
 		if _, err := tx.Exec(ctx,
@@ -55,13 +52,18 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 		FROM products WHERE id=$1 AND is_active=true
 	`
 	var p Product
+	// Scan PostgreSQL enum columns into plain strings first, then cast to typed enums.
+	// pgx v5 does not auto-convert unknown enum OIDs to custom Go string types.
+	var unitStr, unitTypeStr string
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&p.ID, &p.Name, &p.SKU, &p.Unit,
-		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.UnitType, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
+		&p.ID, &p.Name, &p.SKU, &unitStr,
+		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
 	}
+	p.Unit = Unit(unitStr)
+	p.UnitType = UnitType(unitTypeStr)
 	p.Barcodes, err = r.loadBarcodes(ctx, id)
 	return p, err
 }
@@ -69,28 +71,36 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (Product, error) {
 	q := `
 		UPDATE products SET
-			name = COALESCE($2, name),
-			sku = COALESCE($3, sku),
-			unit = COALESCE($4, unit),
+			name          = COALESCE($2, name),
+			sku           = COALESCE($3, sku),
+			unit          = COALESCE($4::unit_enum, unit),
 			purchase_price = COALESCE($5, purchase_price),
-			sale_price = COALESCE($6, sale_price),
-			is_active = COALESCE($7, is_active),
-			unit_type = COALESCE($8::unit_type, unit_type),
-			updated_at = now()
+			sale_price    = COALESCE($6, sale_price),
+			is_active     = COALESCE($7, is_active),
+			unit_type     = COALESCE($8::unit_type_enum, unit_type),
+			updated_at    = now()
 		WHERE id=$1
 		RETURNING id, name, sku, unit, purchase_price, sale_price, is_active, unit_type, unit_scale, created_at, updated_at
 	`
+	// Convert *UnitType and *Unit to *string so pgx sends NULL when nil,
+	// which COALESCE correctly interprets as "keep existing value".
+	unitParam := ptrUnitToString(req.Unit)
+	unitTypeParam := ptrUnitTypeToString(req.UnitType)
+
 	var p Product
+	var unitStr, unitTypeStr string
 	err := r.db.QueryRow(ctx, q,
-		id, req.Name, req.SKU, req.Unit,
-		req.PurchasePrice, req.SalePrice, req.IsActive, req.UnitType,
+		id, req.Name, req.SKU, unitParam,
+		req.PurchasePrice, req.SalePrice, req.IsActive, unitTypeParam,
 	).Scan(
-		&p.ID, &p.Name, &p.SKU, &p.Unit,
-		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.UnitType, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
+		&p.ID, &p.Name, &p.SKU, &unitStr,
+		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
 	}
+	p.Unit = Unit(unitStr)
+	p.UnitType = UnitType(unitTypeStr)
 
 	if req.Barcodes != nil {
 		if err := r.ReplaceBarcodes(ctx, id, *req.Barcodes); err != nil {
@@ -100,6 +110,24 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 
 	p.Barcodes, err = r.loadBarcodes(ctx, id)
 	return p, err
+}
+
+// ptrUnitTypeToString converts *UnitType → *string for pgx parameter passing.
+func ptrUnitTypeToString(v *UnitType) *string {
+	if v == nil {
+		return nil
+	}
+	s := string(*v)
+	return &s
+}
+
+// ptrUnitToString converts *Unit → *string for pgx parameter passing.
+func ptrUnitToString(v *Unit) *string {
+	if v == nil {
+		return nil
+	}
+	s := string(*v)
+	return &s
 }
 
 func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, orderDir, qstr string) ([]Product, int, error) {
@@ -162,12 +190,15 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	var out []Product
 	for rows.Next() {
 		var p Product
+		var unitStr, unitTypeStr string
 		if err := rows.Scan(
-			&p.ID, &p.Name, &p.SKU, &p.Unit,
-			&p.PurchasePrice, &p.SalePrice, &p.IsActive, &p.UnitType, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
+			&p.ID, &p.Name, &p.SKU, &unitStr,
+			&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}
+		p.Unit = Unit(unitStr)
+		p.UnitType = UnitType(unitTypeStr)
 		ids = append(ids, p.ID)
 		out = append(out, p)
 	}
