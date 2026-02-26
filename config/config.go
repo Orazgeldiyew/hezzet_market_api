@@ -33,6 +33,10 @@ type Config struct {
 	SwaggerHost     string // e.g. localhost:5000
 	SwaggerSchemes  string // e.g. http or https
 
+	// File uploads
+	UploadsDir    string // local directory for uploaded files, e.g. "./uploads"
+	PublicBaseURL string // public base URL for building file URLs, e.g. "http://localhost:8080"
+
 	// CORS
 	CORSAllowedOrigins []string
 
@@ -77,6 +81,10 @@ func Load() Config {
 	if cfg.RefreshTokenSecret == "" && cfg.JWTSecret != "" {
 		cfg.RefreshTokenSecret = cfg.JWTSecret
 	}
+
+	// ── File uploads ──
+	cfg.UploadsDir    = getenv("UPLOADS_DIR", "./uploads")
+	cfg.PublicBaseURL = getenv("PUBLIC_BASE_URL", "http://localhost:8080")
 
 	// ── CORS ──
 	cfg.CORSAllowedOrigins = splitEnvCSV(getenv("CORS_ALLOWED_ORIGINS", ""))

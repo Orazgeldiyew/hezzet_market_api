@@ -1,6 +1,7 @@
 package product
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -21,12 +22,13 @@ func NewHandler(svc *Service) *Handler {
 
 // Create godoc
 // @Summary      Create product
-// @Description  Create a new product
+// @Description  Create a new product. Send as multipart/form-data: "data" field contains JSON (CreateRequest), "file" field is optional image (jpg/jpeg/png/webp, max 5MB).
 // @Tags         Products
-// @Accept       json
+// @Accept       multipart/form-data
 // @Produce      json
 // @Security     BearerAuth
-// @Param        body  body      CreateRequest  true  "Product data"
+// @Param        data  formData  string  true   "Product JSON (CreateRequest)"
+// @Param        file  formData  file    false  "Product photo (jpg/jpeg/png/webp, max 5MB)"
 // @Success      201   {object}  response.APIResponse{data=Product}
 // @Failure      400   {object}  response.APIResponse
 // @Failure      401   {object}  response.APIResponse
@@ -34,12 +36,36 @@ func NewHandler(svc *Service) *Handler {
 // @Failure      409   {object}  response.APIResponse
 // @Router       /api/products [post]
 func (h *Handler) Create(c *gin.Context) {
-	var req CreateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.Error(err)
+	dataStr := c.PostForm("data")
+	if dataStr == "" {
+		c.Error(apperr.Validation("'data' form field is required"))
 		return
 	}
-	p, err := h.svc.Create(c.Request.Context(), req)
+
+	var req CreateRequest
+	if err := json.Unmarshal([]byte(dataStr), &req); err != nil {
+		c.Error(apperr.Validation("invalid JSON in 'data' field: " + err.Error()))
+		return
+	}
+
+	// Validate required fields manually (since we can't use ShouldBindJSON with multipart)
+	if req.Name == "" {
+		c.Error(apperr.Validation("name is required"))
+		return
+	}
+	if req.UnitType == "" {
+		c.Error(apperr.Validation("unit_type is required (piece, weight, volume)"))
+		return
+	}
+	if req.Unit == "" {
+		c.Error(apperr.Validation("unit is required (piece, kg, g, l, ml)"))
+		return
+	}
+
+	// Optional photo file
+	fh, _ := c.FormFile("file") // nil when no file uploaded — OK
+
+	p, err := h.svc.Create(c.Request.Context(), req, fh)
 	if err != nil {
 		c.Error(err)
 		return
@@ -296,4 +322,32 @@ func (h *Handler) RemoveCategory(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"deleted": true})
+}
+
+// UploadPhoto godoc
+// @Summary      Upload product photo
+// @Description  Upload or replace the photo for a product (multipart/form-data, field: "file")
+// @Tags         Products
+// @Accept       multipart/form-data
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      int   true  "Product ID"
+// @Param        file  formData  file  true  "Image file (jpg/jpeg/png/webp, max 5MB)"
+// @Success      200   {object}  response.APIResponse{data=Product}
+// @Failure      400   {object}  response.APIResponse
+// @Failure      404   {object}  response.APIResponse
+// @Router       /api/products/{id}/photo [post]
+func (h *Handler) UploadPhoto(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	fh, err := c.FormFile("file")
+	if err != nil {
+		c.Error(apperr.Validation("file is required"))
+		return
+	}
+	p, err := h.svc.UploadPhoto(c.Request.Context(), id, fh)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, p)
 }

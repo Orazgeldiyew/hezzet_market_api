@@ -9,10 +9,22 @@ import (
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	baseURL string // PUBLIC_BASE_URL for building photo URLs
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
+func NewRepository(db *pgxpool.Pool, baseURL string) *Repository {
+	return &Repository{db: db, baseURL: baseURL}
+}
+
+// photoURL converts a nullable DB photo_path to a full public URL.
+func (r *Repository) photoURL(path *string) *string {
+	if path == nil || *path == "" || r.baseURL == "" {
+		return nil
+	}
+	u := r.baseURL + "/uploads/" + *path
+	return &u
+}
 
 func (r *Repository) Create(ctx context.Context, p *Product) error {
 	tx, err := r.db.Begin(ctx)
@@ -48,22 +60,25 @@ func (r *Repository) Create(ctx context.Context, p *Product) error {
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 	q := `
-		SELECT id, name, sku, unit, purchase_price, sale_price, is_active, unit_type, unit_scale, created_at, updated_at
+		SELECT id, name, sku, unit, purchase_price, sale_price, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
 		FROM products WHERE id=$1 AND is_active=true
 	`
 	var p Product
 	// Scan PostgreSQL enum columns into plain strings first, then cast to typed enums.
 	// pgx v5 does not auto-convert unknown enum OIDs to custom Go string types.
 	var unitStr, unitTypeStr string
+	var photoPath *string
 	err := r.db.QueryRow(ctx, q, id).Scan(
 		&p.ID, &p.Name, &p.SKU, &unitStr,
-		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
+		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
 	}
 	p.Unit = Unit(unitStr)
 	p.UnitType = UnitType(unitTypeStr)
+	p.PhotoPath = photoPath
+	p.PhotoURL = r.photoURL(photoPath)
 	p.Barcodes, err = r.loadBarcodes(ctx, id)
 	return p, err
 }
@@ -80,7 +95,7 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 			unit_type     = COALESCE($8::unit_type_enum, unit_type),
 			updated_at    = now()
 		WHERE id=$1
-		RETURNING id, name, sku, unit, purchase_price, sale_price, is_active, unit_type, unit_scale, created_at, updated_at
+		RETURNING id, name, sku, unit, purchase_price, sale_price, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
 	`
 	// Convert *UnitType and *Unit to *string so pgx sends NULL when nil,
 	// which COALESCE correctly interprets as "keep existing value".
@@ -89,18 +104,21 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 
 	var p Product
 	var unitStr, unitTypeStr string
+	var photoPath *string
 	err := r.db.QueryRow(ctx, q,
 		id, req.Name, req.SKU, unitParam,
 		req.PurchasePrice, req.SalePrice, req.IsActive, unitTypeParam,
 	).Scan(
 		&p.ID, &p.Name, &p.SKU, &unitStr,
-		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
+		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
 	}
 	p.Unit = Unit(unitStr)
 	p.UnitType = UnitType(unitTypeStr)
+	p.PhotoPath = photoPath
+	p.PhotoURL = r.photoURL(photoPath)
 
 	if req.Barcodes != nil {
 		if err := r.ReplaceBarcodes(ctx, id, *req.Barcodes); err != nil {
@@ -168,7 +186,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.is_active, p.unit_type, p.unit_scale, p.created_at, p.updated_at
+		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.is_active, p.unit_type, p.unit_scale, p.photo_path, p.created_at, p.updated_at
 		FROM products p
 		LEFT JOIN product_barcodes pb ON pb.product_id = p.id
 		WHERE p.is_active = true
@@ -191,14 +209,17 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	for rows.Next() {
 		var p Product
 		var unitStr, unitTypeStr string
+		var photoPath *string
 		if err := rows.Scan(
 			&p.ID, &p.Name, &p.SKU, &unitStr,
-			&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt,
+			&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}
 		p.Unit = Unit(unitStr)
 		p.UnitType = UnitType(unitTypeStr)
+		p.PhotoPath = photoPath
+		p.PhotoURL = r.photoURL(photoPath)
 		ids = append(ids, p.ID)
 		out = append(out, p)
 	}
@@ -230,6 +251,25 @@ func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
 		return pgx.ErrNoRows
 	}
 	return nil
+}
+
+// InsertPhoto creates a record in product_photos and returns the new photo ID.
+func (r *Repository) InsertPhoto(ctx context.Context, productID int64, ext string) (int64, error) {
+	var id int64
+	err := r.db.QueryRow(ctx,
+		`INSERT INTO product_photos (product_id, ext) VALUES ($1, $2) RETURNING id`,
+		productID, ext,
+	).Scan(&id)
+	return id, err
+}
+
+// UpdatePhotoPath sets the current photo_path on a product.
+func (r *Repository) UpdatePhotoPath(ctx context.Context, productID int64, path *string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE products SET photo_path = $1, updated_at = now() WHERE id = $2 AND is_active = true`,
+		path, productID,
+	)
+	return err
 }
 
 func IsNoRows(err error) bool { return err == pgx.ErrNoRows }

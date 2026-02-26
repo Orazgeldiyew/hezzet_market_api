@@ -118,6 +118,19 @@ func (r *Repository) UpdateLastLogin(ctx context.Context, id int64) error {
 	return err
 }
 
+// BumpTokenVersion atomically increments token_version and returns the new value.
+// Called on every successful login to invalidate all prior sessions across all devices.
+func (r *Repository) BumpTokenVersion(ctx context.Context, userID int64) (int, error) {
+	var newVersion int
+	err := r.db.QueryRow(ctx, `
+		UPDATE users
+		SET token_version = token_version + 1, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING token_version
+	`, userID).Scan(&newVersion)
+	return newVersion, err
+}
+
 // ---------- Block / Unblock ----------
 
 func (r *Repository) BlockUser(ctx context.Context, id int64, reason string, updatedBy int64) (User, error) {

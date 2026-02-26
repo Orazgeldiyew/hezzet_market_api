@@ -17,14 +17,16 @@ type Sale struct {
 }
 
 type SaleItem struct {
-	ID             int64     `json:"id"`
-	SaleID         int64     `json:"sale_id"`
-	ProductID      int64     `json:"product_id"`
-	QtyMilli       int64     `json:"qty_milli"`
-	UnitPriceCents int64     `json:"unit_price_cents"`
-	CostCents      int64     `json:"cost_cents"`
-	LineTotalCents int64     `json:"line_total_cents"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID              int64     `json:"id"`
+	SaleID          int64     `json:"sale_id"`
+	ProductID       int64     `json:"product_id"`
+	ProductName     string    `json:"product_name"`
+	ProductPhotoURL *string   `json:"product_photo_url,omitempty"`
+	QtyMilli        int64     `json:"qty_milli"`
+	UnitPriceCents  int64     `json:"unit_price_cents"`
+	CostCents       int64     `json:"cost_cents"`
+	LineTotalCents  int64     `json:"line_total_cents"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // ── Requests ─────────────────────────────────────────────────────────────────

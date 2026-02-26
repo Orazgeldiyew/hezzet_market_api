@@ -8,8 +8,8 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository) {
-	repo := NewRepository(db)
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository, publicBaseURL string) {
+	repo := NewRepository(db, publicBaseURL)
 	svc := NewService(repo, finRepo)
 	h := NewHandler(svc)
 

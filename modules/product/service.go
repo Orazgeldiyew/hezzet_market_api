@@ -4,7 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -13,12 +18,13 @@ import (
 )
 
 type Service struct {
-	repo  *Repository
-	stock *StockRepository
+	repo       *Repository
+	stock      *StockRepository
+	uploadsDir string
 }
 
-func NewService(repo *Repository, stock *StockRepository) *Service {
-	return &Service{repo: repo, stock: stock}
+func NewService(repo *Repository, stock *StockRepository, uploadsDir string) *Service {
+	return &Service{repo: repo, stock: stock, uploadsDir: uploadsDir}
 }
 
 // ValidateUnit enforces the business rule:
@@ -46,7 +52,105 @@ func ValidateUnit(unitType UnitType, unit Unit) error {
 	return nil
 }
 
-func (s *Service) Create(ctx context.Context, req CreateRequest) (Product, error) {
+// SavePhoto validates, stores a photo file, updates the DB, and deletes any previous file.
+// currentPhotoPath is the existing photo_path value on the product (may be nil).
+// Returns the new storedPath (relative, e.g. "photos/42.jpg").
+func (s *Service) SavePhoto(ctx context.Context, productID int64, fh *multipart.FileHeader, currentPhotoPath *string) (string, error) {
+	if fh.Size > 5*1024*1024 {
+		return "", apperr.Validation("file too large (max 5MB)")
+	}
+
+	// Open and sniff content type
+	src, err := fh.Open()
+	if err != nil {
+		return "", apperr.Internal(fmt.Errorf("open upload: %w", err))
+	}
+	defer src.Close()
+
+	buf := make([]byte, 512)
+	n, err := src.Read(buf)
+	if err != nil && err != io.EOF {
+		return "", apperr.Internal(fmt.Errorf("read upload: %w", err))
+	}
+	ct := http.DetectContentType(buf[:n])
+
+	allowed := map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/webp": true,
+	}
+	if !allowed[ct] {
+		return "", apperr.Validation("unsupported file type, allowed: jpg, jpeg, png, webp")
+	}
+
+	ext := strings.ToLower(filepath.Ext(fh.Filename))
+	allowedExt := map[string]bool{
+		".jpg": true, ".jpeg": true, ".png": true, ".webp": true,
+	}
+	if !allowedExt[ext] {
+		return "", apperr.Validation("unsupported file extension")
+	}
+
+	// Create photo record → get numeric photo ID
+	photoID, err := s.repo.InsertPhoto(ctx, productID, ext)
+	if err != nil {
+		return "", apperr.Internal(fmt.Errorf("insert photo record: %w", err))
+	}
+
+	storedPath := fmt.Sprintf("photos/%d%s", photoID, ext)
+	fullDir := filepath.Join(s.uploadsDir, "photos")
+	fullPath := filepath.Join(s.uploadsDir, storedPath)
+
+	// Security: ensure path stays inside uploadsDir
+	absUploads, _ := filepath.Abs(s.uploadsDir)
+	absFile, _ := filepath.Abs(fullPath)
+	if !strings.HasPrefix(absFile, absUploads) {
+		return "", apperr.Validation("invalid file path")
+	}
+
+	if err := os.MkdirAll(fullDir, 0755); err != nil {
+		return "", apperr.Internal(fmt.Errorf("create upload dir: %w", err))
+	}
+
+	// Seek back to beginning (we already read 512 bytes for detection)
+	if seeker, ok := src.(io.Seeker); ok {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return "", apperr.Internal(fmt.Errorf("seek upload: %w", err))
+		}
+	} else {
+		// Re-open since the reader may not be seekable
+		src.Close()
+		src2, err := fh.Open()
+		if err != nil {
+			return "", apperr.Internal(fmt.Errorf("reopen upload: %w", err))
+		}
+		defer src2.Close()
+		return s.writeAndFinalize(storedPath, fullPath, src2, currentPhotoPath)
+	}
+
+	return s.writeAndFinalize(storedPath, fullPath, src, currentPhotoPath)
+}
+
+func (s *Service) writeAndFinalize(storedPath, fullPath string, r io.Reader, currentPhotoPath *string) (string, error) {
+	dst, err := os.Create(fullPath)
+	if err != nil {
+		return "", apperr.Internal(fmt.Errorf("create file: %w", err))
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, r); err != nil {
+		return "", apperr.Internal(fmt.Errorf("write file: %w", err))
+	}
+
+	// Delete old file (best-effort, don't fail on error)
+	if currentPhotoPath != nil && *currentPhotoPath != "" {
+		_ = os.Remove(filepath.Join(s.uploadsDir, *currentPhotoPath))
+	}
+
+	return storedPath, nil
+}
+
+func (s *Service) Create(ctx context.Context, req CreateRequest, fh *multipart.FileHeader) (Product, error) {
 	// Enforce unit_type ↔ unit compatibility before touching the DB.
 	if err := ValidateUnit(req.UnitType, req.Unit); err != nil {
 		return Product{}, apperr.Validation(err.Error())
@@ -75,10 +179,9 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Product, error
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return Product{}, &apperr.AppError{
-				Code:       "PRODUCT_ALREADY_EXISTS",
-				Message:    "product with this sku or barcode already exists",
-				HTTPStatus: http.StatusConflict,
-				Err:        err,
+				Code:    "PRODUCT_ALREADY_EXISTS",
+				Message: "product with this sku or barcode already exists",
+				Err:     err,
 			}
 		}
 		return Product{}, apperr.Internal(err)
@@ -95,6 +198,22 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Product, error
 			return p, apperr.Validation("some categories not found or inactive")
 		}
 		if err := s.repo.ReplaceCategories(ctx, p.ID, uniq); err != nil {
+			return p, apperr.Internal(err)
+		}
+	}
+
+	// Optional photo upload
+	if fh != nil {
+		storedPath, err := s.SavePhoto(ctx, p.ID, fh, nil)
+		if err != nil {
+			return p, err
+		}
+		if err := s.repo.UpdatePhotoPath(ctx, p.ID, &storedPath); err != nil {
+			return p, apperr.Internal(err)
+		}
+		// Re-fetch to get the computed PhotoURL
+		p, err = s.repo.GetByID(ctx, p.ID)
+		if err != nil {
 			return p, apperr.Internal(err)
 		}
 	}
@@ -177,10 +296,9 @@ func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest) (Prod
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return Product{}, &apperr.AppError{
-				Code:       "PRODUCT_ALREADY_EXISTS",
-				Message:    "product with this sku or barcode already exists",
-				HTTPStatus: http.StatusConflict,
-				Err:        err,
+				Code:    "PRODUCT_ALREADY_EXISTS",
+				Message: "product with this sku or barcode already exists",
+				Err:     err,
 			}
 		}
 		return Product{}, apperr.Internal(err)
@@ -204,6 +322,28 @@ func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest) (Prod
 	}
 
 	return p, nil
+}
+
+// UploadPhoto validates, stores, and records a new photo for an existing product.
+func (s *Service) UploadPhoto(ctx context.Context, id int64, fh *multipart.FileHeader) (Product, error) {
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return Product{}, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found")
+		}
+		return Product{}, apperr.Internal(err)
+	}
+
+	storedPath, err := s.SavePhoto(ctx, id, fh, current.PhotoPath)
+	if err != nil {
+		return Product{}, err
+	}
+
+	if err := s.repo.UpdatePhotoPath(ctx, id, &storedPath); err != nil {
+		return Product{}, apperr.Internal(err)
+	}
+
+	return s.repo.GetByID(ctx, id)
 }
 
 func (s *Service) List(ctx context.Context, limit, offset int, orderBy, orderDir, q string) (ListResponse, error) {

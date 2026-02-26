@@ -58,6 +58,13 @@ func NewRouter(deps Deps) *gin.Engine {
 		response.OK(c, gin.H{"status": "ok"})
 	})
 
+	// ── Static file serving for uploaded photos (no auth required) ──
+	uploadsDir := deps.Cfg.UploadsDir
+	if uploadsDir == "" {
+		uploadsDir = "./uploads"
+	}
+	r.Static("/uploads", uploadsDir)
+
 	// ---- Swagger route (host/scheme from config or dynamic per request) ----
 	swaggerHandler := func(c *gin.Context) {
 		if deps.Cfg.SwaggerHost != "" {
@@ -109,7 +116,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	api.Use(middleware.PaginationMiddleware())
 
 	category.RegisterRoutes(api, deps.DB)
-	product.RegisterRoutes(api, deps.DB)
+	product.RegisterRoutes(api, deps.DB, deps.Cfg.UploadsDir, deps.Cfg.PublicBaseURL)
 	supplier.RegisterRoutes(api, deps.DB)
 	customer.RegisterRoutes(api, deps.DB)
 	workers.RegisterRoutes(api, deps.DB)
@@ -120,7 +127,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	finance.RegisterRoutes(api, deps.DB)
 	workerfinance.RegisterRoutes(api, deps.DB, finRepo)
 	payroll.RegisterRoutes(api, deps.DB, finRepo)
-	sale.RegisterRoutes(api, deps.DB, finRepo)
+	sale.RegisterRoutes(api, deps.DB, finRepo, deps.Cfg.PublicBaseURL)
 
 	r.GET("/debug/routes", func(c *gin.Context) {
 		type R struct {

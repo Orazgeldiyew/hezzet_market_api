@@ -549,47 +549,6 @@ definitions:
       name:
         type: string
     type: object
-  product.CreateRequest:
-    properties:
-      barcodes:
-        items:
-          type: string
-        type: array
-      category_ids:
-        items:
-          type: integer
-        type: array
-      is_active:
-        type: boolean
-      name:
-        type: string
-      purchase_price:
-        type: integer
-      sale_price:
-        type: integer
-      sku:
-        type: string
-      unit:
-        allOf:
-        - $ref: '#/definitions/product.Unit'
-        enum:
-        - piece
-        - kg
-        - g
-        - l
-        - ml
-      unit_type:
-        allOf:
-        - $ref: '#/definitions/product.UnitType'
-        enum:
-        - piece
-        - weight
-        - volume
-    required:
-    - name
-    - unit
-    - unit_type
-    type: object
   product.ListResponse:
     properties:
       items:
@@ -616,6 +575,9 @@ definitions:
       is_active:
         type: boolean
       name:
+        type: string
+      photo_url:
+        description: public URL, computed
         type: string
       purchase_price:
         type: integer
@@ -2177,15 +2139,20 @@ paths:
       - Products
     post:
       consumes:
-      - application/json
-      description: Create a new product
+      - multipart/form-data
+      description: 'Create a new product. Send as multipart/form-data: "data" field
+        contains JSON (CreateRequest), "file" field is optional image (jpg/jpeg/png/webp,
+        max 5MB).'
       parameters:
-      - description: Product data
-        in: body
-        name: body
+      - description: Product JSON (CreateRequest)
+        in: formData
+        name: data
         required: true
-        schema:
-          $ref: '#/definitions/product.CreateRequest'
+        type: string
+      - description: Product photo (jpg/jpeg/png/webp, max 5MB)
+        in: formData
+        name: file
+        type: file
       produces:
       - application/json
       responses:
@@ -2469,6 +2436,48 @@ paths:
       security:
       - BearerAuth: []
       summary: Remove product category
+      tags:
+      - Products
+  /api/products/{id}/photo:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Upload or replace the photo for a product (multipart/form-data,
+        field: "file")'
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Image file (jpg/jpeg/png/webp, max 5MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload product photo
       tags:
       - Products
   /api/sales:

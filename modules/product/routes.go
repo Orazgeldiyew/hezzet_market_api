@@ -7,10 +7,10 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
-	repo := NewRepository(db)
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir, publicBaseURL string) {
+	repo := NewRepository(db, publicBaseURL)
 	stock := NewStockRepository(db)
-	svc := NewService(repo, stock)
+	svc := NewService(repo, stock, uploadsDir)
 	h := NewHandler(svc)
 
 	// Read: operator, cashier, manager (admin bypass)
@@ -32,5 +32,6 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 		write.DELETE("/:id", h.Delete)
 		write.PUT("/:id/categories", h.SetCategories)
 		write.DELETE("/:id/categories/:categoryId", h.RemoveCategory)
+		write.POST("/:id/photo", h.UploadPhoto)
 	}
 }

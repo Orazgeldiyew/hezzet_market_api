@@ -4,6 +4,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -92,6 +93,13 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 		return LoginResponse{}, apperr.Unauthorized("invalid credentials")
 	}
 
+	// Bump token_version on every successful login — invalidates all existing sessions
+	// on other devices. Only this new login's token will carry the new version.
+	newVersion, err := s.repo.BumpTokenVersion(ctx, u.ID)
+	if err != nil {
+		return LoginResponse{}, apperr.Internal(fmt.Errorf("bump token version: %w", err))
+	}
+
 	roles, err := s.repo.GetUserRoles(ctx, u.ID)
 	if err != nil {
 		return LoginResponse{}, apperr.Internal(err)
@@ -102,7 +110,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 		UserID:       u.ID,
 		Username:     u.Username,
 		Role:         roles,
-		TokenVersion: u.TokenVersion,
+		TokenVersion: newVersion,
 	}
 
 	accessToken, accessExp, err := s.generateToken(payload, "access", s.getAccessExpiration(), accessSecret)

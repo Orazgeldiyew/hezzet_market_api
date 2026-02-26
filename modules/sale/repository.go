@@ -17,16 +17,26 @@ import (
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	baseURL string // PUBLIC_BASE_URL for building product photo URLs
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
+func NewRepository(db *pgxpool.Pool, baseURL string) *Repository {
+	return &Repository{db: db, baseURL: baseURL}
+}
+
+// photoURL converts a nullable product photo_path to a full public URL.
+func (r *Repository) photoURL(path *string) *string {
+	if path == nil || *path == "" || r.baseURL == "" {
+		return nil
+	}
+	u := r.baseURL + "/uploads/" + *path
+	return &u
+}
 
 // ── column constants ─────────────────────────────────────────────────────────
 
 const saleCols = `id, warehouse_id, customer_id, total_cents, cost_cents, items_count, note, created_by, created_at`
-
-const saleItemCols = `id, sale_id, product_id, qty_milli, unit_price_cents, cost_cents, line_total_cents, created_at`
 
 // ── scan helpers ─────────────────────────────────────────────────────────────
 
@@ -37,15 +47,6 @@ func scanSale(row pgx.Row) (Sale, error) {
 		&s.CostCents, &s.ItemsCount, &s.Note, &s.CreatedBy, &s.CreatedAt,
 	)
 	return s, err
-}
-
-func scanSaleItem(row pgx.Row) (SaleItem, error) {
-	var si SaleItem
-	err := row.Scan(
-		&si.ID, &si.SaleID, &si.ProductID, &si.QtyMilli,
-		&si.UnitPriceCents, &si.CostCents, &si.LineTotalCents, &si.CreatedAt,
-	)
-	return si, err
 }
 
 func lineTotalCents(qtyMilli, unitPriceCents int64) int64 {
@@ -143,7 +144,6 @@ func (r *Repository) CreateSale(
 		return sorted[i].item.ProductID < sorted[j].item.ProductID
 	})
 
-	saleItems := make([]SaleItem, 0, len(req.Items))
 	var totalCostCents int64
 
 	for _, entry := range sorted {
@@ -184,16 +184,13 @@ func (r *Repository) CreateSale(
 		}
 
 		// 4c. Insert sale_item
-		si, err := scanSaleItem(tx.QueryRow(ctx, `
+		_, err = tx.Exec(ctx, `
 			INSERT INTO sale_items (sale_id, product_id, qty_milli, unit_price_cents, cost_cents, line_total_cents)
 			VALUES ($1, $2, $3, $4, $5, $6)
-			RETURNING `+saleItemCols,
-			sale.ID, item.ProductID, item.QtyMilli, unitPrice, itemCost, lineTotal,
-		))
+		`, sale.ID, item.ProductID, item.QtyMilli, unitPrice, itemCost, lineTotal)
 		if err != nil {
 			return Sale{}, nil, nil, err
 		}
-		saleItems = append(saleItems, si)
 
 		// 4d. Insert stock ledger entry (type='sale', delta=-qty)
 		_, err = tx.Exec(ctx, `
@@ -283,12 +280,13 @@ func (r *Repository) CreateSale(
 		return Sale{}, nil, nil, err
 	}
 
-	// Re-sort saleItems by ID for consistent ordering
-	sort.Slice(saleItems, func(i, j int) bool {
-		return saleItems[i].ID < saleItems[j].ID
-	})
+	// 9. Refetch items with product name + photo (after commit, outside TX)
+	_, items, err := r.GetByID(ctx, sale.ID)
+	if err != nil {
+		return sale, nil, &finTxn, err
+	}
 
-	return sale, saleItems, &finTxn, nil
+	return sale, items, &finTxn, nil
 }
 
 // ── GetByID ──────────────────────────────────────────────────────────────────
@@ -301,9 +299,15 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Sale, []SaleItem, e
 		return Sale{}, nil, err
 	}
 
-	rows, err := r.db.Query(ctx,
-		`SELECT `+saleItemCols+` FROM sale_items WHERE sale_id = $1 ORDER BY id`, id,
-	)
+	rows, err := r.db.Query(ctx, `
+		SELECT si.id, si.sale_id, si.product_id, si.qty_milli, si.unit_price_cents,
+		       si.cost_cents, si.line_total_cents, si.created_at,
+		       p.name, p.photo_path
+		FROM sale_items si
+		JOIN products p ON p.id = si.product_id
+		WHERE si.sale_id = $1
+		ORDER BY si.id
+	`, id)
 	if err != nil {
 		return sale, nil, err
 	}
@@ -311,10 +315,17 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Sale, []SaleItem, e
 
 	var items []SaleItem
 	for rows.Next() {
-		si, err := scanSaleItem(rows)
+		var si SaleItem
+		var photoPath *string
+		err := rows.Scan(
+			&si.ID, &si.SaleID, &si.ProductID, &si.QtyMilli, &si.UnitPriceCents,
+			&si.CostCents, &si.LineTotalCents, &si.CreatedAt,
+			&si.ProductName, &photoPath,
+		)
 		if err != nil {
 			return sale, nil, err
 		}
+		si.ProductPhotoURL = r.photoURL(photoPath)
 		items = append(items, si)
 	}
 	if items == nil {

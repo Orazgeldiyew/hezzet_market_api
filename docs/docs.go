@@ -1583,9 +1583,9 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a new product",
+                "description": "Create a new product. Send as multipart/form-data: \"data\" field contains JSON (CreateRequest), \"file\" field is optional image (jpg/jpeg/png/webp, max 5MB).",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -1596,13 +1596,17 @@ const docTemplate = `{
                 "summary": "Create product",
                 "parameters": [
                     {
-                        "description": "Product data",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/product.CreateRequest"
-                        }
+                        "type": "string",
+                        "description": "Product JSON (CreateRequest)",
+                        "name": "data",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Product photo (jpg/jpeg/png/webp, max 5MB)",
+                        "name": "file",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -2065,6 +2069,74 @@ const docTemplate = `{
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/products/{id}/photo": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload or replace the photo for a product (multipart/form-data, field: \"file\")",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Products"
+                ],
+                "summary": "Upload product photo",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Product ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Image file (jpg/jpeg/png/webp, max 5MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/product.Product"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
                         }
                     },
                     "404": {
@@ -6356,69 +6428,6 @@ const docTemplate = `{
                 }
             }
         },
-        "product.CreateRequest": {
-            "type": "object",
-            "required": [
-                "name",
-                "unit",
-                "unit_type"
-            ],
-            "properties": {
-                "barcodes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "category_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "purchase_price": {
-                    "type": "integer"
-                },
-                "sale_price": {
-                    "type": "integer"
-                },
-                "sku": {
-                    "type": "string"
-                },
-                "unit": {
-                    "enum": [
-                        "piece",
-                        "kg",
-                        "g",
-                        "l",
-                        "ml"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/product.Unit"
-                        }
-                    ]
-                },
-                "unit_type": {
-                    "enum": [
-                        "piece",
-                        "weight",
-                        "volume"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/product.UnitType"
-                        }
-                    ]
-                }
-            }
-        },
         "product.ListResponse": {
             "type": "object",
             "properties": {
@@ -6458,6 +6467,10 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "photo_url": {
+                    "description": "public URL, computed",
                     "type": "string"
                 },
                 "purchase_price": {
@@ -7345,7 +7358,6 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Market backend (products, stock, income, sales)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
-
 }
 
 func init() {

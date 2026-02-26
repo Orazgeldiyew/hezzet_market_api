@@ -1,0 +1,4 @@
+BEGIN;
+DROP TABLE IF EXISTS product_photos;
+ALTER TABLE products DROP COLUMN IF EXISTS photo_path;
+COMMIT;

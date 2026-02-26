@@ -37,6 +37,8 @@ type Product struct {
 	PurchasePrice int64     `json:"purchase_price"`
 	SalePrice     int64     `json:"sale_price"`
 	IsActive      bool      `json:"is_active"`
+	PhotoURL      *string   `json:"photo_url,omitempty"` // public URL, computed
+	PhotoPath     *string   `json:"-"`                   // raw DB value, used internally
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
