@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workerfinance"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
@@ -202,20 +201,131 @@ func (s *Service) ExportPeriod(ctx context.Context, period string) ([]byte, erro
 	sheet := "Payroll " + period
 	f.SetSheetName("Sheet1", sheet)
 
-	// Header row with bold style
-	bold, _ := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{Bold: true},
+	// ── Helpers ──────────────────────────────────────────────────────────────
+
+	thinBorder := []excelize.Border{
+		{Type: "left", Color: "D9D9D9", Style: 1},
+		{Type: "right", Color: "D9D9D9", Style: 1},
+		{Type: "top", Color: "D9D9D9", Style: 1},
+		{Type: "bottom", Color: "D9D9D9", Style: 1},
+	}
+	tmtFmt := `#,##0.00" TMT"`
+
+	// ── Styles ───────────────────────────────────────────────────────────────
+
+	// Header: dark slate bg, white bold Arial 12, centered
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Family: "Arial", Size: 12, Color: "FFFFFF"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"1F2937"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border:    thinBorder,
 	})
+
+	// Text style — odd rows (white) and even rows (zebra gray)
+	textStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Family: "Calibri", Size: 15},
+		Alignment: &excelize.Alignment{Vertical: "center"},
+		Border:    thinBorder,
+	})
+	textZebraStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Family: "Calibri", Size: 15},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"F2F2F2"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Vertical: "center"},
+		Border:    thinBorder,
+	})
+
+	// Money style (TMT format) — odd and even rows
+	moneyStyle, _ := f.NewStyle(&excelize.Style{
+		Font:         &excelize.Font{Family: "Calibri", Size: 15},
+		Alignment:    &excelize.Alignment{Horizontal: "right", Vertical: "center"},
+		Border:       thinBorder,
+		CustomNumFmt: &tmtFmt,
+	})
+	moneyZebraStyle, _ := f.NewStyle(&excelize.Style{
+		Font:         &excelize.Font{Family: "Calibri", Size: 15},
+		Fill:         excelize.Fill{Type: "pattern", Color: []string{"F2F2F2"}, Pattern: 1},
+		Alignment:    &excelize.Alignment{Horizontal: "right", Vertical: "center"},
+		Border:       thinBorder,
+		CustomNumFmt: &tmtFmt,
+	})
+
+	// Paid: green — money (Net Salary col) and text (Status col)
+	paidMoneyStyle, _ := f.NewStyle(&excelize.Style{
+		Font:         &excelize.Font{Family: "Calibri", Size: 15, Bold: true, Color: "375623"},
+		Fill:         excelize.Fill{Type: "pattern", Color: []string{"E2EFDA"}, Pattern: 1},
+		Alignment:    &excelize.Alignment{Horizontal: "right", Vertical: "center"},
+		Border:       thinBorder,
+		CustomNumFmt: &tmtFmt,
+	})
+	paidTextStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Family: "Calibri", Size: 15, Bold: true, Color: "375623"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"E2EFDA"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Vertical: "center"},
+		Border:    thinBorder,
+	})
+
+	// Calculated: orange — money (Net Salary col) and text (Status col)
+	calcMoneyStyle, _ := f.NewStyle(&excelize.Style{
+		Font:         &excelize.Font{Family: "Calibri", Size: 15, Bold: true, Color: "833C00"},
+		Fill:         excelize.Fill{Type: "pattern", Color: []string{"FCE4D6"}, Pattern: 1},
+		Alignment:    &excelize.Alignment{Horizontal: "right", Vertical: "center"},
+		Border:       thinBorder,
+		CustomNumFmt: &tmtFmt,
+	})
+	calcTextStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Family: "Calibri", Size: 15, Bold: true, Color: "833C00"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"FCE4D6"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Vertical: "center"},
+		Border:    thinBorder,
+	})
+
+	// ── Header row ───────────────────────────────────────────────────────────
 	headers := []string{"#", "Worker", "Position", "Period", "Base Salary", "Fines", "Debts", "Net Salary", "Status"}
 	for col, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
 		f.SetCellValue(sheet, cell, h)
-		f.SetCellStyle(sheet, cell, cell, bold)
+		f.SetCellStyle(sheet, cell, cell, headerStyle)
 	}
+	f.SetRowHeight(sheet, 1, 22)
 
-	// Data rows
+	// ── Column widths ────────────────────────────────────────────────────────
+	f.SetColWidth(sheet, "A", "A", 5)
+	f.SetColWidth(sheet, "B", "B", 24)
+	f.SetColWidth(sheet, "C", "C", 16)
+	f.SetColWidth(sheet, "D", "D", 10)
+	f.SetColWidth(sheet, "E", "H", 16)
+	f.SetColWidth(sheet, "I", "I", 13)
+
+	// ── Freeze header + autofilter ────────────────────────────────────────────
+	f.SetPanes(sheet, &excelize.Panes{
+		Freeze:      true,
+		YSplit:      1,
+		TopLeftCell: "A2",
+		ActivePane:  "bottomLeft",
+	})
+	f.AutoFilter(sheet, "A1:I1", nil)
+
+	// ── Data rows ────────────────────────────────────────────────────────────
 	for i, row := range rows {
-		r := i + 2 // row 1 is header
+		r := i + 2
+		zebra := i%2 == 1
+
+		// Base styles for this row
+		ts := textStyle
+		ms := moneyStyle
+		if zebra {
+			ts = textZebraStyle
+			ms = moneyZebraStyle
+		}
+
+		// Net salary + status styles based on payment status
+		netMS := calcMoneyStyle
+		statusTS := calcTextStyle
+		if row.Status == "paid" {
+			netMS = paidMoneyStyle
+			statusTS = paidTextStyle
+		}
+
 		f.SetCellValue(sheet, mustCell(1, r), i+1)
 		f.SetCellValue(sheet, mustCell(2, r), row.WorkerName)
 		f.SetCellValue(sheet, mustCell(3, r), row.Position)
@@ -225,6 +335,17 @@ func (s *Service) ExportPeriod(ctx context.Context, period string) ([]byte, erro
 		f.SetCellValue(sheet, mustCell(7, r), centsToFloat(row.DebtsCents))
 		f.SetCellValue(sheet, mustCell(8, r), centsToFloat(row.NetSalaryCents))
 		f.SetCellValue(sheet, mustCell(9, r), row.Status)
+
+		// Text cols: A–D
+		f.SetCellStyle(sheet, mustCell(1, r), mustCell(4, r), ts)
+		// Money cols: E–G (base salary, fines, debts)
+		f.SetCellStyle(sheet, mustCell(5, r), mustCell(7, r), ms)
+		// Net Salary (H) — money style, status-colored
+		f.SetCellStyle(sheet, mustCell(8, r), mustCell(8, r), netMS)
+		// Status (I) — text style, status-colored
+		f.SetCellStyle(sheet, mustCell(9, r), mustCell(9, r), statusTS)
+
+		f.SetRowHeight(sheet, r, 18)
 	}
 
 	var buf bytes.Buffer

@@ -14,7 +14,8 @@
       "Bash(pkill:*)",
       "Bash(grep -r \"roles\\\\|Roles\" /home/rustem/Desktop/hezzet_market_backend/migrations/*.sql)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzIyMDM5NTksImlhdCI6MTc3MjExNzU1OSwicm9sZSI6WyJhZG1pbiJdLCJzdWIiOiIxIiwidG9rZW5fdmVyc2lvbiI6MCwidHlwZSI6ImFjY2VzcyIsInVzZXJuYW1lIjoiYWRtaW4ifQ.bRKvAoMcXInzGZcrp41k8VfAvHsLoXkHVqtgP_4IxCE\")",
-      "Bash(python3 -m json.tool)"
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c \":*)"
     ]
   }
 }
