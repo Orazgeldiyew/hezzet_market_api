@@ -1,6 +1,7 @@
 package payroll
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -135,4 +136,37 @@ func (h *Handler) Pay(c *gin.Context) {
 		return
 	}
 	response.OK(c, out)
+}
+
+// ExportExcel godoc
+// @Summary      Export payroll as Excel
+// @Description  Download all payroll runs for a given period as .xlsx file
+// @Tags         Payroll
+// @Produce      application/octet-stream
+// @Security     BearerAuth
+// @Param        period  query  string  true  "Period in YYYY-MM format"
+// @Success      200  {file}   binary
+// @Failure      400  {object} response.APIResponse
+// @Failure      401  {object} response.APIResponse
+// @Failure      403  {object} response.APIResponse
+// @Router       /api/payroll/export [get]
+func (h *Handler) ExportExcel(c *gin.Context) {
+	period := c.Query("period")
+	if period == "" {
+		c.Error(apperr.Validation("period query param is required"))
+		return
+	}
+
+	data, err := h.svc.ExportPeriod(c.Request.Context(), period)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	filename := "payroll_" + period + ".xlsx"
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Length", strconv.Itoa(len(data)))
+	c.Writer.WriteHeader(http.StatusOK)
+	_, _ = c.Writer.Write(data)
 }

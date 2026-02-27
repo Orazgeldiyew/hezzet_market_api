@@ -1,6 +1,7 @@
 package payroll
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"regexp"
@@ -8,6 +9,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workerfinance"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
+	"github.com/xuri/excelize/v2"
 )
 
 var periodRe = regexp.MustCompile(`^\d{4}-(0[1-9]|1[0-2])$`)
@@ -181,4 +183,62 @@ func (s *Service) Get(ctx context.Context, id int64) (PayrollRun, error) {
 		return PayrollRun{}, apperr.Internal(err)
 	}
 	return run, nil
+}
+
+// ── export ───────────────────────────────────────────────────────────────────
+
+// ExportPeriod builds an xlsx file in memory for all payroll runs in the given period.
+func (s *Service) ExportPeriod(ctx context.Context, period string) ([]byte, error) {
+	if !periodRe.MatchString(period) {
+		return nil, apperr.Validation("period must be YYYY-MM format")
+	}
+
+	rows, err := s.repo.ListForExport(ctx, period)
+	if err != nil {
+		return nil, apperr.Internal(fmt.Errorf("list for export: %w", err))
+	}
+
+	f := excelize.NewFile()
+	sheet := "Payroll " + period
+	f.SetSheetName("Sheet1", sheet)
+
+	// Header row with bold style
+	bold, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true},
+	})
+	headers := []string{"#", "Worker", "Position", "Period", "Base Salary", "Fines", "Debts", "Net Salary", "Status"}
+	for col, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
+		f.SetCellValue(sheet, cell, h)
+		f.SetCellStyle(sheet, cell, cell, bold)
+	}
+
+	// Data rows
+	for i, row := range rows {
+		r := i + 2 // row 1 is header
+		f.SetCellValue(sheet, mustCell(1, r), i+1)
+		f.SetCellValue(sheet, mustCell(2, r), row.WorkerName)
+		f.SetCellValue(sheet, mustCell(3, r), row.Position)
+		f.SetCellValue(sheet, mustCell(4, r), row.Period)
+		f.SetCellValue(sheet, mustCell(5, r), centsToFloat(row.BaseSalaryCents))
+		f.SetCellValue(sheet, mustCell(6, r), centsToFloat(row.FinesCents))
+		f.SetCellValue(sheet, mustCell(7, r), centsToFloat(row.DebtsCents))
+		f.SetCellValue(sheet, mustCell(8, r), centsToFloat(row.NetSalaryCents))
+		f.SetCellValue(sheet, mustCell(9, r), row.Status)
+	}
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, apperr.Internal(fmt.Errorf("write xlsx: %w", err))
+	}
+	return buf.Bytes(), nil
+}
+
+func mustCell(col, row int) string {
+	cell, _ := excelize.CoordinatesToCellName(col, row)
+	return cell
+}
+
+func centsToFloat(cents int64) float64 {
+	return float64(cents) / 100.0
 }

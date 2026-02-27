@@ -2078,6 +2078,39 @@ paths:
       summary: Calculate payroll
       tags:
       - Payroll
+  /api/payroll/export:
+    get:
+      description: Download all payroll runs for a given period as .xlsx file
+      parameters:
+      - description: Period in YYYY-MM format
+        in: query
+        name: period
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Export payroll as Excel
+      tags:
+      - Payroll
   /api/products:
     get:
       description: Get paginated list of active products with optional search

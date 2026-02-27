@@ -67,6 +67,37 @@ func (r *Repository) UpdateStatusPaid(ctx context.Context, tx pgx.Tx, id int64, 
 	))
 }
 
+// ListForExport fetches all payroll runs for a period joined with worker name/position.
+func (r *Repository) ListForExport(ctx context.Context, period string) ([]PayrollExportRow, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT w.name, w.position, pr.period,
+		       pr.base_salary_cents, pr.fines_cents, pr.debts_cents,
+		       pr.net_salary_cents, pr.status
+		FROM payroll_runs pr
+		JOIN workers w ON w.id = pr.worker_id
+		WHERE pr.period = $1
+		ORDER BY w.name
+	`, period)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []PayrollExportRow
+	for rows.Next() {
+		var row PayrollExportRow
+		if err := rows.Scan(
+			&row.WorkerName, &row.Position, &row.Period,
+			&row.BaseSalaryCents, &row.FinesCents, &row.DebtsCents,
+			&row.NetSalaryCents, &row.Status,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) List(ctx context.Context, workerID *int64, period *string, limit, offset int) ([]PayrollRun, int, error) {
 	where := `WHERE ($1::bigint IS NULL OR worker_id = $1) AND ($2::text IS NULL OR period = $2)`
 

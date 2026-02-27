@@ -29,6 +29,20 @@ type PayRequest struct {
 	PaymentTypeCode string `json:"payment_type_code" binding:"required"`
 }
 
+// ---------- Export ----------
+
+// PayrollExportRow joins payroll_runs with worker info for the Excel report.
+type PayrollExportRow struct {
+	WorkerName      string
+	Position        string
+	Period          string
+	BaseSalaryCents int64
+	FinesCents      int64
+	DebtsCents      int64
+	NetSalaryCents  int64
+	Status          string
+}
+
 // ---------- Responses ----------
 
 type PayrollListResult struct {

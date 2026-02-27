@@ -1395,6 +1395,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/payroll/export": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Download all payroll runs for a given period as .xlsx file",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "Payroll"
+                ],
+                "summary": "Export payroll as Excel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Period in YYYY-MM format",
+                        "name": "period",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/payroll/{id}/pay": {
             "post": {
                 "security": [

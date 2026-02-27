@@ -19,6 +19,7 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repo
 	pr.Use(middleware.RequireRoles("manager"))
 
 	pr.GET("", middleware.PaginationMiddleware(), h.List)
+	pr.GET("/export", h.ExportExcel)
 	pr.POST("/calculate", h.Calculate)
 	pr.POST("/:id/pay", h.Pay)
 }
