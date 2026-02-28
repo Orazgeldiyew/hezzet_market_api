@@ -20,12 +20,13 @@ type WarehouseItemDetail struct {
 }
 
 type WarehouseItem struct {
-	WarehouseID int64     `json:"warehouse_id"`
-	ProductID   int64     `json:"product_id"`
-	QtyMilli    int64     `json:"qty_milli"`
-	AvgCostCents   int64  `json:"avg_cost_cents"`    // средняя себестоимость за 1.000 единицу
-	TotalCostCents int64  `json:"total_cost_cents"`  // себестоимость всего остатка
-	UpdatedAt   time.Time `json:"updated_at"`
+	WarehouseID    int64     `json:"warehouse_id"`
+	ProductID      int64     `json:"product_id"`
+	QtyMilli       int64     `json:"qty_milli"`
+	AvgCostCents   int64     `json:"avg_cost_cents"`   // средняя себестоимость за 1.000 единицу
+	TotalCostCents int64     `json:"total_cost_cents"` // себестоимость всего остатка
+	UpdatedAt      time.Time `json:"updated_at"`
+	AvailableMilli int64     `json:"available_milli"` // qty_milli minus active reservations
 }
 type OpeningBalanceRequest struct {
 	WarehouseID    int64  `json:"warehouse_id" binding:"required,gt=0"`
@@ -123,4 +124,14 @@ type BulkInRequest struct {
 
 type BulkInResult struct {
 	Results []MovementResult `json:"results"`
+}
+
+// NegativeStockRow is returned by GET /api/stock/negative
+type NegativeStockRow struct {
+	WarehouseID   int64  `json:"warehouse_id"`
+	WarehouseName string `json:"warehouse_name"`
+	ProductID     int64  `json:"product_id"`
+	ProductName   string `json:"product_name"`
+	QtyMilli      int64  `json:"qty_milli"`      // negative value
+	DeficitMilli  int64  `json:"deficit_milli"`  // abs(qty_milli)
 }

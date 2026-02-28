@@ -25,7 +25,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 // @Produce json
 // @Security     BearerAuth
 // @Param body body InRequest true "Stock In Request"
-// @Success 201 {object} response.APIResponse
+// @Success 201 {object} response.APIResponse{data=MovementResult}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 409 {object} response.APIResponse
@@ -55,7 +55,7 @@ func (h *Handler) StockIn(c *gin.Context) {
 // @Produce json
 // @Security     BearerAuth
 // @Param body body BulkInRequest true "Bulk Stock In Request"
-// @Success 201 {object} response.APIResponse
+// @Success 201 {object} response.APIResponse{data=BulkInResult}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 409 {object} response.APIResponse
@@ -85,7 +85,7 @@ func (h *Handler) BulkStockIn(c *gin.Context) {
 // @Produce json
 // @Security     BearerAuth
 // @Param body body OutRequest true "Stock Out Request"
-// @Success 201 {object} response.APIResponse
+// @Success 201 {object} response.APIResponse{data=MovementResult}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 409 {object} response.APIResponse
@@ -115,7 +115,7 @@ func (h *Handler) StockOut(c *gin.Context) {
 // @Produce json
 // @Security     BearerAuth
 // @Param body body TransferRequest true "Transfer Request"
-// @Success 201 {object} response.APIResponse
+// @Success 201 {object} response.APIResponse{data=TransferResult}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 409 {object} response.APIResponse
@@ -145,7 +145,7 @@ func (h *Handler) Transfer(c *gin.Context) {
 // @Produce json
 // @Security     BearerAuth
 // @Param body body MoveRequest true "Move Request"
-// @Success 201 {object} response.APIResponse
+// @Success 201 {object} response.APIResponse{data=MovementResult}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 409 {object} response.APIResponse
@@ -174,7 +174,7 @@ func (h *Handler) Move(c *gin.Context) {
 // @Security     BearerAuth
 // @Param warehouse_id query int false "Warehouse ID"
 // @Param product_id query int false "Product ID"
-// @Success 200 {object} response.APIResponse
+// @Success 200 {object} response.APIResponse{data=[]WarehouseItem}
 // @Failure 401 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /api/stock/balance [get]
@@ -220,7 +220,7 @@ func extractUserID(c *gin.Context) int64 {
 // @Param date_to query string false "RFC3339 datetime (inclusive)"
 // @Param page query int false "page"
 // @Param limit query int false "limit"
-// @Success 200 {object} response.APIResponse
+// @Success 200 {object} response.APIResponse{data=[]WarehouseItemDetail,meta=response.Meta}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
@@ -297,7 +297,7 @@ func (h *Handler) GetDetails(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param body body OpeningBalanceRequest true "Opening Balance Request"
-// @Success 201 {object} response.APIResponse
+// @Success 201 {object} response.APIResponse{data=MovementResult}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 409 {object} response.APIResponse
@@ -317,4 +317,22 @@ func (h *Handler) OpeningBalance(c *gin.Context) {
 		return
 	}
 	response.Created(c, out)
+}
+
+// NegativeStock godoc
+// @Summary List products with negative stock (deficit)
+// @Description Returns all warehouse items where qty_milli < 0. These are products oversold via force confirm.
+// @Tags Stock
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.APIResponse{data=[]NegativeStockRow}
+// @Failure 500 {object} response.APIResponse
+// @Router /api/stock/negative [get]
+func (h *Handler) NegativeStock(c *gin.Context) {
+	out, err := h.svc.GetNegativeItems(c.Request.Context())
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
 }

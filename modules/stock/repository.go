@@ -592,11 +592,19 @@ func (r *Repository) Move(ctx context.Context, req MoveRequest, userID int64) (W
 
 func (r *Repository) GetItems(ctx context.Context, warehouseID, productID *int64) ([]WarehouseItem, error) {
 	q := `
-		SELECT ` + itemCols + `
-		FROM warehouse_items
-		WHERE ($1::bigint IS NULL OR warehouse_id = $1)
-		  AND ($2::bigint IS NULL OR product_id = $2)
-		ORDER BY warehouse_id, product_id
+		SELECT wi.warehouse_id, wi.product_id, wi.qty_milli,
+		       wi.avg_cost_cents, wi.total_cost_cents, wi.updated_at,
+		       wi.qty_milli - COALESCE((
+		           SELECT SUM(sr.qty_milli)
+		           FROM stock_reservations sr
+		           WHERE sr.warehouse_id = wi.warehouse_id
+		             AND sr.product_id   = wi.product_id
+		             AND sr.status = 'active'
+		       ), 0) AS available_milli
+		FROM warehouse_items wi
+		WHERE ($1::bigint IS NULL OR wi.warehouse_id = $1)
+		  AND ($2::bigint IS NULL OR wi.product_id = $2)
+		ORDER BY wi.warehouse_id, wi.product_id
 	`
 	rows, err := r.db.Query(ctx, q, warehouseID, productID)
 	if err != nil {
@@ -609,8 +617,8 @@ func (r *Repository) GetItems(ctx context.Context, warehouseID, productID *int64
 		var it WarehouseItem
 		if err := rows.Scan(
 			&it.WarehouseID, &it.ProductID, &it.QtyMilli,
-			&it.AvgCostCents, &it.TotalCostCents,
-			&it.UpdatedAt,
+			&it.AvgCostCents, &it.TotalCostCents, &it.UpdatedAt,
+			&it.AvailableMilli,
 		); err != nil {
 			return nil, err
 		}
@@ -798,7 +806,7 @@ func (r *Repository) OpeningBalance(ctx context.Context, req OpeningBalanceReque
 			avg_cost_cents = EXCLUDED.avg_cost_cents,
 			total_cost_cents = EXCLUDED.total_cost_cents,
 			updated_at = now()
-		RETURNING `+itemCols+`, avg_cost_cents, total_cost_cents
+		RETURNING `+itemCols+`
 	`, req.WarehouseID, req.ProductID, req.QtyMilli, req.PriceCents, totalCost))
 	if err != nil {
 		return WarehouseItemDetail{}, WarehouseItem{}, err
@@ -808,4 +816,44 @@ func (r *Repository) OpeningBalance(ctx context.Context, req OpeningBalanceReque
 		return WarehouseItemDetail{}, WarehouseItem{}, err
 	}
 	return detail, item, nil
+}
+
+// ── GetNegativeItems ──────────────────────────────────────────────────────────
+
+func (r *Repository) GetNegativeItems(ctx context.Context) ([]NegativeStockRow, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT
+		    wi.warehouse_id,
+		    w.name  AS warehouse_name,
+		    wi.product_id,
+		    p.name  AS product_name,
+		    wi.qty_milli,
+		    ABS(wi.qty_milli) AS deficit_milli
+		FROM warehouse_items wi
+		JOIN warehouses w ON w.id = wi.warehouse_id
+		JOIN products   p ON p.id = wi.product_id
+		WHERE wi.qty_milli < 0
+		ORDER BY wi.qty_milli ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []NegativeStockRow
+	for rows.Next() {
+		var row NegativeStockRow
+		if err := rows.Scan(
+			&row.WarehouseID, &row.WarehouseName,
+			&row.ProductID, &row.ProductName,
+			&row.QtyMilli, &row.DeficitMilli,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	if out == nil {
+		out = []NegativeStockRow{}
+	}
+	return out, rows.Err()
 }

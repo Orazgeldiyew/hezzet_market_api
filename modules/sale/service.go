@@ -25,16 +25,6 @@ func isAppError(err error) bool {
 }
 
 func (s *Service) CreateSale(ctx context.Context, req CreateSaleRequest, userID int64) (SaleDetail, error) {
-	// Validate: if payment_amount is provided, payment_type_id is required
-	if req.PaymentAmount != nil {
-		if req.PaymentTypeID == nil {
-			return SaleDetail{}, apperr.Validation("payment_type_id is required when payment_amount is provided")
-		}
-		if *req.PaymentAmount <= 0 {
-			return SaleDetail{}, apperr.Validation("payment_amount must be positive")
-		}
-	}
-
 	// Validate: no duplicate product IDs in items
 	seen := make(map[int64]bool, len(req.Items))
 	for _, item := range req.Items {
@@ -44,7 +34,7 @@ func (s *Service) CreateSale(ctx context.Context, req CreateSaleRequest, userID 
 		seen[item.ProductID] = true
 	}
 
-	sale, items, finTxn, err := s.repo.CreateSale(ctx, req, userID, s.finRepo)
+	sale, items, err := s.repo.CreateSale(ctx, req, userID)
 	if err != nil {
 		if isAppError(err) {
 			return SaleDetail{}, err
@@ -53,10 +43,43 @@ func (s *Service) CreateSale(ctx context.Context, req CreateSaleRequest, userID 
 	}
 
 	return SaleDetail{
-		Sale:          sale,
-		Items:         items,
-		TransactionID: finTxn.ID,
+		Sale:  sale,
+		Items: items,
+		// TransactionID = 0 — no finance transaction until confirmed
 	}, nil
+}
+
+func (s *Service) ConfirmSale(ctx context.Context, saleID int64, req ConfirmSaleRequest, userID int64) (SaleDetail, error) {
+	if req.PaymentAmount != nil {
+		if req.PaymentTypeID == nil {
+			return SaleDetail{}, apperr.Validation("payment_type_id is required when payment_amount is provided")
+		}
+		if *req.PaymentAmount <= 0 {
+			return SaleDetail{}, apperr.Validation("payment_amount must be positive")
+		}
+	}
+
+	_, err := s.repo.ConfirmSale(ctx, saleID, req, userID, s.finRepo)
+	if err != nil {
+		if isAppError(err) {
+			return SaleDetail{}, err
+		}
+		return SaleDetail{}, apperr.Internal(err)
+	}
+
+	// Fetch full detail (items + txn ID)
+	return s.GetSale(ctx, saleID)
+}
+
+func (s *Service) CancelSale(ctx context.Context, saleID int64, userID int64) error {
+	err := s.repo.CancelSale(ctx, saleID, userID)
+	if err != nil {
+		if isAppError(err) {
+			return err
+		}
+		return apperr.Internal(err)
+	}
+	return nil
 }
 
 func (s *Service) GetSale(ctx context.Context, id int64) (SaleDetail, error) {

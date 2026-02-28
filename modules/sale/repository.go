@@ -36,7 +36,7 @@ func (r *Repository) photoURL(path *string) *string {
 
 // ── column constants ─────────────────────────────────────────────────────────
 
-const saleCols = `id, warehouse_id, customer_id, total_cents, cost_cents, items_count, note, created_by, created_at`
+const saleCols = `id, warehouse_id, customer_id, total_cents, cost_cents, items_count, note, created_by, created_at, status`
 
 // ── scan helpers ─────────────────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@ func scanSale(row pgx.Row) (Sale, error) {
 	err := row.Scan(
 		&s.ID, &s.WarehouseID, &s.CustomerID, &s.TotalCents,
 		&s.CostCents, &s.ItemsCount, &s.Note, &s.CreatedBy, &s.CreatedAt,
+		&s.Status,
 	)
 	return s, err
 }
@@ -58,18 +59,17 @@ func isFKViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
 
-// ── CreateSale (atomic: sale + stock-out + finance) ──────────────────────────
+// ── CreateSale (draft: reserves stock, no immediate deduction) ───────────────
 
 func (r *Repository) CreateSale(
 	ctx context.Context,
 	req CreateSaleRequest,
 	userID int64,
-	finRepo *finance.Repository,
-) (Sale, []SaleItem, *finance.Transaction, error) {
+) (Sale, []SaleItem, error) {
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return Sale{}, nil, nil, err
+		return Sale{}, nil, err
 	}
 	defer tx.Rollback(ctx)
 
@@ -87,25 +87,24 @@ func (r *Repository) CreateSale(
 		productIDs,
 	)
 	if err != nil {
-		return Sale{}, nil, nil, err
+		return Sale{}, nil, err
 	}
 	for rows.Next() {
 		var pid, sp int64
 		if err := rows.Scan(&pid, &sp); err != nil {
 			rows.Close()
-			return Sale{}, nil, nil, err
+			return Sale{}, nil, err
 		}
 		priceMap[pid] = sp
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return Sale{}, nil, nil, err
+		return Sale{}, nil, err
 	}
 
-	// Validate all products found
 	for i, item := range req.Items {
 		if _, ok := priceMap[item.ProductID]; !ok {
-			return Sale{}, nil, nil, apperr.Validation(
+			return Sale{}, nil, apperr.Validation(
 				fmt.Sprintf("product %d not found or inactive (item index %d)", item.ProductID, i),
 			)
 		}
@@ -117,18 +116,18 @@ func (r *Repository) CreateSale(
 		totalCents += lineTotalCents(item.QtyMilli, priceMap[item.ProductID])
 	}
 
-	// 3. Insert sale header
+	// 3. Insert sale header (status='draft', cost_cents=0)
 	sale, err := scanSale(tx.QueryRow(ctx, `
-		INSERT INTO sales (warehouse_id, customer_id, total_cents, cost_cents, items_count, note, created_by)
-		VALUES ($1, $2, $3, 0, $4, $5, $6)
+		INSERT INTO sales (warehouse_id, customer_id, total_cents, cost_cents, items_count, note, created_by, status)
+		VALUES ($1, $2, $3, 0, $4, $5, $6, 'draft')
 		RETURNING `+saleCols,
 		req.WarehouseID, req.CustomerID, totalCents, len(req.Items), req.Note, uid,
 	))
 	if err != nil {
 		if isFKViolation(err) {
-			return Sale{}, nil, nil, apperr.Validation("warehouse or customer does not exist")
+			return Sale{}, nil, apperr.Validation("warehouse or customer does not exist")
 		}
-		return Sale{}, nil, nil, err
+		return Sale{}, nil, err
 	}
 
 	// 4. Process items sorted by product_id to avoid deadlocks
@@ -144,114 +143,264 @@ func (r *Repository) CreateSale(
 		return sorted[i].item.ProductID < sorted[j].item.ProductID
 	})
 
-	var totalCostCents int64
-
 	for _, entry := range sorted {
 		item := entry.item
 		unitPrice := priceMap[item.ProductID]
 		lineTotal := lineTotalCents(item.QtyMilli, unitPrice)
 
 		// 4a. Lock warehouse_items row
-		var currentQty, avgCost, wTotalCost int64
+		var currentQty int64
 		err = tx.QueryRow(ctx, `
-			SELECT qty_milli, avg_cost_cents, total_cost_cents
+			SELECT qty_milli
 			FROM warehouse_items
 			WHERE warehouse_id = $1 AND product_id = $2
 			FOR UPDATE
-		`, req.WarehouseID, item.ProductID).Scan(&currentQty, &avgCost, &wTotalCost)
+		`, req.WarehouseID, item.ProductID).Scan(&currentQty)
 		if err != nil {
 			if err == pgx.ErrNoRows {
-				return Sale{}, nil, nil, apperr.Validation(
-					fmt.Sprintf("no stock for product %d in warehouse (item index %d)",
-						item.ProductID, entry.idx),
-				)
+				if !req.Force {
+					return Sale{}, nil, apperr.Validation(
+						fmt.Sprintf("no stock for product %d in warehouse (item index %d)",
+							item.ProductID, entry.idx),
+					)
+				}
+				currentQty = 0 // force=true: строки нет, считаем 0
+			} else {
+				return Sale{}, nil, err
 			}
-			return Sale{}, nil, nil, err
 		}
-		if currentQty < item.QtyMilli {
-			return Sale{}, nil, nil, apperr.Validation(
-				fmt.Sprintf("insufficient stock for product %d: have %d, need %d (item index %d)",
-					item.ProductID, currentQty, item.QtyMilli, entry.idx),
+
+		// 4b. Count active reservations (while holding the lock)
+		var activeReserved int64
+		err = tx.QueryRow(ctx, `
+			SELECT COALESCE(SUM(qty_milli), 0)
+			FROM stock_reservations
+			WHERE warehouse_id = $1 AND product_id = $2 AND status = 'active'
+		`, req.WarehouseID, item.ProductID).Scan(&activeReserved)
+		if err != nil {
+			return Sale{}, nil, err
+		}
+
+		available := currentQty - activeReserved
+		if available < item.QtyMilli && !req.Force {
+			return Sale{}, nil, apperr.Validation(
+				fmt.Sprintf("insufficient available stock for product %d: have %d milli, reserved %d milli, need %d milli (use force=true to sell in deficit)",
+					item.ProductID, currentQty, activeReserved, item.QtyMilli),
 			)
 		}
 
-		// 4b. Calculate COGS by avg_cost
-		itemCost := lineTotalCents(item.QtyMilli, avgCost)
-		if wTotalCost < itemCost {
-			return Sale{}, nil, nil, apperr.Internal(
-				errors.New("total_cost_cents underflow for product " + strconv.FormatInt(item.ProductID, 10)),
-			)
-		}
-
-		// 4c. Insert sale_item
+		// 4c. Insert sale_item (cost_cents=0, will be set at confirm time)
 		_, err = tx.Exec(ctx, `
 			INSERT INTO sale_items (sale_id, product_id, qty_milli, unit_price_cents, cost_cents, line_total_cents)
-			VALUES ($1, $2, $3, $4, $5, $6)
-		`, sale.ID, item.ProductID, item.QtyMilli, unitPrice, itemCost, lineTotal)
+			VALUES ($1, $2, $3, $4, 0, $5)
+		`, sale.ID, item.ProductID, item.QtyMilli, unitPrice, lineTotal)
 		if err != nil {
-			return Sale{}, nil, nil, err
+			return Sale{}, nil, err
+		}
+	}
+
+	// 5. Insert stock reservations (one per item)
+	for _, entry := range sorted {
+		item := entry.item
+		_, err = tx.Exec(ctx, `
+			INSERT INTO stock_reservations (sale_id, warehouse_id, product_id, qty_milli)
+			VALUES ($1, $2, $3, $4)
+		`, sale.ID, req.WarehouseID, item.ProductID, item.QtyMilli)
+		if err != nil {
+			return Sale{}, nil, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Sale{}, nil, err
+	}
+
+	// Refetch items with product name + photo (after commit, outside TX)
+	_, items, err := r.GetByID(ctx, sale.ID)
+	if err != nil {
+		return sale, nil, err
+	}
+	return sale, items, nil
+}
+
+// reservationRow holds data fetched from stock_reservations for ConfirmSale.
+type reservationRow struct {
+	id          int64
+	productID   int64
+	warehouseID int64
+	qtyMilli    int64
+}
+
+// ── ConfirmSale (draft → confirmed: deducts stock, creates finance tx) ───────
+
+func (r *Repository) ConfirmSale(
+	ctx context.Context,
+	saleID int64,
+	req ConfirmSaleRequest,
+	userID int64,
+	finRepo *finance.Repository,
+) (Sale, error) {
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return Sale{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	uid := &userID
+
+	// 1. Lock sale row and check status
+	var status string
+	var totalCents int64
+	err = tx.QueryRow(ctx, `
+		SELECT status, total_cents FROM sales WHERE id = $1 FOR UPDATE
+	`, saleID).Scan(&status, &totalCents)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return Sale{}, apperr.NotFound("SALE_NOT_FOUND", "sale not found")
+		}
+		return Sale{}, err
+	}
+	if status != "draft" {
+		return Sale{}, apperr.Conflict("SALE_NOT_DRAFT", "sale is not in draft status")
+	}
+
+	// 2. Get active reservations (sorted by product_id to avoid deadlocks)
+	resRows, err := tx.Query(ctx, `
+		SELECT sr.id, sr.product_id, sr.warehouse_id, sr.qty_milli
+		FROM stock_reservations sr
+		WHERE sr.sale_id = $1 AND sr.status = 'active'
+		ORDER BY sr.product_id
+	`, saleID)
+	if err != nil {
+		return Sale{}, err
+	}
+	var reservations []reservationRow
+	for resRows.Next() {
+		var res reservationRow
+		if err := resRows.Scan(&res.id, &res.productID, &res.warehouseID, &res.qtyMilli); err != nil {
+			resRows.Close()
+			return Sale{}, err
+		}
+		reservations = append(reservations, res)
+	}
+	resRows.Close()
+	if err := resRows.Err(); err != nil {
+		return Sale{}, err
+	}
+
+	var totalCostCents int64
+
+	// 3. For each reservation: deduct stock and record COGS
+	for _, res := range reservations {
+		var currentQty, avgCost int64
+		err = tx.QueryRow(ctx, `
+			SELECT qty_milli, avg_cost_cents
+			FROM warehouse_items
+			WHERE warehouse_id = $1 AND product_id = $2
+			FOR UPDATE
+		`, res.warehouseID, res.productID).Scan(&currentQty, &avgCost)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				if !req.Force {
+					return Sale{}, apperr.Validation(
+						fmt.Sprintf("no stock for product %d in warehouse", res.productID),
+					)
+				}
+				currentQty, avgCost = 0, 0 // force: строки нет, себестоимость 0
+			} else {
+				return Sale{}, err
+			}
+		}
+		if currentQty < res.qtyMilli && !req.Force {
+			return Sale{}, apperr.Validation(
+				fmt.Sprintf("insufficient stock for product %d: have %d milli, need %d milli (use force=true to override)",
+					res.productID, currentQty, res.qtyMilli),
+			)
 		}
 
-		// 4d. Insert stock ledger entry (type='sale', delta=-qty)
+		itemCost := lineTotalCents(res.qtyMilli, avgCost)
+
+		// Insert stock ledger entry (type='sale', delta=-qty)
 		_, err = tx.Exec(ctx, `
 			INSERT INTO warehouse_item_details
-				(idempotency_key, warehouse_id, product_id, delta_milli, type, price_cents, created_by)
-			VALUES (gen_random_uuid(), $1, $2, $3, 'sale', $4, $5)
-		`, req.WarehouseID, item.ProductID, -item.QtyMilli, unitPrice, uid)
+				(idempotency_key, warehouse_id, product_id, delta_milli, type, created_by)
+			VALUES (gen_random_uuid(), $1, $2, $3, 'sale', $4)
+		`, res.warehouseID, res.productID, -res.qtyMilli, uid)
 		if err != nil {
-			return Sale{}, nil, nil, err
+			return Sale{}, err
 		}
 
-		// 4e. Update warehouse_items (decrement stock, subtract cost, recalc avg)
+		// Upsert warehouse_items (decrement stock; INSERT if row didn't exist)
 		_, err = tx.Exec(ctx, `
-			UPDATE warehouse_items
-			SET
-				qty_milli = qty_milli - $3,
-				total_cost_cents = total_cost_cents - $4,
-				avg_cost_cents = CASE
-					WHEN (qty_milli - $3) > 0
-						THEN ((total_cost_cents - $4) * 1000) / (qty_milli - $3)
+			INSERT INTO warehouse_items
+				(warehouse_id, product_id, qty_milli, avg_cost_cents, total_cost_cents, updated_at)
+			VALUES ($1, $2, -$3, 0, 0, now())
+			ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
+				qty_milli        = warehouse_items.qty_milli - $3,
+				total_cost_cents = GREATEST(warehouse_items.total_cost_cents - $4, 0),
+				avg_cost_cents   = CASE
+					WHEN (warehouse_items.qty_milli - $3) > 0
+						THEN ((warehouse_items.total_cost_cents - $4) * 1000) / (warehouse_items.qty_milli - $3)
 					ELSE 0
 				END,
 				updated_at = now()
-			WHERE warehouse_id = $1 AND product_id = $2
-		`, req.WarehouseID, item.ProductID, item.QtyMilli, itemCost)
+		`, res.warehouseID, res.productID, res.qtyMilli, itemCost)
 		if err != nil {
-			return Sale{}, nil, nil, err
+			return Sale{}, err
+		}
+
+		// Update sale_item.cost_cents
+		_, err = tx.Exec(ctx, `
+			UPDATE sale_items SET cost_cents = $3 WHERE sale_id = $1 AND product_id = $2
+		`, saleID, res.productID, itemCost)
+		if err != nil {
+			return Sale{}, err
+		}
+
+		// Mark reservation as fulfilled
+		_, err = tx.Exec(ctx, `
+			UPDATE stock_reservations SET status = 'fulfilled', released_at = now() WHERE id = $1
+		`, res.id)
+		if err != nil {
+			return Sale{}, err
 		}
 
 		totalCostCents += itemCost
 	}
 
-	// 5. Update sale with accumulated cost
-	_, err = tx.Exec(ctx, `UPDATE sales SET cost_cents = $2 WHERE id = $1`, sale.ID, totalCostCents)
+	// 4. Update sale to confirmed
+	sale, err := scanSale(tx.QueryRow(ctx, `
+		UPDATE sales SET status = 'confirmed', cost_cents = $2 WHERE id = $1
+		RETURNING `+saleCols,
+		saleID, totalCostCents,
+	))
 	if err != nil {
-		return Sale{}, nil, nil, err
+		return Sale{}, err
 	}
-	sale.CostCents = totalCostCents
 
-	// 6. Create finance transaction (income)
-	reason := "Sale #" + strconv.FormatInt(sale.ID, 10)
+	// 5. Create finance transaction (income)
+	reason := "Sale #" + strconv.FormatInt(saleID, 10)
 	finTxn := finance.Transaction{
 		Type:         "income",
 		AmountCents:  totalCents,
 		RelatedTable: "sale",
-		RelatedID:    &sale.ID,
+		RelatedID:    &saleID,
 		Status:       "pending",
 		Reason:       &reason,
 		CreatedBy:    uid,
 	}
 	if err := finRepo.CreateTransaction(ctx, tx, &finTxn); err != nil {
-		return Sale{}, nil, nil, err
+		return Sale{}, err
 	}
 
-	// 7. Optional payment
+	// 6. Optional payment
 	if req.PaymentAmount != nil && *req.PaymentAmount > 0 {
 		if req.PaymentTypeID == nil {
-			return Sale{}, nil, nil, apperr.Validation("payment_type_id is required when payment_amount is provided")
+			return Sale{}, apperr.Validation("payment_type_id is required when payment_amount is provided")
 		}
 		if *req.PaymentAmount > totalCents {
-			return Sale{}, nil, nil, apperr.Validation("payment_amount cannot exceed sale total")
+			return Sale{}, apperr.Validation("payment_amount cannot exceed sale total")
 		}
 
 		p := finance.Payment{
@@ -262,31 +411,167 @@ func (r *Repository) CreateSale(
 			CreatedBy:     uid,
 		}
 		if err := finRepo.CreatePayment(ctx, tx, &p); err != nil {
-			return Sale{}, nil, nil, err
+			return Sale{}, err
 		}
 
-		status := "partial"
+		txnStatus := "partial"
 		if *req.PaymentAmount >= totalCents {
-			status = "paid"
+			txnStatus = "paid"
 		}
-		if _, err := finRepo.UpdateTransactionStatus(ctx, tx, finTxn.ID, status); err != nil {
-			return Sale{}, nil, nil, err
+		if _, err := finRepo.UpdateTransactionStatus(ctx, tx, finTxn.ID, txnStatus); err != nil {
+			return Sale{}, err
 		}
-		finTxn.Status = status
 	}
 
-	// 8. Commit
 	if err := tx.Commit(ctx); err != nil {
-		return Sale{}, nil, nil, err
+		return Sale{}, err
 	}
+	return sale, nil
+}
 
-	// 9. Refetch items with product name + photo (after commit, outside TX)
-	_, items, err := r.GetByID(ctx, sale.ID)
+// ── CancelSale (draft → cancelled or confirmed → cancelled) ─────────────────
+
+func (r *Repository) CancelSale(ctx context.Context, saleID int64, userID int64) error {
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return sale, nil, &finTxn, err
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	uid := &userID
+
+	// 1. Lock sale row and check status
+	var status string
+	var warehouseID int64
+	err = tx.QueryRow(ctx, `
+		SELECT status, warehouse_id FROM sales WHERE id = $1 FOR UPDATE
+	`, saleID).Scan(&status, &warehouseID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperr.NotFound("SALE_NOT_FOUND", "sale not found")
+		}
+		return err
 	}
 
-	return sale, items, &finTxn, nil
+	switch status {
+	case "draft":
+		// Release all active reservations
+		_, err = tx.Exec(ctx, `
+			UPDATE stock_reservations
+			SET status = 'released', released_at = now()
+			WHERE sale_id = $1 AND status = 'active'
+		`, saleID)
+		if err != nil {
+			return err
+		}
+
+	case "confirmed":
+		// Fetch sale items for stock restoration (sorted by product_id)
+		type saleItemRow struct {
+			productID int64
+			qtyMilli  int64
+			costCents int64
+		}
+		siRows, err := tx.Query(ctx, `
+			SELECT product_id, qty_milli, cost_cents
+			FROM sale_items
+			WHERE sale_id = $1
+			ORDER BY product_id
+		`, saleID)
+		if err != nil {
+			return err
+		}
+		var saleItems []saleItemRow
+		for siRows.Next() {
+			var si saleItemRow
+			if err := siRows.Scan(&si.productID, &si.qtyMilli, &si.costCents); err != nil {
+				siRows.Close()
+				return err
+			}
+			saleItems = append(saleItems, si)
+		}
+		siRows.Close()
+		if err := siRows.Err(); err != nil {
+			return err
+		}
+
+		// Restore stock for each item
+		for _, si := range saleItems {
+			var currentQty, avgCost, wTotalCost int64
+			rowExists := true
+			err = tx.QueryRow(ctx, `
+				SELECT qty_milli, avg_cost_cents, total_cost_cents
+				FROM warehouse_items
+				WHERE warehouse_id = $1 AND product_id = $2
+				FOR UPDATE
+			`, warehouseID, si.productID).Scan(&currentQty, &avgCost, &wTotalCost)
+			if err != nil {
+				if err != pgx.ErrNoRows {
+					return err
+				}
+				rowExists = false
+			}
+
+			// Use the stored COGS as restoration cost (exact reversal)
+			inCost := si.costCents
+			newQty := currentQty + si.qtyMilli
+			newTotalCost := wTotalCost + inCost
+			newAvgCost := int64(0)
+			if newQty > 0 {
+				newAvgCost = (newTotalCost * 1000) / newQty
+			}
+
+			// Insert stock ledger entry (type='sale_return', delta=+qty)
+			_, err = tx.Exec(ctx, `
+				INSERT INTO warehouse_item_details
+					(idempotency_key, warehouse_id, product_id, delta_milli, type, created_by)
+				VALUES (gen_random_uuid(), $1, $2, $3, 'sale_return', $4)
+			`, warehouseID, si.productID, si.qtyMilli, uid)
+			if err != nil {
+				return err
+			}
+
+			if rowExists {
+				_, err = tx.Exec(ctx, `
+					UPDATE warehouse_items
+					SET qty_milli = $3, total_cost_cents = $4, avg_cost_cents = $5, updated_at = now()
+					WHERE warehouse_id = $1 AND product_id = $2
+				`, warehouseID, si.productID, newQty, newTotalCost, newAvgCost)
+			} else {
+				_, err = tx.Exec(ctx, `
+					INSERT INTO warehouse_items
+						(warehouse_id, product_id, qty_milli, avg_cost_cents, total_cost_cents, updated_at)
+					VALUES ($1, $2, $3, $4, $5, now())
+				`, warehouseID, si.productID, newQty, newAvgCost, newTotalCost)
+			}
+			if err != nil {
+				return err
+			}
+		}
+
+		// Cancel the finance transaction for this sale
+		_, err = tx.Exec(ctx, `
+			UPDATE transactions SET status = 'canceled'
+			WHERE related_table = 'sale' AND related_id = $1
+		`, saleID)
+		if err != nil {
+			return err
+		}
+
+	case "cancelled":
+		return apperr.Conflict("SALE_ALREADY_CANCELLED", "sale is already cancelled")
+
+	default:
+		return apperr.Internal(errors.New("unknown sale status: " + status))
+	}
+
+	// Update sale status to cancelled
+	_, err = tx.Exec(ctx, `UPDATE sales SET status = 'cancelled' WHERE id = $1`, saleID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 // ── GetByID ──────────────────────────────────────────────────────────────────
@@ -389,6 +674,7 @@ func (r *Repository) List(
 		err := rows.Scan(
 			&item.ID, &item.WarehouseID, &item.CustomerID, &item.TotalCents,
 			&item.CostCents, &item.ItemsCount, &item.Note, &item.CreatedBy, &item.CreatedAt,
+			&item.Status,
 			&item.CustomerName,
 		)
 		if err != nil {

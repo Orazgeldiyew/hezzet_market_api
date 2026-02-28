@@ -48,4 +48,9 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, notifSvc *notificatio
 		h.GetDetails,
 	)
 
+	s.GET("/negative",
+		middleware.RequireRoles("operator", "manager"),
+		h.NegativeStock,
+	)
+
 }

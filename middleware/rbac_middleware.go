@@ -7,6 +7,29 @@ import (
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
+// HasAnyRole returns true if the request context contains at least one of the given roles (admin always passes).
+func HasAnyRole(c *gin.Context, roles ...string) bool {
+	rolesVal, exists := c.Get("roles")
+	if !exists {
+		return false
+	}
+	userRoles, ok := rolesVal.([]string)
+	if !ok {
+		return false
+	}
+	for _, r := range userRoles {
+		if r == "admin" {
+			return true
+		}
+		for _, required := range roles {
+			if r == required {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // RequireRoles: admin bypass always.
 // If roles is empty => admin only.
 func RequireRoles(roles ...string) gin.HandlerFunc {

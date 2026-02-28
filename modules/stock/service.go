@@ -151,3 +151,11 @@ func (s *Service) OpeningBalance(ctx context.Context, req OpeningBalanceRequest,
 	}
 	return MovementResult{Detail: d, Item: it}, nil
 }
+
+func (s *Service) GetNegativeItems(ctx context.Context) ([]NegativeStockRow, error) {
+	out, err := s.repo.GetNegativeItems(ctx)
+	if err != nil {
+		return nil, apperr.Internal(err)
+	}
+	return out, nil
+}

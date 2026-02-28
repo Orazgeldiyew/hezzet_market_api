@@ -66,6 +66,15 @@ func ErrorMiddleware() gin.HandlerFunc {
 			if i > 0 {
 				label = "secondary"
 			}
+
+			// For AppError wrapping an internal cause, log the root cause
+			// so that 500s are debuggable from server logs.
+			errMsg := ginErr.Err.Error()
+			var appErr *apperr.AppError
+			if errors.As(ginErr.Err, &appErr) && appErr.Err != nil {
+				errMsg = appErr.Err.Error()
+			}
+
 			slog.ErrorContext(
 				c.Request.Context(),
 				"request error",
@@ -74,7 +83,7 @@ func ErrorMiddleware() gin.HandlerFunc {
 				slog.String("method", c.Request.Method),
 				slog.String("path", c.Request.URL.Path),
 				slog.String("client_ip", c.ClientIP()),
-				slog.String("error", ginErr.Err.Error()),
+				slog.String("error", errMsg),
 			)
 		}
 

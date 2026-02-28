@@ -11,7 +11,9 @@ import (
 
 // RegisterRoutes sets up all auth routes and returns the token-version
 // checker so the caller can reuse it for other protected route groups.
-func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config) middleware.TokenVersionFunc {
+// auditMiddleware is optional — when provided it is applied to every
+// authenticated write route so those actions appear in the audit log.
+func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config, auditMiddleware ...gin.HandlerFunc) middleware.TokenVersionFunc {
 	repo := NewRepository(db)
 	svc := NewService(repo, cfg)
 	h := NewHandler(svc)
@@ -27,6 +29,7 @@ func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config) middlewa
 		admin := g.Group("/users")
 		admin.Use(middleware.AuthRequired(cfg, repo.GetTokenVersion))
 		admin.Use(middleware.RequireRoles()) // empty = admin only
+		admin.Use(auditMiddleware...)
 		{
 			admin.POST("", h.CreateUser)
 			admin.GET("", middleware.PaginationMiddleware(), h.ListUsers)
@@ -40,6 +43,7 @@ func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config) middlewa
 		// Authenticated (admin or self)
 		self := g.Group("/users")
 		self.Use(middleware.AuthRequired(cfg, repo.GetTokenVersion))
+		self.Use(auditMiddleware...)
 		{
 			self.POST("/:id/password", h.ChangePassword)
 		}

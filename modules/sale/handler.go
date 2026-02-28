@@ -1,6 +1,7 @@
 package sale
 
 import (
+	"io"
 	"strconv"
 	"time"
 
@@ -24,14 +25,14 @@ func extractUserID(c *gin.Context) int64 {
 }
 
 // CreateSale godoc
-// @Summary Create sale
-// @Description Create a sale from the POS. Prices are automatically from product sale_price. Stock is automatically deducted. Finance transaction (income) is created. Payment is optional.
+// @Summary Create sale (draft)
+// @Description Create a draft sale that reserves stock. Call POST /:id/confirm to deduct stock and create a finance transaction.
 // @Tags Sales
 // @Accept json
 // @Produce json
 // @Security BearerAuth
 // @Param body body CreateSaleRequest true "Sale request"
-// @Success 201 {object} response.APIResponse
+// @Success 201 {object} response.APIResponse{data=SaleDetail}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 403 {object} response.APIResponse
@@ -66,7 +67,7 @@ func (h *Handler) CreateSale(c *gin.Context) {
 // @Param date_to query string false "RFC3339 datetime (inclusive)"
 // @Param page query int false "page"
 // @Param limit query int false "limit"
-// @Success 200 {object} response.APIResponse
+// @Success 200 {object} response.APIResponse{data=[]SaleListItem,meta=response.Meta}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
@@ -126,6 +127,71 @@ func (h *Handler) ListSales(c *gin.Context) {
 	response.List(c, out.Items, page, out.Limit, out.Offset, out.Total)
 }
 
+// ConfirmSale godoc
+// @Summary Confirm sale
+// @Description Transitions a draft sale to confirmed: deducts stock, records COGS, creates a finance transaction. Payment is optional.
+// @Tags Sales
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Sale ID"
+// @Param body body ConfirmSaleRequest false "Optional payment details"
+// @Success 200 {object} response.APIResponse{data=SaleDetail}
+// @Failure 400 {object} response.APIResponse
+// @Failure 404 {object} response.APIResponse
+// @Failure 409 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /api/sales/{id}/confirm [post]
+func (h *Handler) ConfirmSale(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.Error(apperr.Validation("invalid sale id"))
+		return
+	}
+	var req ConfirmSaleRequest
+	if err := c.ShouldBindJSON(&req); err != nil && err != io.EOF {
+		c.Error(err)
+		return
+	}
+
+	userID := extractUserID(c)
+
+	out, err := h.svc.ConfirmSale(c.Request.Context(), id, req, userID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
+// CancelSale godoc
+// @Summary Cancel sale
+// @Description Cancels a draft or confirmed sale. Draft: releases reservation. Confirmed: restores stock and voids the finance transaction.
+// @Tags Sales
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Sale ID"
+// @Success 200 {object} response.APIResponse{data=object}
+// @Failure 400 {object} response.APIResponse
+// @Failure 404 {object} response.APIResponse
+// @Failure 409 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /api/sales/{id}/cancel [post]
+func (h *Handler) CancelSale(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.Error(apperr.Validation("invalid sale id"))
+		return
+	}
+	userID := extractUserID(c)
+
+	if err := h.svc.CancelSale(c.Request.Context(), id, userID); err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, gin.H{"cancelled": true})
+}
+
 // GetSale godoc
 // @Summary Get sale detail
 // @Description Returns a sale with all its items and transaction ID.
@@ -133,7 +199,7 @@ func (h *Handler) ListSales(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "Sale ID"
-// @Success 200 {object} response.APIResponse
+// @Success 200 {object} response.APIResponse{data=SaleDetail}
 // @Failure 400 {object} response.APIResponse
 // @Failure 401 {object} response.APIResponse
 // @Failure 404 {object} response.APIResponse

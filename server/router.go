@@ -14,12 +14,15 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/docs"
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/auth"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/auditlog"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/category"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/reports"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customer"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/notification"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/payroll"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/product"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/purchase"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/sale"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/stock"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/supplier"
@@ -107,13 +110,18 @@ func NewRouter(deps Deps) *gin.Engine {
 		)
 	}
 
-	// Auth routes
-	getTokenVersion := auth.RegisterRoutes(r, deps.DB, deps.Cfg)
+	// Audit repo created first so it can be shared with auth routes
+	auditRepo := auditlog.NewRepository(deps.DB)
+	auditMW := auditlog.AuditMiddleware(auditRepo)
+
+	// Auth routes (pass audit middleware so block/unblock/password are logged)
+	getTokenVersion := auth.RegisterRoutes(r, deps.DB, deps.Cfg, auditMW)
 
 	// Protected API
 	api := r.Group("/api")
 	api.Use(middleware.AuthRequired(deps.Cfg, getTokenVersion))
 	api.Use(middleware.PaginationMiddleware())
+	api.Use(auditMW)
 
 	category.RegisterRoutes(api, deps.DB)
 	product.RegisterRoutes(api, deps.DB, deps.Cfg.UploadsDir, deps.Cfg.PublicBaseURL)
@@ -128,6 +136,9 @@ func NewRouter(deps Deps) *gin.Engine {
 	workerfinance.RegisterRoutes(api, deps.DB, finRepo)
 	payroll.RegisterRoutes(api, deps.DB, finRepo)
 	sale.RegisterRoutes(api, deps.DB, finRepo, deps.Cfg.PublicBaseURL)
+	purchase.RegisterRoutes(api, deps.DB, finRepo)
+	auditlog.RegisterRoutes(api, auditRepo)
+	reports.RegisterRoutes(api, deps.DB, deps.Cfg.LowStockDefault)
 
 	r.GET("/debug/routes", func(c *gin.Context) {
 		type R struct {
