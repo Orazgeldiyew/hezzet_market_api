@@ -2993,6 +2993,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Filter by status: draft, confirmed, cancelled",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "RFC3339 datetime (inclusive)",
                         "name": "date_from",
                         "in": "query"
@@ -3343,6 +3349,58 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sales/{id}/receipt": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns an HTML page formatted for an 80mm thermal printer. Uses custom template from receipt settings if configured.",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "Sales"
+                ],
+                "summary": "Render sale receipt as HTML",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Sale ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "HTML receipt",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
                         }
@@ -8057,6 +8115,18 @@ const docTemplate = `{
         "sale.Sale": {
             "type": "object",
             "properties": {
+                "cancelled_at": {
+                    "type": "string"
+                },
+                "cashier_id": {
+                    "type": "integer"
+                },
+                "client_session_id": {
+                    "type": "string"
+                },
+                "completed_at": {
+                    "type": "string"
+                },
                 "cost_cents": {
                     "type": "integer"
                 },
@@ -8064,6 +8134,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "created_by": {
+                    "type": "integer"
+                },
+                "created_by_user_id": {
                     "type": "integer"
                 },
                 "customer_id": {
@@ -8078,11 +8151,23 @@ const docTemplate = `{
                 "note": {
                     "type": "string"
                 },
-                "status": {
+                "owner_user_id": {
+                    "type": "integer"
+                },
+                "register_id": {
+                    "type": "integer"
+                },
+                "sale_number": {
                     "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/sale.SaleStatus"
                 },
                 "total_cents": {
                     "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
                 },
                 "warehouse_id": {
                     "type": "integer"
@@ -8144,6 +8229,18 @@ const docTemplate = `{
         "sale.SaleListItem": {
             "type": "object",
             "properties": {
+                "cancelled_at": {
+                    "type": "string"
+                },
+                "cashier_id": {
+                    "type": "integer"
+                },
+                "client_session_id": {
+                    "type": "string"
+                },
+                "completed_at": {
+                    "type": "string"
+                },
                 "cost_cents": {
                     "type": "integer"
                 },
@@ -8151,6 +8248,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "created_by": {
+                    "type": "integer"
+                },
+                "created_by_user_id": {
                     "type": "integer"
                 },
                 "customer_id": {
@@ -8168,16 +8268,41 @@ const docTemplate = `{
                 "note": {
                     "type": "string"
                 },
-                "status": {
+                "owner_user_id": {
+                    "type": "integer"
+                },
+                "register_id": {
+                    "type": "integer"
+                },
+                "sale_number": {
                     "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/sale.SaleStatus"
                 },
                 "total_cents": {
                     "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
                 },
                 "warehouse_id": {
                     "type": "integer"
                 }
             }
+        },
+        "sale.SaleStatus": {
+            "type": "string",
+            "enum": [
+                "DRAFT",
+                "COMPLETED",
+                "CANCELLED"
+            ],
+            "x-enum-varnames": [
+                "SaleStatusDraft",
+                "SaleStatusCompleted",
+                "SaleStatusCancelled"
+            ]
         },
         "stock.BulkInItem": {
             "type": "object",
@@ -8934,7 +9059,6 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Market backend (products, stock, income, sales)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
-
 }
 
 func init() {

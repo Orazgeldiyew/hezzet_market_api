@@ -40,6 +40,12 @@ type Config struct {
 	// CORS
 	CORSAllowedOrigins []string
 
+	// Receipt defaults
+	ReceiptShopName    string
+	ReceiptShopAddress string
+	ReceiptShopPhone   string
+	ReceiptFooter      string
+
 	// Notification / SMS
 	RedisURL            string
 	SMSProvider         string // "log" | "twilio"
@@ -91,6 +97,12 @@ func Load() Config {
 	if cfg.Env == "dev" && len(cfg.CORSAllowedOrigins) == 0 {
 		cfg.CORSAllowedOrigins = []string{"http://localhost:5000"}
 	}
+
+	// ── Receipt defaults ──
+	cfg.ReceiptShopName = getenv("RECEIPT_SHOP_NAME", "Hezzet Market")
+	cfg.ReceiptShopAddress = getenv("RECEIPT_SHOP_ADDRESS", "")
+	cfg.ReceiptShopPhone = getenv("RECEIPT_SHOP_PHONE", "")
+	cfg.ReceiptFooter = getenv("RECEIPT_FOOTER", "Satyn alanyňyz üçin sag boluň!")
 
 	// ── Notification / SMS ──
 	cfg.RedisURL = getenv("REDIS_URL", "")

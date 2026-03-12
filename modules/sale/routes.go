@@ -6,12 +6,13 @@ import (
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/receiptsettings"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository, publicBaseURL string) {
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository, publicBaseURL string, receiptRepo *receiptsettings.Repository) {
 	repo := NewRepository(db, publicBaseURL)
 	svc := NewService(repo, finRepo)
-	h := NewHandler(svc)
+	h := NewHandler(svc, receiptRepo, publicBaseURL)
 
 	sales := rg.Group("/sales")
 
@@ -28,6 +29,11 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repo
 	sales.GET("/:id",
 		middleware.RequireRoles("cashier", "operator", "manager"),
 		h.GetSale,
+	)
+
+	sales.GET("/:id/receipt",
+		middleware.RequireRoles("cashier", "operator", "manager"),
+		h.GetReceipt,
 	)
 
 	sales.POST("/:id/confirm",

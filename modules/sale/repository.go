@@ -619,6 +619,83 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Sale, []SaleItem, e
 	return sale, items, rows.Err()
 }
 
+// ── GetReceiptData fetches sale + items with unit_type + cashier/warehouse/customer names ──
+
+type ReceiptSaleRow struct {
+	Sale
+	CashierName   string
+	WarehouseName string
+	CustomerName  string
+}
+
+type ReceiptItemRow struct {
+	ProductName    string
+	QtyMilli       int64
+	UnitType       string
+	UnitPriceCents int64
+	LineTotalCents int64
+}
+
+func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleRow, []ReceiptItemRow, error) {
+	var row ReceiptSaleRow
+	var cashierName, warehouseName, customerName *string
+
+	err := r.db.QueryRow(ctx, `
+		SELECT s.id, s.warehouse_id, s.customer_id, s.total_cents, s.cost_cents,
+		       s.items_count, s.note, s.created_by, s.created_at, s.status,
+		       u.username,
+		       w.name,
+		       c.name
+		FROM sales s
+		LEFT JOIN users u ON u.id = s.created_by
+		LEFT JOIN warehouses w ON w.id = s.warehouse_id
+		LEFT JOIN customers c ON c.id = s.customer_id
+		WHERE s.id = $1
+	`, id).Scan(
+		&row.ID, &row.WarehouseID, &row.CustomerID, &row.TotalCents,
+		&row.CostCents, &row.ItemsCount, &row.Note, &row.CreatedBy, &row.CreatedAt,
+		&row.Status,
+		&cashierName, &warehouseName, &customerName,
+	)
+	if err != nil {
+		return ReceiptSaleRow{}, nil, err
+	}
+	if cashierName != nil {
+		row.CashierName = *cashierName
+	}
+	if warehouseName != nil {
+		row.WarehouseName = *warehouseName
+	}
+	if customerName != nil {
+		row.CustomerName = *customerName
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT p.name, si.qty_milli, p.unit_type, si.unit_price_cents, si.line_total_cents
+		FROM sale_items si
+		JOIN products p ON p.id = si.product_id
+		WHERE si.sale_id = $1
+		ORDER BY si.id
+	`, id)
+	if err != nil {
+		return row, nil, err
+	}
+	defer rows.Close()
+
+	var items []ReceiptItemRow
+	for rows.Next() {
+		var it ReceiptItemRow
+		if err := rows.Scan(&it.ProductName, &it.QtyMilli, &it.UnitType, &it.UnitPriceCents, &it.LineTotalCents); err != nil {
+			return row, nil, err
+		}
+		items = append(items, it)
+	}
+	if items == nil {
+		items = []ReceiptItemRow{}
+	}
+	return row, items, rows.Err()
+}
+
 // ── GetTransactionIDBySaleID ─────────────────────────────────────────────────
 
 func (r *Repository) GetTransactionIDBySaleID(ctx context.Context, saleID int64) (int64, error) {
@@ -635,6 +712,7 @@ func (r *Repository) List(
 	ctx context.Context,
 	warehouseID, customerID *int64,
 	createdBy *int64,
+	status *string,
 	dateFrom, dateTo *time.Time,
 	limit, offset int,
 ) ([]SaleListItem, int, error) {
@@ -645,12 +723,13 @@ func (r *Repository) List(
 		  AND ($3::timestamptz IS NULL OR s.created_at >= $3)
 		  AND ($4::timestamptz IS NULL OR s.created_at <= $4)
 		  AND ($5::bigint IS NULL OR s.created_by = $5)
+		  AND ($6::text IS NULL OR s.status = $6)
 	`
 
 	var total int
 	if err := r.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM sales s `+where,
-		warehouseID, customerID, dateFrom, dateTo, createdBy,
+		warehouseID, customerID, dateFrom, dateTo, createdBy, status,
 	).Scan(&total); err != nil {
 		return nil, 0, err
 	}
@@ -661,8 +740,8 @@ func (r *Repository) List(
 		LEFT JOIN customers c ON c.id = s.customer_id
 		`+where+`
 		ORDER BY s.created_at DESC, s.id DESC
-		LIMIT $6 OFFSET $7
-	`, warehouseID, customerID, dateFrom, dateTo, createdBy, limit, offset)
+		LIMIT $7 OFFSET $8
+	`, warehouseID, customerID, dateFrom, dateTo, createdBy, status, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

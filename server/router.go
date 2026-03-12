@@ -16,6 +16,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/auth"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/auditlog"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/category"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/receiptsettings"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/reports"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customer"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
@@ -135,10 +136,17 @@ func NewRouter(deps Deps) *gin.Engine {
 	finance.RegisterRoutes(api, deps.DB)
 	workerfinance.RegisterRoutes(api, deps.DB, finRepo)
 	payroll.RegisterRoutes(api, deps.DB, finRepo)
-	sale.RegisterRoutes(api, deps.DB, finRepo, deps.Cfg.PublicBaseURL)
+	receiptRepo := receiptsettings.RegisterRoutes(api, deps.DB, deps.Cfg)
+	sale.RegisterRoutes(api, deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo)
 	purchase.RegisterRoutes(api, deps.DB, finRepo)
 	auditlog.RegisterRoutes(api, auditRepo)
 	reports.RegisterRoutes(api, deps.DB, deps.Cfg.LowStockDefault)
+
+	// ── Public receipt route: /receipt/:id?token=JWT ──
+	r.GET("/receipt/:id",
+		middleware.AuthFromQuery(deps.Cfg, getTokenVersion),
+		sale.ReceiptHandler(deps.DB, deps.Cfg.PublicBaseURL, receiptRepo),
+	)
 
 	r.GET("/debug/routes", func(c *gin.Context) {
 		type R struct {

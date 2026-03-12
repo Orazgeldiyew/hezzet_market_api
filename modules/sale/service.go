@@ -106,10 +106,11 @@ func (s *Service) GetSale(ctx context.Context, id int64) (SaleDetail, error) {
 func (s *Service) ListSales(
 	ctx context.Context,
 	warehouseID, customerID, createdBy *int64,
+	status *string,
 	dateFrom, dateTo *time.Time,
 	limit, offset int,
 ) (SaleListResult, error) {
-	items, total, err := s.repo.List(ctx, warehouseID, customerID, createdBy, dateFrom, dateTo, limit, offset)
+	items, total, err := s.repo.List(ctx, warehouseID, customerID, createdBy, status, dateFrom, dateTo, limit, offset)
 	if err != nil {
 		return SaleListResult{}, apperr.Internal(err)
 	}

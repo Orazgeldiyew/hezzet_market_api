@@ -1,0 +1,30 @@
+package receiptsettings
+
+// ReceiptSettings is the merged result (DB overrides + env defaults).
+type ReceiptSettings struct {
+	ShopName    string `json:"shop_name"`
+	ShopAddress string `json:"shop_address"`
+	ShopPhone   string `json:"shop_phone"`
+	LogoPath    string `json:"logo_path"`
+	Footer      string `json:"footer"`
+	Template    string `json:"template"`
+}
+
+// UpdateRequest holds optional fields. Non-nil means "set this field".
+// Empty string means "clear override, revert to default".
+type UpdateRequest struct {
+	ShopName    *string `json:"shop_name"`
+	ShopAddress *string `json:"shop_address"`
+	ShopPhone   *string `json:"shop_phone"`
+	LogoPath    *string `json:"logo_path"`
+	Footer      *string `json:"footer"`
+	Template    *string `json:"template"`
+}
+
+// Defaults holds server-level defaults loaded from env vars.
+type Defaults struct {
+	ShopName    string
+	ShopAddress string
+	ShopPhone   string
+	Footer      string
+}

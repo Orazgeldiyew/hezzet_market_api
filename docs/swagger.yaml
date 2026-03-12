@@ -870,11 +870,21 @@ definitions:
     type: object
   sale.Sale:
     properties:
+      cancelled_at:
+        type: string
+      cashier_id:
+        type: integer
+      client_session_id:
+        type: string
+      completed_at:
+        type: string
       cost_cents:
         type: integer
       created_at:
         type: string
       created_by:
+        type: integer
+      created_by_user_id:
         type: integer
       customer_id:
         type: integer
@@ -884,10 +894,18 @@ definitions:
         type: integer
       note:
         type: string
-      status:
+      owner_user_id:
+        type: integer
+      register_id:
+        type: integer
+      sale_number:
         type: string
+      status:
+        $ref: '#/definitions/sale.SaleStatus'
       total_cents:
         type: integer
+      updated_at:
+        type: string
       warehouse_id:
         type: integer
     type: object
@@ -927,11 +945,21 @@ definitions:
     type: object
   sale.SaleListItem:
     properties:
+      cancelled_at:
+        type: string
+      cashier_id:
+        type: integer
+      client_session_id:
+        type: string
+      completed_at:
+        type: string
       cost_cents:
         type: integer
       created_at:
         type: string
       created_by:
+        type: integer
+      created_by_user_id:
         type: integer
       customer_id:
         type: integer
@@ -943,13 +971,31 @@ definitions:
         type: integer
       note:
         type: string
-      status:
+      owner_user_id:
+        type: integer
+      register_id:
+        type: integer
+      sale_number:
         type: string
+      status:
+        $ref: '#/definitions/sale.SaleStatus'
       total_cents:
         type: integer
+      updated_at:
+        type: string
       warehouse_id:
         type: integer
     type: object
+  sale.SaleStatus:
+    enum:
+    - DRAFT
+    - COMPLETED
+    - CANCELLED
+    type: string
+    x-enum-varnames:
+    - SaleStatusDraft
+    - SaleStatusCompleted
+    - SaleStatusCancelled
   stock.BulkInItem:
     properties:
       idempotency_key:
@@ -3292,6 +3338,10 @@ paths:
         in: query
         name: created_by
         type: integer
+      - description: 'Filter by status: draft, confirmed, cancelled'
+        in: query
+        name: status
+        type: string
       - description: RFC3339 datetime (inclusive)
         in: query
         name: date_from
@@ -3519,6 +3569,40 @@ paths:
       security:
       - BearerAuth: []
       summary: Confirm sale
+      tags:
+      - Sales
+  /api/sales/{id}/receipt:
+    get:
+      description: Returns an HTML page formatted for an 80mm thermal printer. Uses
+        custom template from receipt settings if configured.
+      parameters:
+      - description: Sale ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: HTML receipt
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Render sale receipt as HTML
       tags:
       - Sales
   /api/stock/balance:

@@ -3,18 +3,34 @@ package sale
 import "time"
 
 // ── Domain ───────────────────────────────────────────────────────────────────
+type SaleStatus string
+
+const (
+	SaleStatusDraft     SaleStatus = "DRAFT"
+	SaleStatusCompleted SaleStatus = "COMPLETED"
+	SaleStatusCancelled SaleStatus = "CANCELLED"
+)
 
 type Sale struct {
-	ID          int64     `json:"id"`
-	WarehouseID int64     `json:"warehouse_id"`
-	CustomerID  *int64    `json:"customer_id,omitempty"`
-	TotalCents  int64     `json:"total_cents"`
-	CostCents   int64     `json:"cost_cents"`
-	ItemsCount  int       `json:"items_count"`
-	Note        *string   `json:"note,omitempty"`
-	CreatedBy   *int64    `json:"created_by,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	Status      string    `json:"status"`
+	ID              int64      `json:"id"`
+	WarehouseID     int64      `json:"warehouse_id"`
+	CustomerID      *int64     `json:"customer_id,omitempty"`
+	TotalCents      int64      `json:"total_cents"`
+	CostCents       int64      `json:"cost_cents"`
+	ItemsCount      int        `json:"items_count"`
+	Note            *string    `json:"note,omitempty"`
+	CreatedBy       *int64     `json:"created_by,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	Status          SaleStatus `json:"status"`
+	CompletedAt     *time.Time `json:"completed_at,omitempty" db:"completed_at"`
+	CancelledAt     *time.Time `json:"cancelled_at,omitempty" db:"cancelled_at"`
+	CashierID       *int64     `json:"cashier_id,omitempty"`
+	RegisterID      *int64     `json:"register_id,omitempty"`
+	SaleNumber      string     `json:"sale_number"`
+	CreatedByUserID int64      `json:"created_by_user_id"`
+	OwnerUserID     int64      `json:"owner_user_id"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	ClientSessionID *string    `json:"client_session_id,omitempty"`
 }
 
 type SaleItem struct {
