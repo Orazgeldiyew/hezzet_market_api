@@ -108,6 +108,7 @@ func main() {
 		Cfg:        cfg,
 		NotifSvc:   notifSvc,
 		NotifQueue: notifQueue,
+		Redis:      rdb,
 	})
 
 	srv := &http.Server{

@@ -103,6 +103,17 @@ func (s *Service) GetSale(ctx context.Context, id int64) (SaleDetail, error) {
 	}, nil
 }
 
+func (s *Service) DeleteSaleItem(ctx context.Context, saleID, itemID int64) (SaleDetail, error) {
+	sale, items, err := s.repo.DeleteSaleItem(ctx, saleID, itemID)
+	if err != nil {
+		if isAppError(err) {
+			return SaleDetail{}, err
+		}
+		return SaleDetail{}, apperr.Internal(err)
+	}
+	return SaleDetail{Sale: sale, Items: items}, nil
+}
+
 func (s *Service) ListSales(
 	ctx context.Context,
 	warehouseID, customerID, createdBy *int64,

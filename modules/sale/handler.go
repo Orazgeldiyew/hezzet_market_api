@@ -232,6 +232,40 @@ func (h *Handler) GetSale(c *gin.Context) {
 	response.OK(c, out)
 }
 
+// DeleteSaleItem godoc
+// @Summary      Delete item from draft sale
+// @Description  Removes a sale item from a draft sale, releases stock reservation, and recalculates totals.
+// @Tags         Sales
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id       path int true "Sale ID"
+// @Param        item_id  path int true "Sale Item ID"
+// @Success      200 {object} response.APIResponse{data=SaleDetail}
+// @Failure      400 {object} response.APIResponse
+// @Failure      404 {object} response.APIResponse
+// @Failure      409 {object} response.APIResponse
+// @Failure      500 {object} response.APIResponse
+// @Router       /api/sales/{id}/items/{item_id} [delete]
+func (h *Handler) DeleteSaleItem(c *gin.Context) {
+	saleID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || saleID <= 0 {
+		c.Error(apperr.Validation("invalid sale id"))
+		return
+	}
+	itemID, err := strconv.ParseInt(c.Param("item_id"), 10, 64)
+	if err != nil || itemID <= 0 {
+		c.Error(apperr.Validation("invalid item id"))
+		return
+	}
+
+	out, err := h.svc.DeleteSaleItem(c.Request.Context(), saleID, itemID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
 // GetReceipt godoc
 // @Summary Render sale receipt as HTML
 // @Description Returns an HTML page formatted for an 80mm thermal printer. Uses custom template from receipt settings if configured.

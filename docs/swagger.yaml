@@ -523,6 +523,24 @@ definitions:
       worker_id:
         type: integer
     type: object
+  permissions.Permission:
+    properties:
+      enabled:
+        type: boolean
+      id:
+        type: integer
+      module:
+        type: string
+      role:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  permissions.UpdatePermissionRequest:
+    properties:
+      enabled:
+        type: boolean
+    type: object
   product.Card:
     properties:
       categories:
@@ -2482,6 +2500,80 @@ paths:
       summary: Export payroll as Excel
       tags:
       - Payroll
+  /api/permissions:
+    get:
+      description: Returns all role-module permissions (enabled/disabled).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/permissions.Permission'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List module permissions
+      tags:
+      - Permissions
+  /api/permissions/{role}/{module}:
+    put:
+      consumes:
+      - application/json
+      description: Enable or disable a module for a specific role. Takes effect immediately
+        (cache invalidated).
+      parameters:
+      - description: Role (cashier, operator, manager)
+        in: path
+        name: role
+        required: true
+        type: string
+      - description: Module name (sales, stock, products, etc.)
+        in: path
+        name: module
+        required: true
+        type: string
+      - description: enabled flag
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/permissions.UpdatePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/permissions.Permission'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update module permission
+      tags:
+      - Permissions
   /api/products:
     get:
       description: Get paginated list of active products with optional search
@@ -3569,6 +3661,54 @@ paths:
       security:
       - BearerAuth: []
       summary: Confirm sale
+      tags:
+      - Sales
+  /api/sales/{id}/items/{item_id}:
+    delete:
+      description: Removes a sale item from a draft sale, releases stock reservation,
+        and recalculates totals.
+      parameters:
+      - description: Sale ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Sale Item ID
+        in: path
+        name: item_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/sale.SaleDetail'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete item from draft sale
       tags:
       - Sales
   /api/sales/{id}/receipt:

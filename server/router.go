@@ -10,6 +10,8 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/Orazgeldiyew/hezzet_market_backend/config"
 	"github.com/Orazgeldiyew/hezzet_market_backend/docs"
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
@@ -22,6 +24,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/notification"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/payroll"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/permissions"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/product"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/purchase"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/sale"
@@ -38,6 +41,7 @@ type Deps struct {
 	Cfg        config.Config
 	NotifSvc   *notification.Service // nil-safe — notifications disabled when nil
 	NotifQueue *notification.Queue   // nil when Redis is not configured
+	Redis      *redis.Client         // nil when Redis is not configured
 }
 
 func NewRouter(deps Deps) *gin.Engine {
@@ -124,23 +128,54 @@ func NewRouter(deps Deps) *gin.Engine {
 	api.Use(middleware.PaginationMiddleware())
 	api.Use(auditMW)
 
-	category.RegisterRoutes(api, deps.DB)
-	product.RegisterRoutes(api, deps.DB, deps.Cfg.UploadsDir, deps.Cfg.PublicBaseURL)
-	supplier.RegisterRoutes(api, deps.DB)
-	customer.RegisterRoutes(api, deps.DB)
-	workers.RegisterRoutes(api, deps.DB)
-	warehouse.RegisterRoutes(api, deps.DB)
-	stock.RegisterRoutes(api, deps.DB, deps.NotifSvc)
-	notification.RegisterRoutes(api, deps.DB, deps.NotifQueue)
+	// ── Permissions module (returns repo for RequireModule middleware) ──
+	permRepo := permissions.RegisterRoutes(api, deps.DB, deps.Redis)
+
+	// helper to create a sub-group with module permission check
+	mod := func(module string) *gin.RouterGroup {
+		g := api.Group("")
+		g.Use(middleware.RequireModule(permRepo, module))
+		return g
+	}
+
+	// ── Products & Categories ──
+	productsGroup := mod("products")
+	category.RegisterRoutes(productsGroup, deps.DB)
+	product.RegisterRoutes(productsGroup, deps.DB, deps.Cfg.UploadsDir, deps.Cfg.PublicBaseURL)
+
+	// ── Stock & Warehouses & Suppliers ──
+	stockGroup := mod("stock")
+	supplier.RegisterRoutes(stockGroup, deps.DB)
+	warehouse.RegisterRoutes(stockGroup, deps.DB)
+	stock.RegisterRoutes(stockGroup, deps.DB, deps.NotifSvc)
+
+	// ── Customers ──
+	customer.RegisterRoutes(mod("customers"), deps.DB)
+
+	// ── Workers & Payroll ──
+	workersGroup := mod("workers")
+	workers.RegisterRoutes(workersGroup, deps.DB)
 	finRepo := finance.NewRepository(deps.DB)
-	finance.RegisterRoutes(api, deps.DB)
-	workerfinance.RegisterRoutes(api, deps.DB, finRepo)
-	payroll.RegisterRoutes(api, deps.DB, finRepo)
+	workerfinance.RegisterRoutes(workersGroup, deps.DB, finRepo)
+	payroll.RegisterRoutes(workersGroup, deps.DB, finRepo)
+
+	// ── Finance ──
+	finance.RegisterRoutes(mod("finance"), deps.DB)
+
+	// ── Sales ──
 	receiptRepo := receiptsettings.RegisterRoutes(api, deps.DB, deps.Cfg)
-	sale.RegisterRoutes(api, deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo)
-	purchase.RegisterRoutes(api, deps.DB, finRepo)
-	auditlog.RegisterRoutes(api, auditRepo)
-	reports.RegisterRoutes(api, deps.DB, deps.Cfg.LowStockDefault)
+	sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo)
+
+	// ── Purchases ──
+	purchase.RegisterRoutes(mod("purchases"), deps.DB, finRepo)
+
+	// ── Reports & Audit ──
+	reportsGroup := mod("reports")
+	auditlog.RegisterRoutes(reportsGroup, auditRepo)
+	reports.RegisterRoutes(reportsGroup, deps.DB, deps.Cfg.LowStockDefault)
+
+	// ── Notifications (admin-only, no module permission needed) ──
+	notification.RegisterRoutes(api, deps.DB, deps.NotifQueue)
 
 	// ── Public receipt route: /receipt/:id?token=JWT ──
 	r.GET("/receipt/:id",

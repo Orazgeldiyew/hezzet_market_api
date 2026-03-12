@@ -45,4 +45,9 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repo
 		middleware.RequireRoles("cashier", "operator", "manager"),
 		h.CancelSale,
 	)
+
+	sales.DELETE("/:id/items/:item_id",
+		middleware.RequireRoles("cashier", "operator", "manager"),
+		h.DeleteSaleItem,
+	)
 }

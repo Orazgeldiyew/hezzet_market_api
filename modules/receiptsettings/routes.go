@@ -19,7 +19,7 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, cfg config.Config) *R
 	h := NewHandler(repo)
 
 	g := rg.Group("/settings/receipt")
-	g.Use(middleware.RequireRoles()) // admin-only
+	g.Use(middleware.RequireRoles("manager")) // admin + manager
 
 	g.GET("", h.GetSettings)
 	g.PUT("", h.UpdateSettings)

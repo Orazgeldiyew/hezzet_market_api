@@ -28,7 +28,7 @@ func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config, auditMid
 		// Admin-only user management
 		admin := g.Group("/users")
 		admin.Use(middleware.AuthRequired(cfg, repo.GetTokenVersion))
-		admin.Use(middleware.RequireRoles()) // empty = admin only
+		admin.Use(middleware.RequireRoles("manager")) // admin + manager
 		admin.Use(auditMiddleware...)
 		{
 			admin.POST("", h.CreateUser)

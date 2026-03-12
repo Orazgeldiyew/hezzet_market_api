@@ -706,6 +706,89 @@ func (r *Repository) GetTransactionIDBySaleID(ctx context.Context, saleID int64)
 	return txnID, err
 }
 
+// ── DeleteSaleItem (draft only: removes item, releases reservation, updates totals) ──
+
+func (r *Repository) DeleteSaleItem(
+	ctx context.Context,
+	saleID int64,
+	itemID int64,
+) (Sale, []SaleItem, error) {
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return Sale{}, nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Lock sale row and check status
+	var status string
+	var itemsCount int
+	err = tx.QueryRow(ctx, `
+		SELECT status, items_count FROM sales WHERE id = $1 FOR UPDATE
+	`, saleID).Scan(&status, &itemsCount)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return Sale{}, nil, apperr.NotFound("SALE_NOT_FOUND", "sale not found")
+		}
+		return Sale{}, nil, err
+	}
+	if status != "draft" {
+		return Sale{}, nil, apperr.Conflict("SALE_NOT_DRAFT", "sale must be in draft status")
+	}
+
+	// 2. Guard: cannot delete last item
+	if itemsCount == 1 {
+		return Sale{}, nil, apperr.Validation("cannot delete the last item from a sale")
+	}
+
+	// 3. Fetch sale item
+	var productID, lineTotalCents int64
+	err = tx.QueryRow(ctx, `
+		SELECT product_id, line_total_cents FROM sale_items WHERE id = $1 AND sale_id = $2
+	`, itemID, saleID).Scan(&productID, &lineTotalCents)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return Sale{}, nil, apperr.NotFound("SALE_ITEM_NOT_FOUND", "sale item not found")
+		}
+		return Sale{}, nil, err
+	}
+
+	// 4. Release stock reservation
+	_, err = tx.Exec(ctx, `
+		UPDATE stock_reservations
+		SET status = 'released', released_at = now()
+		WHERE sale_id = $1 AND product_id = $2 AND status = 'active'
+	`, saleID, productID)
+	if err != nil {
+		return Sale{}, nil, err
+	}
+
+	// 5. Delete sale item
+	_, err = tx.Exec(ctx, `DELETE FROM sale_items WHERE id = $1`, itemID)
+	if err != nil {
+		return Sale{}, nil, err
+	}
+
+	// 6. Update sale header
+	_, err = tx.Exec(ctx, `
+		UPDATE sales SET total_cents = total_cents - $2, items_count = items_count - 1 WHERE id = $1
+	`, saleID, lineTotalCents)
+	if err != nil {
+		return Sale{}, nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Sale{}, nil, err
+	}
+
+	// 7. Refetch updated sale + items (outside TX)
+	sale, items, err := r.GetByID(ctx, saleID)
+	if err != nil {
+		return Sale{}, nil, err
+	}
+	return sale, items, nil
+}
+
 // ── List ─────────────────────────────────────────────────────────────────────
 
 func (r *Repository) List(
