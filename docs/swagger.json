@@ -659,6 +659,58 @@
                 }
             }
         },
+        "/api/customers/by-card/{code}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Find a customer by scanning their QR or barcode (card_code)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Customers"
+                ],
+                "summary": "Get customer by loyalty card code",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card code (QR/barcode)",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/customer.Customer"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/customers/{id}": {
             "get": {
                 "security": [
@@ -1018,6 +1070,221 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/notifications/phones": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all admin phone numbers registered for SMS notifications",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "List notification phones",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/notification.NotificationPhone"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Registers a new phone number to receive SMS notifications",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Add notification phone",
+                "parameters": [
+                    {
+                        "description": "Phone number and optional label",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/notification.AddPhoneRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/notification.NotificationPhone"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/notifications/phones/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates the label and/or enabled status of a notification phone",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Update notification phone",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Phone ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/notification.UpdatePhoneRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/notification.NotificationPhone"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Permanently removes a notification phone number by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Delete notification phone",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Phone ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
                         }
@@ -2781,6 +3048,110 @@
                 }
             }
         },
+        "/api/receipt-settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the current receipt print settings (store name, footer, template, etc.)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ReceiptSettings"
+                ],
+                "summary": "Get receipt settings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/receiptsettings.ReceiptSettings"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates receipt print settings; validates custom Go template syntax if provided",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ReceiptSettings"
+                ],
+                "summary": "Update receipt settings",
+                "parameters": [
+                    {
+                        "description": "Receipt settings to update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/receiptsettings.UpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/receiptsettings.ReceiptSettings"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/reports/dashboard": {
             "get": {
                 "security": [
@@ -3510,6 +3881,20 @@
                         "name": "item_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Confirmation code",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "delete_code": {
+                                    "type": "string"
+                                }
+                            }
+                        }
                     }
                 ],
                 "responses": {
@@ -5419,6 +5804,287 @@
                                     }
                                 }
                             ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/worker-cards": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all worker cards, optionally filtered by worker_id",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WorkerCards"
+                ],
+                "summary": "List worker cards",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Filter by worker ID",
+                        "name": "worker_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/workercard.WorkerCard"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Generates a new card with a unique code for the specified worker",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WorkerCards"
+                ],
+                "summary": "Create a worker card",
+                "parameters": [
+                    {
+                        "description": "Worker ID and optional label",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/workercard.CreateCardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/workercard.WorkerCard"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/worker-cards/by-card/{code}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns an enabled worker card matching the given QR/barcode code",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WorkerCards"
+                ],
+                "summary": "Find worker card by code",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card QR or barcode code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/workercard.WorkerCard"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/worker-cards/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates the label and/or enabled status of a worker card",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WorkerCards"
+                ],
+                "summary": "Update a worker card",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Card ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/workercard.UpdateCardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/workercard.WorkerCard"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Permanently removes a worker card by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WorkerCards"
+                ],
+                "summary": "Delete a worker card",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Card ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
                         }
                     }
                 }
@@ -7469,6 +8135,9 @@
                 "bonus_points": {
                     "type": "integer"
                 },
+                "card_code": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -7728,6 +8397,51 @@
                 },
                 "warehouse_item_detail_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "notification.AddPhoneRequest": {
+            "type": "object",
+            "required": [
+                "phone"
+            ],
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                }
+            }
+        },
+        "notification.NotificationPhone": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                }
+            }
+        },
+        "notification.UpdatePhoneRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "label": {
+                    "type": "string"
                 }
             }
         },
@@ -8118,29 +8832,115 @@
                 }
             }
         },
+        "receiptsettings.ReceiptSettings": {
+            "type": "object",
+            "properties": {
+                "delete_code": {
+                    "type": "string"
+                },
+                "footer": {
+                    "type": "string"
+                },
+                "logo_path": {
+                    "type": "string"
+                },
+                "shop_address": {
+                    "type": "string"
+                },
+                "shop_name": {
+                    "type": "string"
+                },
+                "shop_phone": {
+                    "type": "string"
+                },
+                "template": {
+                    "type": "string"
+                }
+            }
+        },
+        "receiptsettings.UpdateRequest": {
+            "type": "object",
+            "properties": {
+                "delete_code": {
+                    "type": "string"
+                },
+                "footer": {
+                    "type": "string"
+                },
+                "logo_path": {
+                    "type": "string"
+                },
+                "shop_address": {
+                    "type": "string"
+                },
+                "shop_name": {
+                    "type": "string"
+                },
+                "shop_phone": {
+                    "type": "string"
+                },
+                "template": {
+                    "type": "string"
+                }
+            }
+        },
         "reports.DashboardStats": {
             "type": "object",
             "properties": {
                 "low_stock_count": {
                     "type": "integer"
                 },
+                "month": {
+                    "description": "this month vs last month",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reports.PeriodStats"
+                        }
+                    ]
+                },
                 "pending_payroll": {
                     "type": "integer"
                 },
-                "today_orders": {
-                    "type": "integer"
-                },
-                "today_profit_cents": {
-                    "type": "integer"
-                },
-                "today_revenue_cents": {
-                    "type": "integer"
+                "today": {
+                    "description": "today vs yesterday",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reports.PeriodStats"
+                        }
+                    ]
                 },
                 "top_products": {
+                    "description": "top-5 by revenue this week",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/reports.TopProduct"
                     }
+                },
+                "week": {
+                    "description": "this week vs last week",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reports.PeriodStats"
+                        }
+                    ]
+                }
+            }
+        },
+        "reports.PeriodStats": {
+            "type": "object",
+            "properties": {
+                "change_pct": {
+                    "description": "revenue change vs previous same period",
+                    "type": "number"
+                },
+                "orders": {
+                    "type": "integer"
+                },
+                "profit_cents": {
+                    "type": "integer"
+                },
+                "revenue_cents": {
+                    "type": "integer"
                 }
             }
         },
@@ -8277,6 +9077,9 @@
         "sale.ConfirmSaleRequest": {
             "type": "object",
             "properties": {
+                "bonus_used_cents": {
+                    "type": "integer"
+                },
                 "force": {
                     "description": "Force allows confirming even when physical stock is insufficient (deficit sale).\nThe warehouse item qty_milli will go negative.",
                     "type": "boolean"
@@ -8333,12 +9136,18 @@
                 },
                 "warehouse_id": {
                     "type": "integer"
+                },
+                "worker_id": {
+                    "type": "integer"
                 }
             }
         },
         "sale.Sale": {
             "type": "object",
             "properties": {
+                "bonus_used_cents": {
+                    "type": "integer"
+                },
                 "cancelled_at": {
                     "type": "string"
                 },
@@ -8394,6 +9203,9 @@
                     "type": "string"
                 },
                 "warehouse_id": {
+                    "type": "integer"
+                },
+                "worker_id": {
                     "type": "integer"
                 }
             }
@@ -8453,6 +9265,9 @@
         "sale.SaleListItem": {
             "type": "object",
             "properties": {
+                "bonus_used_cents": {
+                    "type": "integer"
+                },
                 "cancelled_at": {
                     "type": "string"
                 },
@@ -8511,6 +9326,9 @@
                     "type": "string"
                 },
                 "warehouse_id": {
+                    "type": "integer"
+                },
+                "worker_id": {
                     "type": "integer"
                 }
             }
@@ -8976,6 +9794,54 @@
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "workercard.CreateCardRequest": {
+            "type": "object",
+            "required": [
+                "worker_id"
+            ],
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "worker_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "workercard.UpdateCardRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "label": {
+                    "type": "string"
+                }
+            }
+        },
+        "workercard.WorkerCard": {
+            "type": "object",
+            "properties": {
+                "card_code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "worker_id": {
+                    "type": "integer"
                 }
             }
         },

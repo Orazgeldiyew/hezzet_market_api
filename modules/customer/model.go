@@ -11,6 +11,7 @@ type Customer struct {
 	Type        string     `json:"type"`
 	TotalSpent  int64      `json:"total_spent"`
 	BonusPoints int64      `json:"bonus_points"`
+	CardCode    string     `json:"card_code"`
 	IsActive    bool       `json:"is_active"`
 	Notes       string     `json:"notes"`
 	CreatedAt   time.Time  `json:"created_at"`

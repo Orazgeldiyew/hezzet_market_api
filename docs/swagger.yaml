@@ -307,6 +307,8 @@ definitions:
     properties:
       bonus_points:
         type: integer
+      card_code:
+        type: string
       created_at:
         type: string
       deleted_at:
@@ -480,6 +482,35 @@ definitions:
         type: string
       warehouse_item_detail_id:
         type: integer
+    type: object
+  notification.AddPhoneRequest:
+    properties:
+      label:
+        type: string
+      phone:
+        type: string
+    required:
+    - phone
+    type: object
+  notification.NotificationPhone:
+    properties:
+      created_at:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: integer
+      label:
+        type: string
+      phone:
+        type: string
+    type: object
+  notification.UpdatePhoneRequest:
+    properties:
+      enabled:
+        type: boolean
+      label:
+        type: string
     type: object
   payroll.CalculateRequest:
     properties:
@@ -739,22 +770,75 @@ definitions:
     - supplier_id
     - warehouse_id
     type: object
+  receiptsettings.ReceiptSettings:
+    properties:
+      delete_code:
+        type: string
+      footer:
+        type: string
+      logo_path:
+        type: string
+      shop_address:
+        type: string
+      shop_name:
+        type: string
+      shop_phone:
+        type: string
+      template:
+        type: string
+    type: object
+  receiptsettings.UpdateRequest:
+    properties:
+      delete_code:
+        type: string
+      footer:
+        type: string
+      logo_path:
+        type: string
+      shop_address:
+        type: string
+      shop_name:
+        type: string
+      shop_phone:
+        type: string
+      template:
+        type: string
+    type: object
   reports.DashboardStats:
     properties:
       low_stock_count:
         type: integer
+      month:
+        allOf:
+        - $ref: '#/definitions/reports.PeriodStats'
+        description: this month vs last month
       pending_payroll:
         type: integer
-      today_orders:
-        type: integer
-      today_profit_cents:
-        type: integer
-      today_revenue_cents:
-        type: integer
+      today:
+        allOf:
+        - $ref: '#/definitions/reports.PeriodStats'
+        description: today vs yesterday
       top_products:
+        description: top-5 by revenue this week
         items:
           $ref: '#/definitions/reports.TopProduct'
         type: array
+      week:
+        allOf:
+        - $ref: '#/definitions/reports.PeriodStats'
+        description: this week vs last week
+    type: object
+  reports.PeriodStats:
+    properties:
+      change_pct:
+        description: revenue change vs previous same period
+        type: number
+      orders:
+        type: integer
+      profit_cents:
+        type: integer
+      revenue_cents:
+        type: integer
     type: object
   reports.SalesPeriodRow:
     properties:
@@ -843,6 +927,8 @@ definitions:
     type: object
   sale.ConfirmSaleRequest:
     properties:
+      bonus_used_cents:
+        type: integer
       force:
         description: |-
           Force allows confirming even when physical stock is insufficient (deficit sale).
@@ -882,12 +968,16 @@ definitions:
         type: string
       warehouse_id:
         type: integer
+      worker_id:
+        type: integer
     required:
     - items
     - warehouse_id
     type: object
   sale.Sale:
     properties:
+      bonus_used_cents:
+        type: integer
       cancelled_at:
         type: string
       cashier_id:
@@ -926,6 +1016,8 @@ definitions:
         type: string
       warehouse_id:
         type: integer
+      worker_id:
+        type: integer
     type: object
   sale.SaleDetail:
     properties:
@@ -963,6 +1055,8 @@ definitions:
     type: object
   sale.SaleListItem:
     properties:
+      bonus_used_cents:
+        type: integer
       cancelled_at:
         type: string
       cashier_id:
@@ -1002,6 +1096,8 @@ definitions:
       updated_at:
         type: string
       warehouse_id:
+        type: integer
+      worker_id:
         type: integer
     type: object
   sale.SaleStatus:
@@ -1323,6 +1419,37 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  workercard.CreateCardRequest:
+    properties:
+      label:
+        type: string
+      worker_id:
+        type: integer
+    required:
+    - worker_id
+    type: object
+  workercard.UpdateCardRequest:
+    properties:
+      enabled:
+        type: boolean
+      label:
+        type: string
+    type: object
+  workercard.WorkerCard:
+    properties:
+      card_code:
+        type: string
+      created_at:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: integer
+      label:
+        type: string
+      worker_id:
+        type: integer
     type: object
   workerfinance.CreateDebtRequest:
     properties:
@@ -2146,6 +2273,164 @@ paths:
       summary: Add spent amount
       tags:
       - Customers
+  /api/customers/by-card/{code}:
+    get:
+      description: Find a customer by scanning their QR or barcode (card_code)
+      parameters:
+      - description: Card code (QR/barcode)
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/customer.Customer'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get customer by loyalty card code
+      tags:
+      - Customers
+  /api/notifications/phones:
+    get:
+      description: Returns all admin phone numbers registered for SMS notifications
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/notification.NotificationPhone'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List notification phones
+      tags:
+      - Notifications
+    post:
+      consumes:
+      - application/json
+      description: Registers a new phone number to receive SMS notifications
+      parameters:
+      - description: Phone number and optional label
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/notification.AddPhoneRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/notification.NotificationPhone'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Add notification phone
+      tags:
+      - Notifications
+  /api/notifications/phones/{id}:
+    delete:
+      description: Permanently removes a notification phone number by ID
+      parameters:
+      - description: Phone ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete notification phone
+      tags:
+      - Notifications
+    put:
+      consumes:
+      - application/json
+      description: Updates the label and/or enabled status of a notification phone
+      parameters:
+      - description: Phone ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/notification.UpdatePhoneRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/notification.NotificationPhone'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update notification phone
+      tags:
+      - Notifications
   /api/notifications/sms:
     get:
       description: List SMS audit logs with filters and pagination (admin only).
@@ -3234,6 +3519,68 @@ paths:
       summary: Supplier debt summary
       tags:
       - PurchaseOrders
+  /api/receipt-settings:
+    get:
+      description: Returns the current receipt print settings (store name, footer,
+        template, etc.)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/receiptsettings.ReceiptSettings'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get receipt settings
+      tags:
+      - ReceiptSettings
+    put:
+      consumes:
+      - application/json
+      description: Updates receipt print settings; validates custom Go template syntax
+        if provided
+      parameters:
+      - description: Receipt settings to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/receiptsettings.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/receiptsettings.ReceiptSettings'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update receipt settings
+      tags:
+      - ReceiptSettings
   /api/reports/dashboard:
     get:
       description: Returns today's sales, low-stock count, pending payroll, and top
@@ -3678,6 +4025,15 @@ paths:
         name: item_id
         required: true
         type: integer
+      - description: Confirmation code
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            delete_code:
+              type: string
+          type: object
       produces:
       - application/json
       responses:
@@ -4820,6 +5176,173 @@ paths:
       summary: Get warehouse by ID
       tags:
       - Warehouses
+  /api/worker-cards:
+    get:
+      description: Returns all worker cards, optionally filtered by worker_id
+      parameters:
+      - description: Filter by worker ID
+        in: query
+        name: worker_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/workercard.WorkerCard'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List worker cards
+      tags:
+      - WorkerCards
+    post:
+      consumes:
+      - application/json
+      description: Generates a new card with a unique code for the specified worker
+      parameters:
+      - description: Worker ID and optional label
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/workercard.CreateCardRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/workercard.WorkerCard'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a worker card
+      tags:
+      - WorkerCards
+  /api/worker-cards/{id}:
+    delete:
+      description: Permanently removes a worker card by ID
+      parameters:
+      - description: Card ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a worker card
+      tags:
+      - WorkerCards
+    put:
+      consumes:
+      - application/json
+      description: Updates the label and/or enabled status of a worker card
+      parameters:
+      - description: Card ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/workercard.UpdateCardRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/workercard.WorkerCard'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a worker card
+      tags:
+      - WorkerCards
+  /api/worker-cards/by-card/{code}:
+    get:
+      description: Returns an enabled worker card matching the given QR/barcode code
+      parameters:
+      - description: Card QR or barcode code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/workercard.WorkerCard'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Find worker card by code
+      tags:
+      - WorkerCards
   /api/workers:
     get:
       description: Get paginated list of workers. By default returns only active;

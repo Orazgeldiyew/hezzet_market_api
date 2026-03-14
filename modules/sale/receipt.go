@@ -18,20 +18,22 @@ import (
 
 // ReceiptData holds all variables available in receipt templates.
 type ReceiptData struct {
-	ShopName      string
-	ShopAddress   string
-	ShopPhone     string
-	LogoURL       string
-	Footer        string
-	SaleID        int64
-	Date          string
-	Status        string
-	CashierName   string
-	WarehouseName string
-	CustomerName  string
-	TotalCents    int64
-	Note          string
-	Items         []ReceiptItem
+	ShopName       string
+	ShopAddress    string
+	ShopPhone      string
+	LogoURL        string
+	Footer         string
+	SaleID         int64
+	Date           string
+	Status         string
+	CashierName    string
+	WarehouseName  string
+	CustomerName   string
+	TotalCents     int64
+	BonusUsedCents int64
+	WorkerName     string
+	Note           string
+	Items          []ReceiptItem
 }
 
 // ReceiptItem is a line item for the receipt template.
@@ -130,6 +132,8 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
 
   <hr>
   <div class="total-line"><span>ИТОГО:</span><span>{{money .TotalCents}} TMT</span></div>
+  {{if gt .BonusUsedCents 0}}<div class="meta">Бонус: -{{money .BonusUsedCents}} TMT</div>{{end}}
+  {{if .WorkerName}}<div class="meta">Работник (кредит): {{.WorkerName}}</div>{{end}}
   {{if .Note}}<div class="meta">Примечание: {{.Note}}</div>{{end}}
 
   {{if .Footer}}<hr><div class="center footer">{{.Footer}}</div>{{end}}
@@ -159,7 +163,7 @@ func RenderReceipt(data ReceiptData, customTemplate string) (string, error) {
 
 // ReceiptHandler returns a gin.HandlerFunc for the public /receipt/:id route.
 func ReceiptHandler(db *pgxpool.Pool, baseURL string, receiptRepo *receiptsettings.Repository) gin.HandlerFunc {
-	repo := NewRepository(db, baseURL)
+	repo := NewRepository(db, baseURL, nil)
 
 	return func(c *gin.Context) {
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -208,20 +212,22 @@ func ReceiptHandler(db *pgxpool.Pool, baseURL string, receiptRepo *receiptsettin
 		}
 
 		data := ReceiptData{
-			ShopName:      settings.ShopName,
-			ShopAddress:   settings.ShopAddress,
-			ShopPhone:     settings.ShopPhone,
-			LogoURL:       logoURL,
-			Footer:        settings.Footer,
-			SaleID:        saleRow.ID,
-			Date:          saleRow.CreatedAt.Format("02.01.2006 15:04"),
-			Status:        string(saleRow.Status),
-			CashierName:   saleRow.CashierName,
-			WarehouseName: saleRow.WarehouseName,
-			CustomerName:  saleRow.CustomerName,
-			TotalCents:    saleRow.TotalCents,
-			Note:          note,
-			Items:         receiptItems,
+			ShopName:       settings.ShopName,
+			ShopAddress:    settings.ShopAddress,
+			ShopPhone:      settings.ShopPhone,
+			LogoURL:        logoURL,
+			Footer:         settings.Footer,
+			SaleID:         saleRow.ID,
+			Date:           saleRow.CreatedAt.Format("02.01.2006 15:04"),
+			Status:         string(saleRow.Status),
+			CashierName:    saleRow.CashierName,
+			WarehouseName:  saleRow.WarehouseName,
+			CustomerName:   saleRow.CustomerName,
+			TotalCents:     saleRow.TotalCents,
+			BonusUsedCents: saleRow.BonusUsedCents,
+			WorkerName:     saleRow.WorkerName,
+			Note:           note,
+			Items:          receiptItems,
 		}
 
 		html, err := RenderReceipt(data, settings.Template)

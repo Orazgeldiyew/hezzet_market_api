@@ -28,6 +28,9 @@ func PaginationMiddleware() gin.HandlerFunc {
 		}
 
 		offset := (page - 1) * limit
+		if offset > 100_000 {
+			offset = 100_000
+		}
 
 		p := Pagination{
 			Page:   page,

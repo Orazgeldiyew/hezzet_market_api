@@ -15,8 +15,10 @@ type Sale struct {
 	ID              int64      `json:"id"`
 	WarehouseID     int64      `json:"warehouse_id"`
 	CustomerID      *int64     `json:"customer_id,omitempty"`
+	WorkerID        *int64     `json:"worker_id,omitempty"`
 	TotalCents      int64      `json:"total_cents"`
 	CostCents       int64      `json:"cost_cents"`
+	BonusUsedCents  int64      `json:"bonus_used_cents"`
 	ItemsCount      int        `json:"items_count"`
 	Note            *string    `json:"note,omitempty"`
 	CreatedBy       *int64     `json:"created_by,omitempty"`
@@ -56,6 +58,7 @@ type CreateSaleItemRequest struct {
 type CreateSaleRequest struct {
 	WarehouseID int64                   `json:"warehouse_id" binding:"required,gt=0"`
 	CustomerID  *int64                  `json:"customer_id"`
+	WorkerID    *int64                  `json:"worker_id"`
 	Items       []CreateSaleItemRequest `json:"items" binding:"required,min=1,dive"`
 	Note        *string                 `json:"note"`
 	// Force allows selling even when available stock is insufficient (deficit sale).
@@ -63,9 +66,10 @@ type CreateSaleRequest struct {
 }
 
 type ConfirmSaleRequest struct {
-	PaymentTypeID *int64  `json:"payment_type_id"`
-	PaymentAmount *int64  `json:"payment_amount"`
-	PaymentNote   *string `json:"payment_note"`
+	PaymentTypeID  *int64  `json:"payment_type_id"`
+	PaymentAmount  *int64  `json:"payment_amount"`
+	PaymentNote    *string `json:"payment_note"`
+	BonusUsedCents *int64  `json:"bonus_used_cents"`
 	// Force allows confirming even when physical stock is insufficient (deficit sale).
 	// The warehouse item qty_milli will go negative.
 	Force bool `json:"force"`

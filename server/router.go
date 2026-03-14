@@ -31,17 +31,19 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/stock"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/supplier"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/warehouse"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workercard"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workerfinance"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workers"
 	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/response"
 )
 
 type Deps struct {
-	DB         *pgxpool.Pool
-	Cfg        config.Config
-	NotifSvc   *notification.Service // nil-safe — notifications disabled when nil
-	NotifQueue *notification.Queue   // nil when Redis is not configured
-	Redis      *redis.Client         // nil when Redis is not configured
+	DB             *pgxpool.Pool
+	Cfg            config.Config
+	NotifSvc       *notification.Service    // nil-safe — notifications disabled when nil
+	NotifQueue     *notification.Queue      // nil when Redis is not configured
+	Redis          *redis.Client            // nil when Redis is not configured
+	NotifPhoneRepo *notification.PhoneRepository // for phone management API
 }
 
 func NewRouter(deps Deps) *gin.Engine {
@@ -150,6 +152,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	stock.RegisterRoutes(stockGroup, deps.DB, deps.NotifSvc)
 
 	// ── Customers ──
+	customerRepo := customer.NewRepository(deps.DB)
 	customer.RegisterRoutes(mod("customers"), deps.DB)
 
 	// ── Workers & Payroll ──
@@ -164,7 +167,7 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	// ── Sales ──
 	receiptRepo := receiptsettings.RegisterRoutes(api, deps.DB, deps.Cfg)
-	sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo)
+	sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo, customerRepo)
 
 	// ── Purchases ──
 	purchase.RegisterRoutes(mod("purchases"), deps.DB, finRepo)
@@ -174,8 +177,11 @@ func NewRouter(deps Deps) *gin.Engine {
 	auditlog.RegisterRoutes(reportsGroup, auditRepo)
 	reports.RegisterRoutes(reportsGroup, deps.DB, deps.Cfg.LowStockDefault)
 
+	// ── Worker Cards (credit card management) ──
+	workercard.RegisterRoutes(api, deps.DB)
+
 	// ── Notifications (admin-only, no module permission needed) ──
-	notification.RegisterRoutes(api, deps.DB, deps.NotifQueue)
+	notification.RegisterRoutes(api, deps.DB, deps.NotifQueue, deps.NotifPhoneRepo)
 
 	// ── Public receipt route: /receipt/:id?token=JWT ──
 	r.GET("/receipt/:id",

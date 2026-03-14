@@ -58,6 +58,9 @@ func (s *Service) ConfirmSale(ctx context.Context, saleID int64, req ConfirmSale
 			return SaleDetail{}, apperr.Validation("payment_amount must be positive")
 		}
 	}
+	if req.BonusUsedCents != nil && *req.BonusUsedCents < 0 {
+		return SaleDetail{}, apperr.Validation("bonus_used_cents must be non-negative")
+	}
 
 	_, err := s.repo.ConfirmSale(ctx, saleID, req, userID, s.finRepo)
 	if err != nil {

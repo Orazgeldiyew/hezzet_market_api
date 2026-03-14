@@ -185,23 +185,27 @@ func (r *Repository) LockTransaction(ctx context.Context, tx pgx.Tx, id int64) (
 }
 
 // SetCanceled sets status to 'canceled'. Returns the updated row.
+// Returns CONFLICT error if the transaction is already fully paid.
 func (r *Repository) SetCanceled(ctx context.Context, id int64) (Transaction, error) {
 	t, err := scanTransaction(r.db.QueryRow(ctx, `
 		UPDATE transactions
 		SET status = 'canceled'
-		WHERE id = $1 AND status != 'canceled'
+		WHERE id = $1 AND status NOT IN ('canceled', 'paid')
 		RETURNING `+transactionCols,
 		id,
 	))
 	if err != nil {
 		if isNotFound(err) {
-			// Could be already canceled or truly not found — check
+			// Could be already canceled/paid or truly not found — check
 			existing, err2 := r.GetByID(ctx, id)
 			if err2 != nil {
 				if isNotFound(err2) {
 					return Transaction{}, apperr.NotFound("TRANSACTION_NOT_FOUND", "transaction not found")
 				}
 				return Transaction{}, err2
+			}
+			if existing.Status == "paid" {
+				return Transaction{}, apperr.Conflict("TRANSACTION_PAID", "cannot cancel a fully paid transaction")
 			}
 			// Already canceled — return idempotently
 			return existing, nil

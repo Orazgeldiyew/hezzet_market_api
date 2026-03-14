@@ -12,10 +12,10 @@ func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.MaxConns = 10
-	cfg.MinConns = 2
-	cfg.MaxConnLifetime = 30 * time.Minute
-	cfg.MaxConnIdleTime = 5 * time.Minute
+	cfg.MaxConns = 25
+	cfg.MinConns = 5
+	cfg.MaxConnLifetime = 15 * time.Minute
+	cfg.MaxConnIdleTime = 10 * time.Minute
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

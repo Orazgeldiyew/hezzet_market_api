@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -45,8 +46,12 @@ func (r *Repository) IsEnabled(ctx context.Context, role, module string) (bool, 
 		role, module,
 	).Scan(&enabled)
 	if err != nil {
-		// Row not found means no explicit permission → default allow
-		return true, nil
+		if err == pgx.ErrNoRows {
+			// No explicit permission row → default allow
+			return true, nil
+		}
+		// Real DB error (connection, timeout, etc.) → deny access, don't silently allow
+		return false, err
 	}
 
 	// 3. Cache result

@@ -245,6 +245,7 @@ func (h *Handler) GetSale(c *gin.Context) {
 // @Failure      404 {object} response.APIResponse
 // @Failure      409 {object} response.APIResponse
 // @Failure      500 {object} response.APIResponse
+// @Param        body     body object{delete_code=string} true "Confirmation code"
 // @Router       /api/sales/{id}/items/{item_id} [delete]
 func (h *Handler) DeleteSaleItem(c *gin.Context) {
 	saleID, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -255,6 +256,24 @@ func (h *Handler) DeleteSaleItem(c *gin.Context) {
 	itemID, err := strconv.ParseInt(c.Param("item_id"), 10, 64)
 	if err != nil || itemID <= 0 {
 		c.Error(apperr.Validation("invalid item id"))
+		return
+	}
+
+	var body struct {
+		DeleteCode string `json:"delete_code"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.DeleteCode == "" {
+		c.Error(apperr.Validation("delete_code is required"))
+		return
+	}
+
+	storedCode, err := h.receiptRepo.GetDeleteCode(c.Request.Context())
+	if err != nil {
+		c.Error(apperr.Internal(err))
+		return
+	}
+	if body.DeleteCode != storedCode {
+		c.Error(apperr.Forbidden("invalid delete code"))
 		return
 	}
 

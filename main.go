@@ -71,8 +71,9 @@ func main() {
 		}
 	}
 
-	// SMS audit log repository (always created if db is available).
+	// SMS repositories (always created — DB is always available).
 	notifLogRepo := notification.NewLogRepository(db)
+	notifPhoneRepo := notification.NewPhoneRepository(db)
 
 	var notifQueue *notification.Queue
 
@@ -96,6 +97,7 @@ func main() {
 		notifSvc = notification.NewService(
 			notifQueue, notifLogRepo, cfg.AdminPhones, cfg.SMSFrom,
 			provider.Name(), cfg.LowStockDefault, cfg.LowStockDedupTTL,
+			notifPhoneRepo,
 		)
 
 		notification.StartWorkers(ctx, cfg.SMSWorkers, notifQueue, provider, cfg.SMSFrom, notifLogRepo)
@@ -104,11 +106,12 @@ func main() {
 
 	// ── Router + HTTP server ────────────────────────────────────────────────
 	r := server.NewRouter(server.Deps{
-		DB:         db,
-		Cfg:        cfg,
-		NotifSvc:   notifSvc,
-		NotifQueue: notifQueue,
-		Redis:      rdb,
+		DB:             db,
+		Cfg:            cfg,
+		NotifSvc:       notifSvc,
+		NotifQueue:     notifQueue,
+		Redis:          rdb,
+		NotifPhoneRepo: notifPhoneRepo,
 	})
 
 	srv := &http.Server{

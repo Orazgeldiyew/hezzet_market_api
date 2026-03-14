@@ -17,33 +17,94 @@ func NewRepository(db *pgxpool.Pool, lowStockDefault int64) *Repository {
 	return &Repository{db: db, lowStockThresh: lowStockDefault * 1000}
 }
 
-// Dashboard returns today's sales stats, low-stock count, pending payroll count,
-// and the top-5 products by revenue for the current ISO week.
+// Dashboard returns sales stats for today/week/month with comparison to previous
+// periods, low-stock count, pending payroll, and top-5 products this week.
 func (r *Repository) Dashboard(ctx context.Context) (*DashboardStats, error) {
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	yesterdayStart := todayStart.AddDate(0, 0, -1)
 
-	// weekday: Monday=0 offset
 	weekday := int(now.Weekday())
 	if weekday == 0 {
-		weekday = 7 // Sunday → treat as 7 so Monday is start
+		weekday = 7
 	}
 	weekStart := todayStart.AddDate(0, 0, -(weekday - 1))
+	lastWeekStart := weekStart.AddDate(0, 0, -7)
+
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	lastMonthStart := monthStart.AddDate(0, -1, 0)
 
 	stats := &DashboardStats{}
 
-	// 1. Today's revenue, profit, orders (confirmed sales only)
-	var costCents int64
-	if err := r.db.QueryRow(ctx,
-		`SELECT COALESCE(SUM(total_cents),0), COALESCE(SUM(cost_cents),0), COUNT(*)
-		 FROM sales WHERE created_at >= $1 AND status = 'confirmed'`,
-		todayStart,
-	).Scan(&stats.TodayRevenueCents, &costCents, &stats.TodayOrders); err != nil {
+	// 1. All period aggregations in one query (confirmed sales only).
+	//    Boundaries: $1=todayStart $2=yesterdayStart $3=weekStart
+	//                $4=lastWeekStart $5=monthStart $6=lastMonthStart
+	var (
+		todayRev, todayCost         int64
+		yesterdayRev, yesterdayCost int64
+		weekRev, weekCost           int64
+		lastWeekRev, lastWeekCost   int64
+		monthRev, monthCost         int64
+		lastMonthRev, lastMonthCost int64
+		todayOrders, yesterdayOrders,
+		weekOrders, lastWeekOrders,
+		monthOrders, lastMonthOrders int
+	)
+	err := r.db.QueryRow(ctx, `
+		SELECT
+		  COALESCE(SUM(CASE WHEN created_at >= $1                        THEN total_cents END), 0),
+		  COALESCE(SUM(CASE WHEN created_at >= $1                        THEN cost_cents  END), 0),
+		  COUNT(   CASE WHEN created_at >= $1                            THEN 1           END),
+		  COALESCE(SUM(CASE WHEN created_at >= $2 AND created_at < $1    THEN total_cents END), 0),
+		  COALESCE(SUM(CASE WHEN created_at >= $2 AND created_at < $1    THEN cost_cents  END), 0),
+		  COUNT(   CASE WHEN created_at >= $2 AND created_at < $1        THEN 1           END),
+		  COALESCE(SUM(CASE WHEN created_at >= $3                        THEN total_cents END), 0),
+		  COALESCE(SUM(CASE WHEN created_at >= $3                        THEN cost_cents  END), 0),
+		  COUNT(   CASE WHEN created_at >= $3                            THEN 1           END),
+		  COALESCE(SUM(CASE WHEN created_at >= $4 AND created_at < $3    THEN total_cents END), 0),
+		  COALESCE(SUM(CASE WHEN created_at >= $4 AND created_at < $3    THEN cost_cents  END), 0),
+		  COUNT(   CASE WHEN created_at >= $4 AND created_at < $3        THEN 1           END),
+		  COALESCE(SUM(CASE WHEN created_at >= $5                        THEN total_cents END), 0),
+		  COALESCE(SUM(CASE WHEN created_at >= $5                        THEN cost_cents  END), 0),
+		  COUNT(   CASE WHEN created_at >= $5                            THEN 1           END),
+		  COALESCE(SUM(CASE WHEN created_at >= $6 AND created_at < $5    THEN total_cents END), 0),
+		  COALESCE(SUM(CASE WHEN created_at >= $6 AND created_at < $5    THEN cost_cents  END), 0),
+		  COUNT(   CASE WHEN created_at >= $6 AND created_at < $5        THEN 1           END)
+		FROM sales
+		WHERE status = 'confirmed' AND created_at >= $6`,
+		todayStart, yesterdayStart, weekStart, lastWeekStart, monthStart, lastMonthStart,
+	).Scan(
+		&todayRev, &todayCost, &todayOrders,
+		&yesterdayRev, &yesterdayCost, &yesterdayOrders,
+		&weekRev, &weekCost, &weekOrders,
+		&lastWeekRev, &lastWeekCost, &lastWeekOrders,
+		&monthRev, &monthCost, &monthOrders,
+		&lastMonthRev, &lastMonthCost, &lastMonthOrders,
+	)
+	if err != nil {
 		return nil, err
 	}
-	stats.TodayProfitCents = stats.TodayRevenueCents - costCents
 
-	// 2. Low-stock count (active products only)
+	stats.Today = PeriodStats{
+		RevenueCents: todayRev,
+		ProfitCents:  todayRev - todayCost,
+		Orders:       todayOrders,
+		ChangePct:    changePct(todayRev, yesterdayRev),
+	}
+	stats.Week = PeriodStats{
+		RevenueCents: weekRev,
+		ProfitCents:  weekRev - weekCost,
+		Orders:       weekOrders,
+		ChangePct:    changePct(weekRev, lastWeekRev),
+	}
+	stats.Month = PeriodStats{
+		RevenueCents: monthRev,
+		ProfitCents:  monthRev - monthCost,
+		Orders:       monthOrders,
+		ChangePct:    changePct(monthRev, lastMonthRev),
+	}
+
+	// 2. Low-stock count
 	if err := r.db.QueryRow(ctx,
 		`SELECT COUNT(*)
 		 FROM warehouse_items wi
@@ -54,14 +115,14 @@ func (r *Repository) Dashboard(ctx context.Context) (*DashboardStats, error) {
 		return nil, err
 	}
 
-	// 3. Pending payroll (status = 'calculated')
+	// 3. Pending payroll
 	if err := r.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM payroll_runs WHERE status = 'calculated'`,
 	).Scan(&stats.PendingPayroll); err != nil {
 		return nil, err
 	}
 
-	// 4. Top 5 products by revenue this week (confirmed sales only)
+	// 4. Top 5 products by revenue this week
 	rows, err := r.db.Query(ctx,
 		`SELECT p.id, p.name, SUM(si.line_total_cents) AS rev
 		 FROM sale_items si
@@ -87,6 +148,18 @@ func (r *Repository) Dashboard(ctx context.Context) (*DashboardStats, error) {
 		stats.TopProducts = append(stats.TopProducts, tp)
 	}
 	return stats, rows.Err()
+}
+
+// changePct returns revenue percentage change: (current - previous) / previous * 100.
+// Returns +100 if previous was 0 but current > 0; 0 if both are 0.
+func changePct(current, previous int64) float64 {
+	if previous == 0 {
+		if current > 0 {
+			return 100
+		}
+		return 0
+	}
+	return float64(current-previous) / float64(previous) * 100
 }
 
 // validGroupBy is the whitelist for group_by values to prevent SQL injection.

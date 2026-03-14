@@ -228,6 +228,26 @@ type AddSpentRequest struct {
 	AmountCents int64 `json:"amount_cents" binding:"required,gt=0"`
 }
 
+// GetByCard godoc
+// @Summary      Get customer by loyalty card code
+// @Description  Find a customer by scanning their QR or barcode (card_code)
+// @Tags         Customers
+// @Produce      json
+// @Security     BearerAuth
+// @Param        code  path      string  true  "Card code (QR/barcode)"
+// @Success      200   {object}  response.APIResponse{data=Customer}
+// @Failure      404   {object}  response.APIResponse
+// @Router       /api/customers/by-card/{code} [get]
+func (h *Handler) GetByCard(c *gin.Context) {
+	code := c.Param("code")
+	out, err := h.svc.GetByCardCode(c.Request.Context(), code)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
 // UpdateContact godoc
 // @Summary      Update customer contact fields
 // @Description  Update name/phone/email/notes (cashier/operator/manager)

@@ -12,17 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customer"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
 type Repository struct {
-	db      *pgxpool.Pool
-	baseURL string // PUBLIC_BASE_URL for building product photo URLs
+	db           *pgxpool.Pool
+	baseURL      string // PUBLIC_BASE_URL for building product photo URLs
+	customerRepo *customer.Repository
 }
 
-func NewRepository(db *pgxpool.Pool, baseURL string) *Repository {
-	return &Repository{db: db, baseURL: baseURL}
+func NewRepository(db *pgxpool.Pool, baseURL string, customerRepo *customer.Repository) *Repository {
+	return &Repository{db: db, baseURL: baseURL, customerRepo: customerRepo}
 }
 
 // photoURL converts a nullable product photo_path to a full public URL.
@@ -36,15 +38,15 @@ func (r *Repository) photoURL(path *string) *string {
 
 // ── column constants ─────────────────────────────────────────────────────────
 
-const saleCols = `id, warehouse_id, customer_id, total_cents, cost_cents, items_count, note, created_by, created_at, status`
+const saleCols = `id, warehouse_id, customer_id, worker_id, total_cents, cost_cents, bonus_used_cents, items_count, note, created_by, created_at, status`
 
 // ── scan helpers ─────────────────────────────────────────────────────────────
 
 func scanSale(row pgx.Row) (Sale, error) {
 	var s Sale
 	err := row.Scan(
-		&s.ID, &s.WarehouseID, &s.CustomerID, &s.TotalCents,
-		&s.CostCents, &s.ItemsCount, &s.Note, &s.CreatedBy, &s.CreatedAt,
+		&s.ID, &s.WarehouseID, &s.CustomerID, &s.WorkerID, &s.TotalCents,
+		&s.CostCents, &s.BonusUsedCents, &s.ItemsCount, &s.Note, &s.CreatedBy, &s.CreatedAt,
 		&s.Status,
 	)
 	return s, err
@@ -118,10 +120,10 @@ func (r *Repository) CreateSale(
 
 	// 3. Insert sale header (status='draft', cost_cents=0)
 	sale, err := scanSale(tx.QueryRow(ctx, `
-		INSERT INTO sales (warehouse_id, customer_id, total_cents, cost_cents, items_count, note, created_by, status)
-		VALUES ($1, $2, $3, 0, $4, $5, $6, 'draft')
+		INSERT INTO sales (warehouse_id, customer_id, worker_id, total_cents, cost_cents, items_count, note, created_by, status)
+		VALUES ($1, $2, $3, $4, 0, $5, $6, $7, 'draft')
 		RETURNING `+saleCols,
-		req.WarehouseID, req.CustomerID, totalCents, len(req.Items), req.Note, uid,
+		req.WarehouseID, req.CustomerID, req.WorkerID, totalCents, len(req.Items), req.Note, uid,
 	))
 	if err != nil {
 		if isFKViolation(err) {
@@ -252,9 +254,11 @@ func (r *Repository) ConfirmSale(
 	// 1. Lock sale row and check status
 	var status string
 	var totalCents int64
+	var saleCustomerID *int64
+	var saleWorkerID *int64
 	err = tx.QueryRow(ctx, `
-		SELECT status, total_cents FROM sales WHERE id = $1 FOR UPDATE
-	`, saleID).Scan(&status, &totalCents)
+		SELECT status, total_cents, customer_id, worker_id FROM sales WHERE id = $1 FOR UPDATE
+	`, saleID).Scan(&status, &totalCents, &saleCustomerID, &saleWorkerID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return Sale{}, apperr.NotFound("SALE_NOT_FOUND", "sale not found")
@@ -263,6 +267,21 @@ func (r *Repository) ConfirmSale(
 	}
 	if status != "draft" {
 		return Sale{}, apperr.Conflict("SALE_NOT_DRAFT", "sale is not in draft status")
+	}
+
+	// 1b. Validate and deduct bonus points if requested
+	bonusUsed := int64(0)
+	if req.BonusUsedCents != nil && *req.BonusUsedCents > 0 {
+		bonusUsed = *req.BonusUsedCents
+		if saleCustomerID == nil {
+			return Sale{}, apperr.Validation("bonus redemption requires a customer on the sale")
+		}
+		if bonusUsed > totalCents {
+			return Sale{}, apperr.Validation("bonus_used_cents exceeds sale total")
+		}
+		if err := r.customerRepo.DeductBonus(ctx, tx, *saleCustomerID, bonusUsed); err != nil {
+			return Sale{}, err
+		}
 	}
 
 	// 2. Get active reservations (sorted by product_id to avoid deadlocks)
@@ -371,19 +390,21 @@ func (r *Repository) ConfirmSale(
 
 	// 4. Update sale to confirmed
 	sale, err := scanSale(tx.QueryRow(ctx, `
-		UPDATE sales SET status = 'confirmed', cost_cents = $2 WHERE id = $1
+		UPDATE sales SET status = 'confirmed', cost_cents = $2, bonus_used_cents = $3 WHERE id = $1
 		RETURNING `+saleCols,
-		saleID, totalCostCents,
+		saleID, totalCostCents, bonusUsed,
 	))
 	if err != nil {
 		return Sale{}, err
 	}
 
-	// 5. Create finance transaction (income)
+	// 5. Create finance transaction (income).
+	// effectiveAmount = sale total minus bonus discount paid by loyalty points.
+	effectiveAmount := totalCents - bonusUsed
 	reason := "Sale #" + strconv.FormatInt(saleID, 10)
 	finTxn := finance.Transaction{
 		Type:         "income",
-		AmountCents:  totalCents,
+		AmountCents:  effectiveAmount,
 		RelatedTable: "sale",
 		RelatedID:    &saleID,
 		Status:       "pending",
@@ -394,13 +415,25 @@ func (r *Repository) ConfirmSale(
 		return Sale{}, err
 	}
 
-	// 6. Optional payment
+	// 6. Worker credit purchase — create a worker_debt of type='purchase'
+	if saleWorkerID != nil {
+		debtNote := "Sale #" + strconv.FormatInt(saleID, 10)
+		_, err = tx.Exec(ctx, `
+			INSERT INTO worker_debts (worker_id, amount_cents, remaining_cents, type, note, created_by)
+			VALUES ($1, $2, $2, 'purchase', $3, $4)
+		`, *saleWorkerID, totalCents, debtNote, uid)
+		if err != nil {
+			return Sale{}, err
+		}
+	}
+
+	// 7. Optional payment
 	if req.PaymentAmount != nil && *req.PaymentAmount > 0 {
 		if req.PaymentTypeID == nil {
 			return Sale{}, apperr.Validation("payment_type_id is required when payment_amount is provided")
 		}
-		if *req.PaymentAmount > totalCents {
-			return Sale{}, apperr.Validation("payment_amount cannot exceed sale total")
+		if *req.PaymentAmount > effectiveAmount {
+			return Sale{}, apperr.Validation("payment_amount cannot exceed sale total after bonus")
 		}
 
 		p := finance.Payment{
@@ -415,7 +448,7 @@ func (r *Repository) ConfirmSale(
 		}
 
 		txnStatus := "partial"
-		if *req.PaymentAmount >= totalCents {
+		if *req.PaymentAmount >= effectiveAmount {
 			txnStatus = "paid"
 		}
 		if _, err := finRepo.UpdateTransactionStatus(ctx, tx, finTxn.ID, txnStatus); err != nil {
@@ -443,9 +476,12 @@ func (r *Repository) CancelSale(ctx context.Context, saleID int64, userID int64)
 	// 1. Lock sale row and check status
 	var status string
 	var warehouseID int64
+	var saleCustomerID *int64
+	var saleWorkerID *int64
+	var bonusUsedCents int64
 	err = tx.QueryRow(ctx, `
-		SELECT status, warehouse_id FROM sales WHERE id = $1 FOR UPDATE
-	`, saleID).Scan(&status, &warehouseID)
+		SELECT status, warehouse_id, customer_id, worker_id, bonus_used_cents FROM sales WHERE id = $1 FOR UPDATE
+	`, saleID).Scan(&status, &warehouseID, &saleCustomerID, &saleWorkerID, &bonusUsedCents)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return apperr.NotFound("SALE_NOT_FOUND", "sale not found")
@@ -558,6 +594,29 @@ func (r *Repository) CancelSale(ctx context.Context, saleID int64, userID int64)
 			return err
 		}
 
+		// Restore bonus points to customer if any were used
+		if bonusUsedCents > 0 && saleCustomerID != nil {
+			_, err = tx.Exec(ctx, `
+				UPDATE customers SET bonus_points = bonus_points + $2, updated_at = now()
+				WHERE id = $1 AND deleted_at IS NULL
+			`, *saleCustomerID, bonusUsedCents)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Cancel open worker credit debt created during ConfirmSale
+		if saleWorkerID != nil {
+			debtNote := "Sale #" + strconv.FormatInt(saleID, 10)
+			_, err = tx.Exec(ctx, `
+				DELETE FROM worker_debts
+				WHERE worker_id = $1 AND type = 'purchase' AND note = $2 AND status = 'open'
+			`, *saleWorkerID, debtNote)
+			if err != nil {
+				return err
+			}
+		}
+
 	case "cancelled":
 		return apperr.Conflict("SALE_ALREADY_CANCELLED", "sale is already cancelled")
 
@@ -626,6 +685,7 @@ type ReceiptSaleRow struct {
 	CashierName   string
 	WarehouseName string
 	CustomerName  string
+	WorkerName    string
 }
 
 type ReceiptItemRow struct {
@@ -638,24 +698,26 @@ type ReceiptItemRow struct {
 
 func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleRow, []ReceiptItemRow, error) {
 	var row ReceiptSaleRow
-	var cashierName, warehouseName, customerName *string
+	var cashierName, warehouseName, customerName, workerName *string
 
 	err := r.db.QueryRow(ctx, `
-		SELECT s.id, s.warehouse_id, s.customer_id, s.total_cents, s.cost_cents,
-		       s.items_count, s.note, s.created_by, s.created_at, s.status,
+		SELECT s.id, s.warehouse_id, s.customer_id, s.worker_id, s.total_cents, s.cost_cents,
+		       s.bonus_used_cents, s.items_count, s.note, s.created_by, s.created_at, s.status,
 		       u.username,
 		       w.name,
-		       c.name
+		       c.name,
+		       wk.name
 		FROM sales s
 		LEFT JOIN users u ON u.id = s.created_by
 		LEFT JOIN warehouses w ON w.id = s.warehouse_id
 		LEFT JOIN customers c ON c.id = s.customer_id
+		LEFT JOIN workers wk ON wk.id = s.worker_id AND wk.deleted_at IS NULL
 		WHERE s.id = $1
 	`, id).Scan(
-		&row.ID, &row.WarehouseID, &row.CustomerID, &row.TotalCents,
-		&row.CostCents, &row.ItemsCount, &row.Note, &row.CreatedBy, &row.CreatedAt,
+		&row.ID, &row.WarehouseID, &row.CustomerID, &row.WorkerID, &row.TotalCents,
+		&row.CostCents, &row.BonusUsedCents, &row.ItemsCount, &row.Note, &row.CreatedBy, &row.CreatedAt,
 		&row.Status,
-		&cashierName, &warehouseName, &customerName,
+		&cashierName, &warehouseName, &customerName, &workerName,
 	)
 	if err != nil {
 		return ReceiptSaleRow{}, nil, err
@@ -668,6 +730,9 @@ func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleR
 	}
 	if customerName != nil {
 		row.CustomerName = *customerName
+	}
+	if workerName != nil {
+		row.WorkerName = *workerName
 	}
 
 	rows, err := r.db.Query(ctx, `
@@ -834,8 +899,8 @@ func (r *Repository) List(
 	for rows.Next() {
 		var item SaleListItem
 		err := rows.Scan(
-			&item.ID, &item.WarehouseID, &item.CustomerID, &item.TotalCents,
-			&item.CostCents, &item.ItemsCount, &item.Note, &item.CreatedBy, &item.CreatedAt,
+			&item.ID, &item.WarehouseID, &item.CustomerID, &item.WorkerID, &item.TotalCents,
+			&item.CostCents, &item.BonusUsedCents, &item.ItemsCount, &item.Note, &item.CreatedBy, &item.CreatedAt,
 			&item.Status,
 			&item.CustomerName,
 		)

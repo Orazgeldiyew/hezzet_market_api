@@ -13,7 +13,7 @@ Content-Type: application/json
 ## Roles
 
 | Role     | Read products | Create / Update / Delete |
-| -------- | ------------- | ------------------------ |
+| -------- | ------------- | ------------------------ |ддддддд
 | admin    | yes           | yes                      |
 | manager  | yes           | no                       |
 | operator | yes           | yes                      |

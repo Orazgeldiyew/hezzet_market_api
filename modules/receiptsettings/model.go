@@ -8,6 +8,7 @@ type ReceiptSettings struct {
 	LogoPath    string `json:"logo_path"`
 	Footer      string `json:"footer"`
 	Template    string `json:"template"`
+	DeleteCode  string `json:"delete_code"`
 }
 
 // UpdateRequest holds optional fields. Non-nil means "set this field".
@@ -19,6 +20,7 @@ type UpdateRequest struct {
 	LogoPath    *string `json:"logo_path"`
 	Footer      *string `json:"footer"`
 	Template    *string `json:"template"`
+	DeleteCode  *string `json:"delete_code"`
 }
 
 // Defaults holds server-level defaults loaded from env vars.

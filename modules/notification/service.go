@@ -9,15 +9,22 @@ import (
 
 const qtyMilliScale int64 = 1000
 
+// PhoneQuerier is implemented by PhoneRepository.
+// Service uses it to look up active admin phones at runtime.
+type PhoneQuerier interface {
+	GetActivePhones(ctx context.Context) ([]string, error)
+}
+
 // Service provides high-level, fire-and-forget notification helpers.
 // All methods are safe to call with a nil receiver (no-op) so callers
 // don't need nil-guards.
 type Service struct {
-	queue        *Queue
-	logRepo      *LogRepository
-	adminPhones  []string
-	smsFrom      string
-	providerName string
+	queue           *Queue
+	logRepo         *LogRepository
+	phoneRepo       PhoneQuerier
+	adminPhones     []string // fallback when phoneRepo returns nothing
+	smsFrom         string
+	providerName    string
 	lowStockDefault int64 // threshold in regular units (not milli)
 	dedupTTL        time.Duration
 }
@@ -30,10 +37,12 @@ func NewService(
 	providerName string,
 	lowStockDefault int64,
 	dedupTTL time.Duration,
+	phoneRepo PhoneQuerier,
 ) *Service {
 	return &Service{
 		queue:           queue,
 		logRepo:         logRepo,
+		phoneRepo:       phoneRepo,
 		adminPhones:     adminPhones,
 		smsFrom:         smsFrom,
 		providerName:    providerName,
@@ -113,7 +122,15 @@ func (s *Service) NotifyAdminLowStock(ctx context.Context, productID, warehouseI
 		productID, warehouseID, currentQty, s.lowStockDefault,
 	)
 
-	for _, phone := range s.adminPhones {
+	// Prefer DB phones; fall back to config phones if DB returns nothing.
+	phones := s.adminPhones
+	if s.phoneRepo != nil {
+		if dbPhones, err := s.phoneRepo.GetActivePhones(ctx); err == nil && len(dbPhones) > 0 {
+			phones = dbPhones
+		}
+	}
+
+	for _, phone := range phones {
 		job := SMSJob{
 			JobID:       generateUUID(),
 			Type:        "admin_low_stock",

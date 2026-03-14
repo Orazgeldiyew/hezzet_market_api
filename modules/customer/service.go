@@ -97,6 +97,17 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+func (s *Service) GetByCardCode(ctx context.Context, code string) (Customer, error) {
+	c, err := s.repo.GetByCardCode(ctx, code)
+	if err != nil {
+		if IsNotFound(err) {
+			return Customer{}, apperr.NotFound("NOT_FOUND", "customer not found")
+		}
+		return Customer{}, apperr.Internal(err)
+	}
+	return c, nil
+}
+
 func (s *Service) AddSpent(ctx context.Context, customerID int64, amountCents int64) (Customer, error) {
 	if amountCents <= 0 {
 		return Customer{}, apperr.Validation("amount must be positive")

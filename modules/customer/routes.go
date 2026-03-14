@@ -16,6 +16,7 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 
 	// Read: cashier/operator/manager (admin bypass)
 	customers.GET("", middleware.RequireRoles("cashier", "operator", "manager"), middleware.PaginationMiddleware(), h.List)
+	customers.GET("/by-card/:code", middleware.RequireRoles("cashier", "operator", "manager"), h.GetByCard)
 	customers.GET("/:id", middleware.RequireRoles("cashier", "operator", "manager"), h.Get)
 
 	// Create + spent: cashier/manager (admin bypass)

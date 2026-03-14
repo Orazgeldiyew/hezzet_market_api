@@ -594,16 +594,16 @@ func (r *Repository) GetItems(ctx context.Context, warehouseID, productID *int64
 	q := `
 		SELECT wi.warehouse_id, wi.product_id, wi.qty_milli,
 		       wi.avg_cost_cents, wi.total_cost_cents, wi.updated_at,
-		       wi.qty_milli - COALESCE((
-		           SELECT SUM(sr.qty_milli)
-		           FROM stock_reservations sr
-		           WHERE sr.warehouse_id = wi.warehouse_id
-		             AND sr.product_id   = wi.product_id
-		             AND sr.status = 'active'
-		       ), 0) AS available_milli
+		       wi.qty_milli - COALESCE(SUM(sr.qty_milli), 0) AS available_milli
 		FROM warehouse_items wi
+		LEFT JOIN stock_reservations sr
+		       ON sr.warehouse_id = wi.warehouse_id
+		      AND sr.product_id   = wi.product_id
+		      AND sr.status = 'active'
 		WHERE ($1::bigint IS NULL OR wi.warehouse_id = $1)
 		  AND ($2::bigint IS NULL OR wi.product_id = $2)
+		GROUP BY wi.warehouse_id, wi.product_id, wi.qty_milli,
+		         wi.avg_cost_cents, wi.total_cost_cents, wi.updated_at
 		ORDER BY wi.warehouse_id, wi.product_id
 	`
 	rows, err := r.db.Query(ctx, q, warehouseID, productID)
