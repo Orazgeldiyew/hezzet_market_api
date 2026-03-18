@@ -1,0 +1,183 @@
+package i18n
+
+var messagesTK = map[string]string{
+	// ── Auth ─────────────────────────────────────────────────────────────
+	"unauthorized":                   "ygtyýarlandyrylmadyk",
+	"invalid credentials":            "nädogry ulanyjy ady ýa-da açar söz",
+	"account is disabled":            "hasap öçürilen",
+	"account is blocked":             "hasap bloklanan",
+	"token revoked":                  "token ýatyryldy",
+	"token expired":                  "tokeniň möhleti gutardy",
+	"invalid token":                  "nädogry token",
+	"invalid token type":             "nädogry token görnüşi",
+	"invalid refresh token":          "nädogry täzeleniş tokeni",
+	"token missing token_version":    "tokende token_version ýok",
+	"invalid token_version type":     "nädogry token_version görnüşi",
+	"token query parameter required": "URL-de token parametri zerur",
+	"user not found":                 "ulanyjy tapylmady",
+
+	// ── Forbidden ────────────────────────────────────────────────────────
+	"forbidden":            "gadagan",
+	"module access denied": "modula girmek gadagan",
+	"invalid delete code":  "nädogry pozmak kody",
+	"only admin can change manager permissions": "diňe admin menejeriň ygtyýarlyklaryny üýtgedip biler",
+
+	// ── Auth validation ──────────────────────────────────────────────────
+	"admin role must be exclusive (cannot combine with other roles)": "admin roly ýeke bolmaly (beýleki roller bilen birleşdirip bolmaýar)",
+	"unknown role in roles[]":                     "roles[]-da näbelli rol",
+	"roles cannot be empty":                       "roles boş bolup bilmez",
+	"invalid user id":                             "nädogry ulanyjy ID",
+	"cannot delete yourself":                      "özüňizi pozup bolmaýar",
+	"cannot block yourself":                       "özüňizi bloklap bolmaýar",
+	"cannot unblock yourself":                     "özüňizi blokdan aýryp bolmaýar",
+	"order_by must be 'username' or 'created_at'": "order_by 'username' ýa-da 'created_at' bolmaly",
+	"order_direction must be 'asc' or 'desc'":     "order_direction 'asc' ýa-da 'desc' bolmaly",
+	"username already exists":                     "ulanyjy ady eýýäm bar",
+
+	// ── Sale ─────────────────────────────────────────────────────────────
+	"invalid sale id":               "nädogry satuw ID",
+	"invalid item id":               "nädogry haryt ID",
+	"delete_code is required":       "pozmak kody zerur",
+	"duplicate product_id in items": "harytlarda gaýtalanýan product_id",
+	"payment_type_id is required when payment_amount is provided": "payment_amount görkezilende payment_type_id zerur",
+	"payment_amount must be positive":                             "töleg mukdary oňyn bolmaly",
+	"bonus_used_cents must be non-negative":                       "bonus otrisatel bolup bilmez",
+	"bonus redemption requires a customer on the sale":            "bonus ulanmak üçin satuwda müşderi bolmaly",
+	"bonus_used_cents exceeds sale total":                         "bonus satuwyň jemi mukdaryndan köp",
+	"payment_amount cannot exceed sale total after bonus":         "töleg mukdary bonusdan soňky jemden köp bolup bilmez",
+	"cannot delete the last item from a sale":                     "satuwdaky iň soňky harydy pozup bolmaýar",
+	"warehouse or customer does not exist":                        "ammar ýa-da müşderi ýok",
+
+	// ── Sale status ──────────────────────────────────────────────────────
+	"sale not found":               "satuw tapylmady",
+	"sale item not found":          "satuwyň harydy tapylmady",
+	"sale is not in draft status":  "satuw garalama ýagdaýynda däl",
+	"sale must be in draft status": "satuw garalama ýagdaýynda bolmaly",
+	"sale is already cancelled":    "satuw eýýäm ýatyryldy",
+
+	// ── Customer ─────────────────────────────────────────────────────────
+	"customer not found": "müşderi tapylmady",
+	"order_by must be 'name', 'created_at', or 'total_spent'": "order_by 'name', 'created_at' ýa-da 'total_spent' bolmaly",
+	"amount must be positive":                                 "mukdar oňyn bolmaly",
+	"insufficient bonus points":                               "bonus ballary ýeterlik däl",
+
+	// ── Product ──────────────────────────────────────────────────────────
+	"product not found":                                    "haryt tapylmady",
+	"file too large (max 5MB)":                             "faýl gaty uly (iň köp 5MB)",
+	"unsupported file type, allowed: jpg, jpeg, png, webp": "goldanylmaýan faýl görnüşi, rugsat berlen: jpg, jpeg, png, webp",
+	"unsupported file extension":                           "goldanylmaýan faýl giňeltmesi",
+	"invalid file path":                                    "nädogry faýl ýoly",
+	"some categories not found or inactive":                "käbir kategoriýalar tapylmady ýa-da işjeň däl",
+	"'data' form field is required":                        "'data' meýdany zerur",
+	"name is required":                                     "at zerur",
+	"unit_type is required (piece, weight, volume)":        "unit_type zerur (piece, weight, volume)",
+	"unit is required (piece, kg, g, l, ml)":               "unit zerur (piece, kg, g, l, ml)",
+	"file is required":                                     "faýl zerur",
+
+	// ── Stock ────────────────────────────────────────────────────────────
+	"warehouse not found":                                    "ammar tapylmady",
+	"invalid warehouse id":                                   "nädogry ammar ID",
+	"warehouse or product does not exist":                    "ammar ýa-da haryt ýok",
+	"no stock for this product in the given warehouse":       "bu ammarda bu harydyň galyndysy ýok",
+	"insufficient stock":                                     "ammarda haryt ýeterlik däl",
+	"insufficient stock in source warehouse":                 "çeşme ammarynda haryt ýeterlik däl",
+	"no stock for this product in source warehouse":          "çeşme ammarynda bu harydyň galyndysy ýok",
+	"source and destination warehouses must differ":          "çeşme we barmaly ammarlar tapawutlanmaly",
+	"source warehouse or product does not exist":             "çeşme ammary ýa-da haryt ýok",
+	"destination warehouse or product does not exist":        "barmaly ammar ýa-da haryt ýok",
+	"price_cents is required for stock in (unit price)":      "geliş üçin price_cents zerur (birlik bahasy)",
+	"price_cents is required for positive delta (unit cost)": "oňyn hereket üçin price_cents zerur (özüne düşýän baha)",
+	"delta_milli must be negative for return_to_supplier":    "üpjün edijä gaýtarmak üçin delta_milli otrisatel bolmaly",
+	"supplier_id is required for return_to_supplier":         "üpjün edijä gaýtarmak üçin supplier_id zerur",
+	"idempotency_key already used with different parameters": "idempotency_key eýýäm başga parametrler bilen ulanyldy",
+
+	// ── Purchase ─────────────────────────────────────────────────────────
+	"invalid purchase order id":                "nädogry satyn alyş sargyt ID",
+	"purchase order not found":                 "satyn alyş sargydy tapylmady",
+	"supplier or warehouse does not exist":     "üpjün ediji ýa-da ammar ýok",
+	"purchase order is not in draft status":    "satyn alyş sargydy garalama ýagdaýynda däl",
+	"cannot cancel a received purchase order":  "alnan satyn alyş sargydyny ýatyryp bolmaýar",
+	"purchase order is already cancelled":      "satyn alyş sargydy eýýäm ýatyryldy",
+	"purchase order has not been received yet": "satyn alyş sargydy entek alynmady",
+	"purchase order is already fully paid":     "satyn alyş sargydy doly tölenildi",
+
+	// ── Finance ──────────────────────────────────────────────────────────
+	"invalid transaction id":                           "nädogry amal ID",
+	"transaction not found":                            "amal tapylmady",
+	"transaction has been cancelled":                   "amal ýatyryldy",
+	"cannot cancel a fully paid transaction":           "doly tölenen amaly ýatyryp bolmaýar",
+	"cannot add payment to a canceled transaction":     "ýatyrylan amala töleg goşup bolmaýar",
+	"transaction is already fully paid":                "amal eýýäm doly tölenildi",
+	"initial payment cannot exceed transaction amount": "başlangyç töleg amalyň mukdaryndan köp bolup bilmez",
+	"invalid payment_type_code":                        "nädogry töleg görnüşi kody",
+
+	// ── Worker ───────────────────────────────────────────────────────────
+	"invalid worker id":                           "nädogry işgär ID",
+	"worker not found":                            "işgär tapylmady",
+	"worker card not found":                       "işgäriň kartasy tapylmady",
+	"worker_id is required":                       "worker_id zerur",
+	"invalid worker_id":                           "nädogry worker_id",
+	"compensation not configured for this worker": "bu işgär üçin iş haky kesgitlenmedi",
+
+	// ── Payroll ──────────────────────────────────────────────────────────
+	"invalid payroll run id":                              "nädogry iş haky hasaplaşyk ID",
+	"payroll run not found":                               "iş haky hasaplaşygy tapylmady",
+	"period query param is required":                      "period parametri zerur",
+	"period must be YYYY-MM format":                       "period ÝÝÝÝ-AA formatda bolmaly",
+	"invalid role: must be cashier, operator, or manager": "nädogry rol: cashier, operator ýa-da manager bolmaly",
+
+	// ── Other ────────────────────────────────────────────────────────────
+	"supplier not found":           "üpjün ediji tapylmady",
+	"category not found":           "kategoriýa tapylmady",
+	"link not found":               "baglanyşyk tapylmady",
+	"sms log not found":            "SMS ýazgysy tapylmady",
+	"phone not found":              "telefon tapylmady",
+	"phone is required":            "telefon zerur",
+	"invalid id":                   "nädogry ID",
+	"invalid request body":         "nädogry talap bedeni",
+	"role and module are required": "rol we modul zerur",
+	"job_id is required":           "job_id zerur",
+	"job is not in a requeueable status (must be dlq, failed, or rate_limited)": "iş gaýtadan iberilip bilinýän ýagdaýda däl (dlq, failed ýa-da rate_limited bolmaly)",
+	"hire_date must be in YYYY-MM-DD format":                                    "hire_date ÝÝÝÝ-AA-GG formatda bolmaly",
+	"invalid template syntax":                                                   "nädogry şablon sintaksisi",
+	"group_by must be day, week, or month":                                      "group_by day, week ýa-da month bolmaly",
+	"warehouse_id must be an integer":                                           "warehouse_id bütin san bolmaly",
+	"user_id must be an integer":                                                "user_id bütin san bolmaly",
+
+	// ── Date params ──────────────────────────────────────────────────────
+	"date_from must be RFC3339":     "date_from RFC3339 formatda bolmaly",
+	"date_to must be RFC3339":       "date_to RFC3339 formatda bolmaly",
+	"from must be RFC3339 datetime": "from RFC3339 formatda bolmaly",
+	"to must be RFC3339 datetime":   "to RFC3339 formatda bolmaly",
+	"from_date must be RFC3339":     "from_date RFC3339 formatda bolmaly",
+	"to_date must be RFC3339":       "to_date RFC3339 formatda bolmaly",
+
+	// ── Middleware-generated ─────────────────────────────────────────────
+	"request canceled":                "talap ýatyryldy",
+	"request timed out":               "talap wagty gutardy",
+	"malformed JSON in request body":  "talap bedeninde nädogry JSON",
+	"related resource does not exist": "degişli çeşme ýok",
+	"duplicate entry":                 "gaýtalanýan ýazgy",
+	"request validation failed":       "talabyň barlagy şowsuz",
+	"internal error":                  "içerki ýalňyşlyk",
+
+	// ── Validation field messages ────────────────────────────────────────
+	"field is required":                            "meýdan zerur",
+	"must be at least %s characters long":          "iň az %s simwol bolmaly",
+	"must be at most %s characters long":           "iň köp %s simwol bolmaly",
+	"must be greater than or equal to %s":          "iň az %s bolmaly",
+	"must be less than or equal to %s":             "iň köp %s bolmaly",
+	"must be greater than %s":                      "%s-den köp bolmaly",
+	"must be less than %s":                         "%s-den az bolmaly",
+	"must be exactly %s characters long":           "takyk %s simwol bolmaly",
+	"must be a valid email address":                "dogry email bolmaly",
+	"must be a valid URL":                          "dogry URL bolmaly",
+	"must be a valid UUID":                         "dogry UUID bolmaly",
+	"must be a valid phone number in E.164 format": "E.164 formatda dogry telefon belgisi bolmaly",
+	"must be one of: %s":                           "şulardan biri bolmaly: %s",
+	"must contain only alphanumeric characters":    "diňe harplar we sanlar",
+	"must contain only alphabetic characters":      "diňe harplar",
+	"must be a numeric value":                      "san bolmaly",
+	"must be a boolean value":                      "boolean bolmaly",
+	"must contain unique values":                   "üýtgeşik bahalar bolmaly",
+}

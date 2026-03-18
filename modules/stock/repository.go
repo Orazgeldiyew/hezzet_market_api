@@ -66,7 +66,7 @@ func normalizeType(t string) string {
 // qty_milli SCALE=1000:
 // total_cents = qty_milli * unit_price_cents / 1000
 func lineTotalCents(qtyMilli int64, unitPriceCents int64) int64 {
-	return (qtyMilli * unitPriceCents) / 1000
+	return (qtyMilli*unitPriceCents + 500) / 1000
 }
 
 // checkIdempotencyStrict: strict idempotency on (warehouse_id + idempotency_key), compares type+product_id+delta_milli.

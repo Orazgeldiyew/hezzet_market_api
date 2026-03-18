@@ -53,7 +53,7 @@ func scanSale(row pgx.Row) (Sale, error) {
 }
 
 func lineTotalCents(qtyMilli, unitPriceCents int64) int64 {
-	return (qtyMilli * unitPriceCents) / 1000
+	return (qtyMilli*unitPriceCents + 500) / 1000
 }
 
 func isFKViolation(err error) bool {
@@ -398,21 +398,40 @@ func (r *Repository) ConfirmSale(
 		return Sale{}, err
 	}
 
-	// 5. Create finance transaction (income).
-	// effectiveAmount = sale total minus bonus discount paid by loyalty points.
-	effectiveAmount := totalCents - bonusUsed
-	reason := "Sale #" + strconv.FormatInt(saleID, 10)
-	finTxn := finance.Transaction{
-		Type:         "income",
-		AmountCents:  effectiveAmount,
-		RelatedTable: "sale",
-		RelatedID:    &saleID,
-		Status:       "pending",
-		Reason:       &reason,
-		CreatedBy:    uid,
+	// 5a. Create bonus_payment transaction if bonus was used.
+	if bonusUsed > 0 {
+		bonusReason := "Sale #" + strconv.FormatInt(saleID, 10) + " (bonus)"
+		bonusTxn := finance.Transaction{
+			Type:         "bonus_payment",
+			AmountCents:  bonusUsed,
+			RelatedTable: "sale",
+			RelatedID:    &saleID,
+			Status:       "paid",
+			Reason:       &bonusReason,
+			CreatedBy:    uid,
+		}
+		if err := finRepo.CreateTransaction(ctx, tx, &bonusTxn); err != nil {
+			return Sale{}, err
+		}
 	}
-	if err := finRepo.CreateTransaction(ctx, tx, &finTxn); err != nil {
-		return Sale{}, err
+
+	// 5b. Create income transaction for the cash portion (if any).
+	effectiveAmount := totalCents - bonusUsed
+	var finTxn finance.Transaction
+	if effectiveAmount > 0 {
+		reason := "Sale #" + strconv.FormatInt(saleID, 10)
+		finTxn = finance.Transaction{
+			Type:         "income",
+			AmountCents:  effectiveAmount,
+			RelatedTable: "sale",
+			RelatedID:    &saleID,
+			Status:       "pending",
+			Reason:       &reason,
+			CreatedBy:    uid,
+		}
+		if err := finRepo.CreateTransaction(ctx, tx, &finTxn); err != nil {
+			return Sale{}, err
+		}
 	}
 
 	// 6. Worker credit purchase — create a worker_debt of type='purchase'
@@ -427,8 +446,11 @@ func (r *Repository) ConfirmSale(
 		}
 	}
 
-	// 7. Optional payment
+	// 7. Optional payment (only when there is a cash portion to pay)
 	if req.PaymentAmount != nil && *req.PaymentAmount > 0 {
+		if effectiveAmount <= 0 {
+			return Sale{}, apperr.Validation("payment not accepted: entire sale was paid by bonus")
+		}
 		if req.PaymentTypeID == nil {
 			return Sale{}, apperr.Validation("payment_type_id is required when payment_amount is provided")
 		}

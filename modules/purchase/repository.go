@@ -38,7 +38,7 @@ func scanPO(row pgx.Row) (PurchaseOrder, error) {
 }
 
 func lineTotalCents(qtyMilli, unitCostCents int64) int64 {
-	return (qtyMilli * unitCostCents) / 1000
+	return (qtyMilli*unitCostCents + 500) / 1000
 }
 
 func isFKViolation(err error) bool {

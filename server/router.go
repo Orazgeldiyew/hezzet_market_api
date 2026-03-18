@@ -62,6 +62,7 @@ func NewRouter(deps Deps) *gin.Engine {
 		MaxAge:          12 * time.Hour,
 	}))
 
+	r.Use(middleware.Locale())
 	r.Use(ErrorMiddleware())
 
 	r.GET("/health", func(c *gin.Context) {

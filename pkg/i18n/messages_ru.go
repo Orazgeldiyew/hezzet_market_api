@@ -1,0 +1,183 @@
+package i18n
+
+var messagesRU = map[string]string{
+	// ── Auth ─────────────────────────────────────────────────────────────
+	"unauthorized":              "не авторизован",
+	"invalid credentials":       "неверные учётные данные",
+	"account is disabled":       "аккаунт отключён",
+	"account is blocked":        "аккаунт заблокирован",
+	"token revoked":             "токен отозван",
+	"token expired":             "токен истёк",
+	"invalid token":             "недействительный токен",
+	"invalid token type":        "недействительный тип токена",
+	"invalid refresh token":     "недействительный токен обновления",
+	"token missing token_version": "в токене отсутствует token_version",
+	"invalid token_version type":  "неверный тип token_version",
+	"token query parameter required": "требуется параметр token в URL",
+	"user not found":            "пользователь не найден",
+
+	// ── Forbidden ────────────────────────────────────────────────────────
+	"forbidden":                 "доступ запрещён",
+	"module access denied":      "доступ к модулю запрещён",
+	"invalid delete code":       "неверный код удаления",
+	"only admin can change manager permissions": "только админ может менять права менеджера",
+
+	// ── Auth validation ──────────────────────────────────────────────────
+	"admin role must be exclusive (cannot combine with other roles)": "роль admin должна быть единственной (нельзя сочетать с другими ролями)",
+	"unknown role in roles[]":       "неизвестная роль в roles[]",
+	"roles cannot be empty":         "roles не может быть пустым",
+	"invalid user id":               "неверный ID пользователя",
+	"cannot delete yourself":        "нельзя удалить самого себя",
+	"cannot block yourself":         "нельзя заблокировать самого себя",
+	"cannot unblock yourself":       "нельзя разблокировать самого себя",
+	"order_by must be 'username' or 'created_at'": "order_by должен быть 'username' или 'created_at'",
+	"order_direction must be 'asc' or 'desc'":     "order_direction должен быть 'asc' или 'desc'",
+	"username already exists":       "имя пользователя уже существует",
+
+	// ── Sale ─────────────────────────────────────────────────────────────
+	"invalid sale id":               "неверный ID продажи",
+	"invalid item id":               "неверный ID позиции",
+	"delete_code is required":       "код удаления обязателен",
+	"duplicate product_id in items": "дублирующий product_id в товарах",
+	"payment_type_id is required when payment_amount is provided": "payment_type_id обязателен при указании payment_amount",
+	"payment_amount must be positive":       "сумма оплаты должна быть положительной",
+	"bonus_used_cents must be non-negative": "бонус не может быть отрицательным",
+	"bonus redemption requires a customer on the sale": "для использования бонуса нужен клиент в продаже",
+	"bonus_used_cents exceeds sale total":   "бонус превышает сумму продажи",
+	"payment_amount cannot exceed sale total after bonus": "сумма оплаты не может превышать итог после бонуса",
+	"cannot delete the last item from a sale": "нельзя удалить последний товар из продажи",
+	"warehouse or customer does not exist":  "склад или клиент не существует",
+
+	// ── Sale status ──────────────────────────────────────────────────────
+	"sale not found":             "продажа не найдена",
+	"sale item not found":        "позиция продажи не найдена",
+	"sale is not in draft status": "продажа не в черновом статусе",
+	"sale must be in draft status": "продажа должна быть в черновом статусе",
+	"sale is already cancelled":  "продажа уже отменена",
+
+	// ── Customer ─────────────────────────────────────────────────────────
+	"customer not found":          "клиент не найден",
+	"order_by must be 'name', 'created_at', or 'total_spent'": "order_by должен быть 'name', 'created_at' или 'total_spent'",
+	"amount must be positive":     "сумма должна быть положительной",
+	"insufficient bonus points":   "недостаточно бонусных баллов",
+
+	// ── Product ──────────────────────────────────────────────────────────
+	"product not found":           "товар не найден",
+	"file too large (max 5MB)":    "файл слишком большой (макс 5МБ)",
+	"unsupported file type, allowed: jpg, jpeg, png, webp": "неподдерживаемый тип файла, допустимые: jpg, jpeg, png, webp",
+	"unsupported file extension":  "неподдерживаемое расширение файла",
+	"invalid file path":           "неверный путь к файлу",
+	"some categories not found or inactive": "некоторые категории не найдены или неактивны",
+	"'data' form field is required":   "поле формы 'data' обязательно",
+	"name is required":                "название обязательно",
+	"unit_type is required (piece, weight, volume)": "unit_type обязателен (piece, weight, volume)",
+	"unit is required (piece, kg, g, l, ml)":        "unit обязателен (piece, kg, g, l, ml)",
+	"file is required":                "файл обязателен",
+
+	// ── Stock ────────────────────────────────────────────────────────────
+	"warehouse not found":         "склад не найден",
+	"invalid warehouse id":        "неверный ID склада",
+	"warehouse or product does not exist": "склад или товар не существует",
+	"no stock for this product in the given warehouse": "нет остатка этого товара на данном складе",
+	"insufficient stock":          "недостаточно товара на складе",
+	"insufficient stock in source warehouse": "недостаточно товара на складе-отправителе",
+	"no stock for this product in source warehouse": "нет остатка этого товара на складе-отправителе",
+	"source and destination warehouses must differ": "склад-отправитель и склад-получатель должны отличаться",
+	"source warehouse or product does not exist":   "склад-отправитель или товар не существует",
+	"destination warehouse or product does not exist": "склад-получатель или товар не существует",
+	"price_cents is required for stock in (unit price)": "price_cents обязателен для прихода (цена за единицу)",
+	"price_cents is required for positive delta (unit cost)": "price_cents обязателен для положительного движения (себестоимость)",
+	"delta_milli must be negative for return_to_supplier": "delta_milli должен быть отрицательным для возврата поставщику",
+	"supplier_id is required for return_to_supplier":      "supplier_id обязателен для возврата поставщику",
+	"idempotency_key already used with different parameters": "idempotency_key уже использован с другими параметрами",
+
+	// ── Purchase ─────────────────────────────────────────────────────────
+	"invalid purchase order id":   "неверный ID заказа на закупку",
+	"purchase order not found":    "заказ на закупку не найден",
+	"supplier or warehouse does not exist": "поставщик или склад не существует",
+	"purchase order is not in draft status": "заказ на закупку не в черновом статусе",
+	"cannot cancel a received purchase order": "нельзя отменить полученный заказ",
+	"purchase order is already cancelled": "заказ на закупку уже отменён",
+	"purchase order has not been received yet": "заказ на закупку ещё не получен",
+	"purchase order is already fully paid": "заказ на закупку полностью оплачен",
+
+	// ── Finance ──────────────────────────────────────────────────────────
+	"invalid transaction id":      "неверный ID транзакции",
+	"transaction not found":       "транзакция не найдена",
+	"transaction has been cancelled": "транзакция отменена",
+	"cannot cancel a fully paid transaction": "нельзя отменить полностью оплаченную транзакцию",
+	"cannot add payment to a canceled transaction": "нельзя добавить платёж к отменённой транзакции",
+	"transaction is already fully paid": "транзакция полностью оплачена",
+	"initial payment cannot exceed transaction amount": "первоначальный платёж не может превышать сумму транзакции",
+	"invalid payment_type_code":   "неверный код типа оплаты",
+
+	// ── Worker ───────────────────────────────────────────────────────────
+	"invalid worker id":           "неверный ID работника",
+	"worker not found":            "работник не найден",
+	"worker card not found":       "карточка работника не найдена",
+	"worker_id is required":       "worker_id обязателен",
+	"invalid worker_id":           "неверный worker_id",
+	"compensation not configured for this worker": "компенсация не настроена для этого работника",
+
+	// ── Payroll ──────────────────────────────────────────────────────────
+	"invalid payroll run id":      "неверный ID расчёта зарплаты",
+	"payroll run not found":       "расчёт зарплаты не найден",
+	"period query param is required": "параметр period обязателен",
+	"period must be YYYY-MM format":  "period должен быть в формате ГГГГ-ММ",
+	"invalid role: must be cashier, operator, or manager": "неверная роль: должна быть cashier, operator или manager",
+
+	// ── Other ────────────────────────────────────────────────────────────
+	"supplier not found":          "поставщик не найден",
+	"category not found":          "категория не найдена",
+	"link not found":              "ссылка не найдена",
+	"sms log not found":           "SMS лог не найден",
+	"phone not found":             "телефон не найден",
+	"phone is required":           "телефон обязателен",
+	"invalid id":                  "неверный ID",
+	"invalid request body":        "неверное тело запроса",
+	"role and module are required": "роль и модуль обязательны",
+	"job_id is required":          "job_id обязателен",
+	"job is not in a requeueable status (must be dlq, failed, or rate_limited)": "задание не в статусе для повторной отправки (должно быть dlq, failed или rate_limited)",
+	"hire_date must be in YYYY-MM-DD format": "hire_date должен быть в формате ГГГГ-ММ-ДД",
+	"invalid template syntax":     "неверный синтаксис шаблона",
+	"group_by must be day, week, or month": "group_by должен быть day, week или month",
+	"warehouse_id must be an integer":      "warehouse_id должен быть целым числом",
+	"user_id must be an integer":           "user_id должен быть целым числом",
+
+	// ── Date params ──────────────────────────────────────────────────────
+	"date_from must be RFC3339":   "date_from должен быть в формате RFC3339",
+	"date_to must be RFC3339":     "date_to должен быть в формате RFC3339",
+	"from must be RFC3339 datetime": "from должен быть в формате RFC3339",
+	"to must be RFC3339 datetime":   "to должен быть в формате RFC3339",
+	"from_date must be RFC3339":   "from_date должен быть в формате RFC3339",
+	"to_date must be RFC3339":     "to_date должен быть в формате RFC3339",
+
+	// ── Middleware-generated ─────────────────────────────────────────────
+	"request canceled":            "запрос отменён",
+	"request timed out":           "время ожидания запроса истекло",
+	"malformed JSON in request body": "некорректный JSON в теле запроса",
+	"related resource does not exist": "связанный ресурс не существует",
+	"duplicate entry":             "дублирующая запись",
+	"request validation failed":   "ошибка валидации запроса",
+	"internal error":              "внутренняя ошибка",
+
+	// ── Validation field messages (from validator tags) ───────────────────
+	"field is required":                       "поле обязательно",
+	"must be at least %s characters long":     "минимум %s символов",
+	"must be at most %s characters long":      "максимум %s символов",
+	"must be greater than or equal to %s":     "должно быть не менее %s",
+	"must be less than or equal to %s":        "должно быть не более %s",
+	"must be greater than %s":                 "должно быть больше %s",
+	"must be less than %s":                    "должно быть меньше %s",
+	"must be exactly %s characters long":      "должно быть ровно %s символов",
+	"must be a valid email address":           "должен быть действительный email",
+	"must be a valid URL":                     "должен быть действительный URL",
+	"must be a valid UUID":                    "должен быть действительный UUID",
+	"must be a valid phone number in E.164 format": "должен быть номер телефона в формате E.164",
+	"must be one of: %s":                      "должен быть одним из: %s",
+	"must contain only alphanumeric characters": "только буквы и цифры",
+	"must contain only alphabetic characters": "только буквы",
+	"must be a numeric value":                 "должно быть числовым значением",
+	"must be a boolean value":                 "должно быть булевым значением",
+	"must contain unique values":              "значения должны быть уникальными",
+}

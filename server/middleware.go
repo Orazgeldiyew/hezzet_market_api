@@ -17,6 +17,7 @@ import (
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
+	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/i18n"
 	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/response"
 )
 
@@ -88,6 +89,11 @@ func ErrorMiddleware() gin.HandlerFunc {
 		}
 
 		r := classifyError(c.Errors[0].Err)
+
+		// Translate message and validation details to the requested language
+		lang := middleware.GetLocale(c)
+		r.message = i18n.Translate(lang, r.message)
+		r.details = i18n.TranslateDetails(lang, r.details)
 
 		c.JSON(r.status, response.APIResponse{
 			Success:    false,

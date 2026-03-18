@@ -14,40 +14,40 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
 
 	// Payment types — read for cashier and above
 	rg.GET("/payment-types",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequireRoles("cashier", "operator", "manager", "admin"),
 		h.ListPaymentTypes,
 	)
 
 	// Transactions
 	txns := rg.Group("/transactions")
 
-	// List — read for cashier and above
+	// List — manager and admin
 	txns.GET("",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequireRoles("manager", "admin"),
 		h.ListTransactions,
 	)
 
-	// Get detail — read for cashier and above
+	// Get detail — manager and admin
 	txns.GET("/:id",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequireRoles("manager", "admin"),
 		h.GetTransaction,
 	)
 
-	// Create manual transaction — operator/manager
+	// Create manual transaction — operator/manager/admin
 	txns.POST("/manual",
-		middleware.RequireRoles("operator", "manager"),
+		middleware.RequireRoles("operator", "manager", "admin"),
 		h.CreateManual,
 	)
 
-	// Add payment — operator/manager
+	// Add payment — operator/manager/admin
 	txns.POST("/:id/payments",
-		middleware.RequireRoles("operator", "manager"),
+		middleware.RequireRoles("operator", "manager", "admin"),
 		h.AddPayment,
 	)
 
-	// Cancel — manager only
+	// Cancel — manager and admin
 	txns.POST("/:id/cancel",
-		middleware.RequireRoles("manager"),
+		middleware.RequireRoles("manager", "admin"),
 		h.CancelTransaction,
 	)
 }
