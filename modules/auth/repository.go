@@ -346,5 +346,13 @@ func (r *Repository) SetUserRoles(ctx context.Context, userID int64, roleCodes [
 		}
 	}
 
+	// Bump token_version so the user must re-login to pick up new roles in JWT
+	if _, err = tx.Exec(ctx, `
+		UPDATE users SET token_version = token_version + 1, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+	`, userID); err != nil {
+		return err
+	}
+
 	return tx.Commit(ctx)
 }

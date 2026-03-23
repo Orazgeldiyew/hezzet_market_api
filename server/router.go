@@ -131,13 +131,13 @@ func NewRouter(deps Deps) *gin.Engine {
 	api.Use(middleware.PaginationMiddleware())
 	api.Use(auditMW)
 
-	// ── Permissions module (returns repo for RequireModule middleware) ──
+	// ── Permissions & Roles module (returns repo for RequirePermission middleware) ──
 	permRepo := permissions.RegisterRoutes(api, deps.DB, deps.Redis)
 
-	// helper to create a sub-group with module permission check
+	// helper: module-level gate (checks "view" action) — backward compat
 	mod := func(module string) *gin.RouterGroup {
 		g := api.Group("")
-		g.Use(middleware.RequireModule(permRepo, module))
+		g.Use(middleware.RequirePermission(permRepo, module, "view"))
 		return g
 	}
 

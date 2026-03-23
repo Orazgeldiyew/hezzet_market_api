@@ -9,10 +9,47 @@ import (
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
-// ModuleChecker is implemented by permissions.Repository.
+// ── Interfaces ──
+
+// ModuleChecker is the legacy interface (backward compat).
 type ModuleChecker interface {
 	IsEnabled(ctx context.Context, role, module string) (bool, error)
 }
+
+// PermissionChecker checks action-level permissions.
+type PermissionChecker interface {
+	IsAllowed(ctx context.Context, roleCodes []string, module, action string) (bool, error)
+}
+
+// ── RequirePermission (new, action-level) ──
+
+// RequirePermission checks if the user's roles have granted=true for module+action.
+// Admin always bypasses. If DB/Redis is unavailable, defaults to allow (fail-open).
+func RequirePermission(checker PermissionChecker, module, action string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rolesVal, _ := c.Get("roles")
+		userRoles, _ := rolesVal.([]string)
+
+		for _, r := range userRoles {
+			if r == "admin" {
+				c.Next()
+				return
+			}
+		}
+
+		allowed, err := checker.IsAllowed(c.Request.Context(), userRoles, module, action)
+		if err != nil || allowed {
+			// err → fail-open (allow if DB/Redis unavailable)
+			c.Next()
+			return
+		}
+
+		c.Error(apperr.Forbidden("permission denied"))
+		c.Abort()
+	}
+}
+
+// ── RequireModule (legacy, backward compat) ──
 
 // RequireModule checks if the user's role has access to the given module.
 // Admin always bypasses. If Redis/DB is unavailable, defaults to allow.
@@ -31,7 +68,6 @@ func RequireModule(repo ModuleChecker, module string) gin.HandlerFunc {
 		for _, role := range userRoles {
 			enabled, err := repo.IsEnabled(c.Request.Context(), role, module)
 			if err != nil || enabled {
-				// err → fail-open (allow if DB/Redis unavailable)
 				c.Next()
 				return
 			}
@@ -41,6 +77,8 @@ func RequireModule(repo ModuleChecker, module string) gin.HandlerFunc {
 		c.Abort()
 	}
 }
+
+// ── HasAnyRole ──
 
 // HasAnyRole returns true if the request context contains at least one of the given roles (admin always passes).
 func HasAnyRole(c *gin.Context, roles ...string) bool {
@@ -64,6 +102,8 @@ func HasAnyRole(c *gin.Context, roles ...string) bool {
 	}
 	return false
 }
+
+// ── RequireRoles ──
 
 // RequireRoles: admin bypass always.
 // If roles is empty => admin only.
