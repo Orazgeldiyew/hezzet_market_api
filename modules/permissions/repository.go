@@ -306,6 +306,42 @@ func (r *Repository) BulkUpdatePermissions(ctx context.Context, roleID int, item
 	return results, nil
 }
 
+// MatrixForRoles returns the matrix filtered to the given role codes, merging with OR logic.
+func (r *Repository) MatrixForRoles(ctx context.Context, roleCodes []string) ([]MatrixEntry, error) {
+	if len(roleCodes) == 0 {
+		return []MatrixEntry{}, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT rp.module,
+			   COALESCE(bool_or(rp.action = 'view'   AND rp.granted), false) AS can_view,
+			   COALESCE(bool_or(rp.action = 'create'  AND rp.granted), false) AS can_create,
+			   COALESCE(bool_or(rp.action = 'update'  AND rp.granted), false) AS can_update,
+			   COALESCE(bool_or(rp.action = 'delete'  AND rp.granted), false) AS can_delete
+		FROM role_permissions rp
+		JOIN roles ro ON ro.id = rp.role_id
+		WHERE ro.code = ANY($1)
+		GROUP BY rp.module
+		ORDER BY rp.module
+	`, roleCodes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MatrixEntry
+	for rows.Next() {
+		var m MatrixEntry
+		if err := rows.Scan(&m.Module, &m.View, &m.Create, &m.Update, &m.Delete); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	if out == nil {
+		out = []MatrixEntry{}
+	}
+	return out, rows.Err()
+}
+
 // Matrix returns a compact role x module x actions view.
 func (r *Repository) Matrix(ctx context.Context) ([]MatrixEntry, error) {
 	rows, err := r.db.Query(ctx, `

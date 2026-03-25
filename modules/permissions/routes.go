@@ -19,8 +19,8 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, rdb *redis.Client) *R
 	roles := rg.Group("/roles")
 	roles.GET("", middleware.RequireRoles("manager"), h.ListRoles)
 	roles.GET("/:id", middleware.RequireRoles("manager"), h.GetRole)
-	roles.POST("", middleware.RequireRoles("manager"), h.CreateRole)
-	roles.PATCH("/:id", middleware.RequireRoles("manager"), h.UpdateRole)
+	roles.POST("", middleware.RequireRoles(), h.CreateRole)   // admin only
+	roles.PATCH("/:id", middleware.RequireRoles(), h.UpdateRole) // admin only
 	roles.DELETE("/:id", middleware.RequireRoles(), h.DeleteRole) // admin only
 
 	// ── Permissions ──

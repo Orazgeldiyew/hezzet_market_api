@@ -76,6 +76,10 @@ definitions:
         type: string
       expires_in:
         type: integer
+      permissions:
+        items:
+          $ref: '#/definitions/auth.UserPermission'
+        type: array
       refresh_token:
         type: string
       roles:
@@ -169,6 +173,19 @@ definitions:
         type: string
       username:
         type: string
+    type: object
+  auth.UserPermission:
+    properties:
+      create:
+        type: boolean
+      delete:
+        type: boolean
+      module:
+        type: string
+      update:
+        type: boolean
+      view:
+        type: boolean
     type: object
   auth.UserWithRoles:
     properties:
@@ -554,23 +571,108 @@ definitions:
       worker_id:
         type: integer
     type: object
+  permissions.BulkPermissionItem:
+    properties:
+      action:
+        type: string
+      granted:
+        type: boolean
+      module:
+        type: string
+    required:
+    - action
+    - module
+    type: object
+  permissions.BulkPermissionRequest:
+    properties:
+      permissions:
+        items:
+          $ref: '#/definitions/permissions.BulkPermissionItem'
+        minItems: 1
+        type: array
+    required:
+    - permissions
+    type: object
+  permissions.CreateRoleRequest:
+    properties:
+      code:
+        maxLength: 50
+        minLength: 2
+        type: string
+      description:
+        type: string
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  permissions.MatrixEntry:
+    properties:
+      create:
+        type: boolean
+      delete:
+        type: boolean
+      module:
+        type: string
+      role_code:
+        type: string
+      role_id:
+        type: integer
+      role_name:
+        type: string
+      update:
+        type: boolean
+      view:
+        type: boolean
+    type: object
   permissions.Permission:
     properties:
-      enabled:
+      action:
+        type: string
+      granted:
         type: boolean
       id:
         type: integer
       module:
         type: string
-      role:
+      role_code:
+        type: string
+      role_id:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  permissions.Role:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      is_system:
+        type: boolean
+      name:
         type: string
       updated_at:
         type: string
     type: object
   permissions.UpdatePermissionRequest:
     properties:
-      enabled:
+      granted:
         type: boolean
+    type: object
+  permissions.UpdateRoleRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
     type: object
   product.Card:
     properties:
@@ -2787,7 +2889,6 @@ paths:
       - Payroll
   /api/permissions:
     get:
-      description: Returns all role-module permissions (enabled/disabled).
       produces:
       - application/json
       responses:
@@ -2802,33 +2903,32 @@ paths:
                     $ref: '#/definitions/permissions.Permission'
                   type: array
               type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/response.APIResponse'
       security:
       - BearerAuth: []
-      summary: List module permissions
+      summary: List all permissions
       tags:
       - Permissions
-  /api/permissions/{role}/{module}:
+  /api/permissions/{role_id}/{module}/{action}:
     put:
       consumes:
       - application/json
-      description: Enable or disable a module for a specific role. Takes effect immediately
-        (cache invalidated).
       parameters:
-      - description: Role (cashier, operator, manager)
+      - description: Role ID
         in: path
-        name: role
+        name: role_id
         required: true
-        type: string
-      - description: Module name (sales, stock, products, etc.)
+        type: integer
+      - description: Module name
         in: path
         name: module
         required: true
         type: string
-      - description: enabled flag
+      - description: Action (view, create, update, delete)
+        in: path
+        name: action
+        required: true
+        type: string
+      - description: granted flag
         in: body
         name: body
         required: true
@@ -2846,17 +2946,65 @@ paths:
                 data:
                   $ref: '#/definitions/permissions.Permission'
               type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/response.APIResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/response.APIResponse'
       security:
       - BearerAuth: []
-      summary: Update module permission
+      summary: Set granted for one permission
+      tags:
+      - Permissions
+  /api/permissions/{role_id}/bulk:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Role ID
+        in: path
+        name: role_id
+        required: true
+        type: integer
+      - description: Permissions array
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/permissions.BulkPermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/permissions.Permission'
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Bulk update permissions for a role
+      tags:
+      - Permissions
+  /api/permissions/matrix:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/permissions.MatrixEntry'
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Permission matrix (roles x modules x actions)
       tags:
       - Permissions
   /api/products:
@@ -3761,6 +3909,125 @@ paths:
       summary: Export stock movements as Excel
       tags:
       - Reports
+  /api/roles:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/permissions.Role'
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: List all roles
+      tags:
+      - Roles
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Role data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/permissions.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/permissions.Role'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new role
+      tags:
+      - Roles
+  /api/roles/{id}:
+    delete:
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a custom role
+      tags:
+      - Roles
+    get:
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get role with permissions
+      tags:
+      - Roles
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/permissions.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/permissions.Role'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Update role name/description
+      tags:
+      - Roles
   /api/sales:
     get:
       description: List sales with optional filters and pagination.

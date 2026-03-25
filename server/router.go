@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -123,7 +124,8 @@ func NewRouter(deps Deps) *gin.Engine {
 	auditMW := auditlog.AuditMiddleware(auditRepo)
 
 	// Auth routes (pass audit middleware so block/unblock/password are logged)
-	getTokenVersion := auth.RegisterRoutes(r, deps.DB, deps.Cfg, auditMW)
+	authResult := auth.RegisterRoutes(r, deps.DB, deps.Cfg, auditMW)
+	getTokenVersion := authResult.TokenVersionFunc
 
 	// Protected API
 	api := r.Group("/api")
@@ -133,6 +135,9 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	// ── Permissions & Roles module (returns repo for RequirePermission middleware) ──
 	permRepo := permissions.RegisterRoutes(api, deps.DB, deps.Redis)
+
+	// Wire permission fetcher into auth service (login response includes permissions)
+	authResult.Service.SetPermissionFetcher(&permAdapter{repo: permRepo})
 
 	// helper: module-level gate (checks "view" action) — backward compat
 	mod := func(module string) *gin.RouterGroup {
@@ -204,6 +209,29 @@ func NewRouter(deps Deps) *gin.Engine {
 	})
 
 	return r
+}
+
+// permAdapter bridges permissions.Repository → auth.PermissionFetcher
+type permAdapter struct {
+	repo *permissions.Repository
+}
+
+func (a *permAdapter) MatrixForRoles(ctx context.Context, roleCodes []string) ([]auth.MatrixEntry, error) {
+	entries, err := a.repo.MatrixForRoles(ctx, roleCodes)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]auth.MatrixEntry, len(entries))
+	for i, e := range entries {
+		out[i] = auth.MatrixEntry{
+			Module: e.Module,
+			View:   e.View,
+			Create: e.Create,
+			Update: e.Update,
+			Delete: e.Delete,
+		}
+	}
+	return out, nil
 }
 
 func splitCSV(s string) []string {

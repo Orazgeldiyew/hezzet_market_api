@@ -13,7 +13,13 @@ import (
 // checker so the caller can reuse it for other protected route groups.
 // auditMiddleware is optional — when provided it is applied to every
 // authenticated write route so those actions appear in the audit log.
-func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config, auditMiddleware ...gin.HandlerFunc) middleware.TokenVersionFunc {
+// RegisterResult bundles the return values of RegisterRoutes.
+type RegisterResult struct {
+	TokenVersionFunc middleware.TokenVersionFunc
+	Service          *Service
+}
+
+func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config, auditMiddleware ...gin.HandlerFunc) RegisterResult {
 	repo := NewRepository(db)
 	svc := NewService(repo, cfg)
 	h := NewHandler(svc)
@@ -49,5 +55,8 @@ func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config, auditMid
 		}
 	}
 
-	return repo.GetTokenVersion
+	return RegisterResult{
+		TokenVersionFunc: repo.GetTokenVersion,
+		Service:          svc,
+	}
 }

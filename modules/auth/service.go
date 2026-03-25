@@ -19,12 +19,30 @@ import (
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
+// PermissionFetcher returns the permission matrix entries for given role codes.
+type PermissionFetcher interface {
+	MatrixForRoles(ctx context.Context, roleCodes []string) ([]MatrixEntry, error)
+}
+
+// MatrixEntry mirrors permissions.MatrixEntry to avoid import cycle.
+type MatrixEntry struct {
+	Module string
+	View   bool
+	Create bool
+	Update bool
+	Delete bool
+}
+
 type Service struct {
-	repo *Repository
-	cfg  config.Config
+	repo    *Repository
+	cfg     config.Config
+	permFet PermissionFetcher // nil-safe: if nil, permissions omitted from login response
 }
 
 func NewService(repo *Repository, cfg config.Config) *Service { return &Service{repo: repo, cfg: cfg} }
+
+// SetPermissionFetcher injects the permission fetcher after construction (breaks init cycle).
+func (s *Service) SetPermissionFetcher(pf PermissionFetcher) { s.permFet = pf }
 
 // -------------------- Roles helpers --------------------
 
@@ -126,6 +144,27 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 	// Best-effort: update last_login_at
 	_ = s.repo.UpdateLastLogin(ctx, u.ID)
 
+	// Fetch permissions for the user's roles
+	var perms []UserPermission
+	if s.permFet != nil {
+		entries, err := s.permFet.MatrixForRoles(ctx, roles)
+		if err == nil {
+			perms = make([]UserPermission, 0, len(entries))
+			for _, e := range entries {
+				perms = append(perms, UserPermission{
+					Module: e.Module,
+					View:   e.View,
+					Create: e.Create,
+					Update: e.Update,
+					Delete: e.Delete,
+				})
+			}
+		}
+	}
+	if perms == nil {
+		perms = []UserPermission{}
+	}
+
 	return LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
@@ -133,6 +172,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 		ExpiresIn:    int64(accessExp.Seconds()),
 		User:         toDTO(u),
 		Roles:        roles,
+		Permissions:  perms,
 	}, nil
 }
 

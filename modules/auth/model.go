@@ -83,12 +83,22 @@ type JWTPayload struct {
 // ---------- Responses ----------
 
 type LoginResponse struct {
-	AccessToken  string   `json:"access_token"`
-	RefreshToken string   `json:"refresh_token"`
-	TokenType    string   `json:"token_type"`
-	ExpiresIn    int64    `json:"expires_in"`
-	User         UserDTO  `json:"user"`
-	Roles        []string `json:"roles"`
+	AccessToken  string            `json:"access_token"`
+	RefreshToken string            `json:"refresh_token"`
+	TokenType    string            `json:"token_type"`
+	ExpiresIn    int64             `json:"expires_in"`
+	User         UserDTO           `json:"user"`
+	Roles        []string          `json:"roles"`
+	Permissions  []UserPermission  `json:"permissions"`
+}
+
+// UserPermission is a compact module-level permission summary for the frontend.
+type UserPermission struct {
+	Module string `json:"module"`
+	View   bool   `json:"view"`
+	Create bool   `json:"create"`
+	Update bool   `json:"update"`
+	Delete bool   `json:"delete"`
 }
 
 type TokenResponse struct {
