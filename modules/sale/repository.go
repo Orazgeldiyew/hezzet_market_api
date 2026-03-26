@@ -40,6 +40,9 @@ func (r *Repository) photoURL(path *string) *string {
 
 const saleCols = `id, warehouse_id, customer_id, worker_id, total_cents, cost_cents, bonus_used_cents, items_count, note, created_by, created_at, status`
 
+// saleColsQ is saleCols with s. prefix for queries with JOINs
+const saleColsQ = `s.id, s.warehouse_id, s.customer_id, s.worker_id, s.total_cents, s.cost_cents, s.bonus_used_cents, s.items_count, s.note, s.created_by, s.created_at, s.status`
+
 // ── scan helpers ─────────────────────────────────────────────────────────────
 
 func scanSale(row pgx.Row) (Sale, error) {
@@ -948,7 +951,7 @@ func (r *Repository) List(
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT s.`+saleCols+`, c.name
+		SELECT `+saleColsQ+`, c.name
 		FROM sales s
 		LEFT JOIN customers c ON c.id = s.customer_id
 		`+where+`

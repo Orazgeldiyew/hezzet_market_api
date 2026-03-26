@@ -19,7 +19,7 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 func (r *Repository) List(ctx context.Context, userID int64) ([]FavoriteProduct, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT fp.id, fp.user_id, fp.product_id, fp.position, fp.created_at,
-		       p.name, p.sale_price_cents, p.photo_url
+		       p.name, p.sale_price, p.photo_path
 		FROM favorite_products fp
 		JOIN products p ON p.id = fp.product_id
 		WHERE fp.user_id = $1 AND p.is_active = true AND p.deleted_at IS NULL
@@ -63,7 +63,7 @@ func (r *Repository) Add(ctx context.Context, userID, productID int64) (Favorite
 
 	// Fill product info
 	_ = r.db.QueryRow(ctx,
-		`SELECT name, sale_price_cents, photo_url FROM products WHERE id = $1`,
+		`SELECT name, sale_price, photo_path FROM products WHERE id = $1`,
 		productID,
 	).Scan(&f.Name, &f.PriceCents, &f.PhotoURL)
 
