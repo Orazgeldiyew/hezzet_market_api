@@ -182,6 +182,8 @@ definitions:
         type: boolean
       module:
         type: string
+      transfer:
+        type: boolean
       update:
         type: boolean
       view:
@@ -370,6 +372,52 @@ definitions:
       phone:
         maxLength: 50
         type: string
+    type: object
+  favorite.AddRequest:
+    properties:
+      product_id:
+        type: integer
+    required:
+    - product_id
+    type: object
+  favorite.FavoriteProduct:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      photo_url:
+        type: string
+      position:
+        type: integer
+      price_cents:
+        type: integer
+      product_id:
+        type: integer
+      user_id:
+        type: integer
+    type: object
+  favorite.ReorderItem:
+    properties:
+      position:
+        minimum: 0
+        type: integer
+      product_id:
+        type: integer
+    required:
+    - product_id
+    type: object
+  favorite.ReorderRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/favorite.ReorderItem'
+        minItems: 1
+        type: array
+    required:
+    - items
     type: object
   finance.AddPaymentRequest:
     properties:
@@ -623,6 +671,8 @@ definitions:
         type: integer
       role_name:
         type: string
+      transfer:
+        type: boolean
       update:
         type: boolean
       view:
@@ -1212,6 +1262,13 @@ definitions:
     - SaleStatusDraft
     - SaleStatusCompleted
     - SaleStatusCancelled
+  sale.TransferSaleRequest:
+    properties:
+      cashier_id:
+        type: integer
+    required:
+    - cashier_id
+    type: object
   stock.BulkInItem:
     properties:
       idempotency_key:
@@ -2405,6 +2462,109 @@ paths:
       summary: Get customer by loyalty card code
       tags:
       - Customers
+  /api/favorites:
+    get:
+      description: Returns the current user's favorite products sorted by position
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/favorite.FavoriteProduct'
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: List favorite products
+      tags:
+      - Favorites
+    post:
+      consumes:
+      - application/json
+      description: Adds a product to the current user's favorites
+      parameters:
+      - description: Product ID
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/favorite.AddRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/favorite.FavoriteProduct'
+              type: object
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Add product to favorites
+      tags:
+      - Favorites
+  /api/favorites/{product_id}:
+    delete:
+      description: Removes a product from the current user's favorites
+      parameters:
+      - description: Product ID
+        in: path
+        name: product_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove product from favorites
+      tags:
+      - Favorites
+  /api/favorites/reorder:
+    put:
+      consumes:
+      - application/json
+      description: Updates the position of favorite products for the current user
+      parameters:
+      - description: New positions
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/favorite.ReorderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Reorder favorite products
+      tags:
+      - Favorites
   /api/notifications/phones:
     get:
       description: Returns all admin phone numbers registered for SMS notifications
@@ -4365,7 +4525,48 @@ paths:
             $ref: '#/definitions/response.APIResponse'
       security:
       - BearerAuth: []
-      summary: Render sale receipt as HTML
+      tags:
+      - Sales
+  /api/sales/{id}/transfer:
+    post:
+      consumes:
+      - application/json
+      description: Changes the owner of a draft sale so another cashier can continue
+        it
+      parameters:
+      - description: Sale ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: New cashier ID
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/sale.TransferSaleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Transfer draft sale to another cashier
       tags:
       - Sales
   /api/stock/balance:

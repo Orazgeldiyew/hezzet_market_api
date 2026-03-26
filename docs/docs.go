@@ -1087,6 +1087,180 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/favorites": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the current user's favorite products sorted by position",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Favorites"
+                ],
+                "summary": "List favorite products",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/favorite.FavoriteProduct"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Adds a product to the current user's favorites",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Favorites"
+                ],
+                "summary": "Add product to favorites",
+                "parameters": [
+                    {
+                        "description": "Product ID",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/favorite.AddRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/favorite.FavoriteProduct"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/favorites/reorder": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates the position of favorite products for the current user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Favorites"
+                ],
+                "summary": "Reorder favorite products",
+                "parameters": [
+                    {
+                        "description": "New positions",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/favorite.ReorderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/favorites/{product_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a product from the current user's favorites",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Favorites"
+                ],
+                "summary": "Remove product from favorites",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Product ID",
+                        "name": "product_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/notifications/phones": {
             "get": {
                 "security": [
@@ -4253,7 +4427,6 @@ const docTemplate = `{
                 "tags": [
                     "Sales"
                 ],
-                "summary": "Render sale receipt as HTML",
                 "parameters": [
                     {
                         "type": "integer",
@@ -4284,6 +4457,70 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sales/{id}/transfer": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes the owner of a draft sale so another cashier can continue it",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sales"
+                ],
+                "summary": "Transfer draft sale to another cashier",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Sale ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New cashier ID",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/sale.TransferSaleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
                         }
@@ -8244,6 +8481,9 @@ const docTemplate = `{
                 "module": {
                     "type": "string"
                 },
+                "transfer": {
+                    "type": "boolean"
+                },
                 "update": {
                     "type": "boolean"
                 },
@@ -8524,6 +8764,76 @@ const docTemplate = `{
                 "phone": {
                     "type": "string",
                     "maxLength": 50
+                }
+            }
+        },
+        "favorite.AddRequest": {
+            "type": "object",
+            "required": [
+                "product_id"
+            ],
+            "properties": {
+                "product_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "favorite.FavoriteProduct": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "photo_url": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "price_cents": {
+                    "type": "integer"
+                },
+                "product_id": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "favorite.ReorderItem": {
+            "type": "object",
+            "required": [
+                "product_id"
+            ],
+            "properties": {
+                "position": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "product_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "favorite.ReorderRequest": {
+            "type": "object",
+            "required": [
+                "items"
+            ],
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/favorite.ReorderItem"
+                    }
                 }
             }
         },
@@ -8906,6 +9216,9 @@ const docTemplate = `{
                 },
                 "role_name": {
                     "type": "string"
+                },
+                "transfer": {
+                    "type": "boolean"
                 },
                 "update": {
                     "type": "boolean"
@@ -9795,6 +10108,17 @@ const docTemplate = `{
                 "SaleStatusCancelled"
             ]
         },
+        "sale.TransferSaleRequest": {
+            "type": "object",
+            "required": [
+                "cashier_id"
+            ],
+            "properties": {
+                "cashier_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "stock.BulkInItem": {
             "type": "object",
             "required": [
@@ -10598,6 +10922,7 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Market backend (products, stock, income, sales)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
+
 }
 
 func init() {
