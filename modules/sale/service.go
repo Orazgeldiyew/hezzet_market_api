@@ -85,6 +85,17 @@ func (s *Service) CancelSale(ctx context.Context, saleID int64, userID int64) er
 	return nil
 }
 
+func (s *Service) TransferDraft(ctx context.Context, saleID, currentUserID, newCashierID int64, callerRoles []string) error {
+	err := s.repo.TransferDraft(ctx, saleID, currentUserID, newCashierID, callerRoles)
+	if err != nil {
+		if isAppError(err) {
+			return err
+		}
+		return apperr.Internal(err)
+	}
+	return nil
+}
+
 func (s *Service) GetSale(ctx context.Context, id int64) (SaleDetail, error) {
 	sale, items, err := s.repo.GetByID(ctx, id)
 	if err != nil {

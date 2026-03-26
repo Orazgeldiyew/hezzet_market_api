@@ -486,6 +486,49 @@ func (r *Repository) ConfirmSale(
 
 // ── CancelSale (draft → cancelled or confirmed → cancelled) ─────────────────
 
+func (r *Repository) TransferDraft(ctx context.Context, saleID, currentUserID, newCashierID int64, callerRoles []string) error {
+	var status string
+	var ownerUserID int64
+	err := r.db.QueryRow(ctx,
+		`SELECT status, owner_user_id FROM sales WHERE id = $1`, saleID,
+	).Scan(&status, &ownerUserID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperr.NotFound("SALE_NOT_FOUND", "sale not found")
+		}
+		return err
+	}
+
+	if status != "draft" {
+		return apperr.Validation("only draft sales can be transferred")
+	}
+
+	// Only owner or manager/admin can transfer
+	isManagerOrAdmin := false
+	for _, r := range callerRoles {
+		if r == "admin" || r == "manager" {
+			isManagerOrAdmin = true
+			break
+		}
+	}
+	if ownerUserID != currentUserID && !isManagerOrAdmin {
+		return apperr.Forbidden("only the owner or manager can transfer a draft")
+	}
+
+	ct, err := r.db.Exec(ctx,
+		`UPDATE sales SET cashier_id = $2, owner_user_id = $2, updated_at = now()
+		 WHERE id = $1 AND status = 'draft'`,
+		saleID, newCashierID,
+	)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return apperr.NotFound("SALE_NOT_FOUND", "sale not found or not draft")
+	}
+	return nil
+}
+
 func (r *Repository) CancelSale(ctx context.Context, saleID int64, userID int64) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {

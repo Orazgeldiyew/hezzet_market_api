@@ -22,6 +22,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/receiptsettings"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/reports"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customer"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/favorite"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/notification"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/payroll"
@@ -173,7 +174,7 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	// ── Sales ──
 	receiptRepo := receiptsettings.RegisterRoutes(api, deps.DB, deps.Cfg)
-	sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo, customerRepo)
+	sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo, customerRepo, permRepo)
 
 	// ── Purchases ──
 	purchase.RegisterRoutes(mod("purchases"), deps.DB, finRepo)
@@ -185,6 +186,9 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	// ── Worker Cards (credit card management) ──
 	workercard.RegisterRoutes(api, deps.DB)
+
+	// ── Favorites (per-user, any authenticated user) ──
+	favorite.RegisterRoutes(api, deps.DB)
 
 	// ── Notifications (admin-only, no module permission needed) ──
 	notification.RegisterRoutes(api, deps.DB, deps.NotifQueue, deps.NotifPhoneRepo)
@@ -224,11 +228,12 @@ func (a *permAdapter) MatrixForRoles(ctx context.Context, roleCodes []string) ([
 	out := make([]auth.MatrixEntry, len(entries))
 	for i, e := range entries {
 		out[i] = auth.MatrixEntry{
-			Module: e.Module,
-			View:   e.View,
-			Create: e.Create,
-			Update: e.Update,
-			Delete: e.Delete,
+			Module:   e.Module,
+			View:     e.View,
+			Create:   e.Create,
+			Update:   e.Update,
+			Delete:   e.Delete,
+			Transfer: e.Transfer,
 		}
 	}
 	return out, nil

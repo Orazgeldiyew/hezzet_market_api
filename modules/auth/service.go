@@ -26,11 +26,12 @@ type PermissionFetcher interface {
 
 // MatrixEntry mirrors permissions.MatrixEntry to avoid import cycle.
 type MatrixEntry struct {
-	Module string
-	View   bool
-	Create bool
-	Update bool
-	Delete bool
+	Module   string
+	View     bool
+	Create   bool
+	Update   bool
+	Delete   bool
+	Transfer bool
 }
 
 type Service struct {
@@ -152,11 +153,12 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 			perms = make([]UserPermission, 0, len(entries))
 			for _, e := range entries {
 				perms = append(perms, UserPermission{
-					Module: e.Module,
-					View:   e.View,
-					Create: e.Create,
-					Update: e.Update,
-					Delete: e.Delete,
+					Module:   e.Module,
+					View:     e.View,
+					Create:   e.Create,
+					Update:   e.Update,
+					Delete:   e.Delete,
+					Transfer: e.Transfer,
 				})
 			}
 		}

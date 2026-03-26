@@ -75,6 +75,10 @@ type ConfirmSaleRequest struct {
 	Force bool `json:"force"`
 }
 
+type TransferSaleRequest struct {
+	CashierID int64 `json:"cashier_id" binding:"required,gt=0"`
+}
+
 // ── Responses ────────────────────────────────────────────────────────────────
 
 type SaleDetail struct {

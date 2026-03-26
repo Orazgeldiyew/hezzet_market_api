@@ -287,6 +287,44 @@ func (h *Handler) DeleteSaleItem(c *gin.Context) {
 
 // GetReceipt godoc
 // @Summary Render sale receipt as HTML
+// TransferDraft godoc
+// @Summary      Transfer draft sale to another cashier
+// @Description  Changes the owner of a draft sale so another cashier can continue it
+// @Tags         Sales
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path  int                  true  "Sale ID"
+// @Param        body body  TransferSaleRequest   true  "New cashier ID"
+// @Success      200  {object} response.APIResponse
+// @Failure      400  {object} response.APIResponse
+// @Failure      403  {object} response.APIResponse
+// @Failure      404  {object} response.APIResponse
+// @Router       /api/sales/{id}/transfer [post]
+func (h *Handler) TransferDraft(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.Error(apperr.Validation("invalid sale id"))
+		return
+	}
+
+	var req TransferSaleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(apperr.Validation("cashier_id is required"))
+		return
+	}
+
+	userID := extractUserID(c)
+	rolesVal, _ := c.Get("roles")
+	roles, _ := rolesVal.([]string)
+
+	if err := h.svc.TransferDraft(c.Request.Context(), id, userID, req.CashierID, roles); err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, gin.H{"transferred": true, "new_cashier_id": req.CashierID})
+}
+
 // @Description Returns an HTML page formatted for an 80mm thermal printer. Uses custom template from receipt settings if configured.
 // @Tags Sales
 // @Produce html

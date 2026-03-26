@@ -62,4 +62,5 @@ type MatrixEntry struct {
 	Create   bool   `json:"create"`
 	Update   bool   `json:"update"`
 	Delete   bool   `json:"delete"`
+	Transfer bool   `json:"transfer"`
 }

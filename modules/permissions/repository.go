@@ -313,10 +313,11 @@ func (r *Repository) MatrixForRoles(ctx context.Context, roleCodes []string) ([]
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT rp.module,
-			   COALESCE(bool_or(rp.action = 'view'   AND rp.granted), false) AS can_view,
-			   COALESCE(bool_or(rp.action = 'create'  AND rp.granted), false) AS can_create,
-			   COALESCE(bool_or(rp.action = 'update'  AND rp.granted), false) AS can_update,
-			   COALESCE(bool_or(rp.action = 'delete'  AND rp.granted), false) AS can_delete
+			   COALESCE(bool_or(rp.action = 'view'     AND rp.granted), false) AS can_view,
+			   COALESCE(bool_or(rp.action = 'create'   AND rp.granted), false) AS can_create,
+			   COALESCE(bool_or(rp.action = 'update'   AND rp.granted), false) AS can_update,
+			   COALESCE(bool_or(rp.action = 'delete'   AND rp.granted), false) AS can_delete,
+			   COALESCE(bool_or(rp.action = 'transfer' AND rp.granted), false) AS can_transfer
 		FROM role_permissions rp
 		JOIN roles ro ON ro.id = rp.role_id
 		WHERE ro.code = ANY($1)
@@ -331,7 +332,7 @@ func (r *Repository) MatrixForRoles(ctx context.Context, roleCodes []string) ([]
 	var out []MatrixEntry
 	for rows.Next() {
 		var m MatrixEntry
-		if err := rows.Scan(&m.Module, &m.View, &m.Create, &m.Update, &m.Delete); err != nil {
+		if err := rows.Scan(&m.Module, &m.View, &m.Create, &m.Update, &m.Delete, &m.Transfer); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -346,10 +347,11 @@ func (r *Repository) MatrixForRoles(ctx context.Context, roleCodes []string) ([]
 func (r *Repository) Matrix(ctx context.Context) ([]MatrixEntry, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT ro.id, ro.code, ro.name, rp.module,
-			   COALESCE(bool_or(rp.action = 'view'   AND rp.granted), false) AS can_view,
-			   COALESCE(bool_or(rp.action = 'create'  AND rp.granted), false) AS can_create,
-			   COALESCE(bool_or(rp.action = 'update'  AND rp.granted), false) AS can_update,
-			   COALESCE(bool_or(rp.action = 'delete'  AND rp.granted), false) AS can_delete
+			   COALESCE(bool_or(rp.action = 'view'     AND rp.granted), false) AS can_view,
+			   COALESCE(bool_or(rp.action = 'create'   AND rp.granted), false) AS can_create,
+			   COALESCE(bool_or(rp.action = 'update'   AND rp.granted), false) AS can_update,
+			   COALESCE(bool_or(rp.action = 'delete'   AND rp.granted), false) AS can_delete,
+			   COALESCE(bool_or(rp.action = 'transfer' AND rp.granted), false) AS can_transfer
 		FROM role_permissions rp
 		JOIN roles ro ON ro.id = rp.role_id
 		GROUP BY ro.id, ro.code, ro.name, rp.module
@@ -363,7 +365,7 @@ func (r *Repository) Matrix(ctx context.Context) ([]MatrixEntry, error) {
 	var out []MatrixEntry
 	for rows.Next() {
 		var m MatrixEntry
-		if err := rows.Scan(&m.RoleID, &m.RoleCode, &m.RoleName, &m.Module, &m.View, &m.Create, &m.Update, &m.Delete); err != nil {
+		if err := rows.Scan(&m.RoleID, &m.RoleCode, &m.RoleName, &m.Module, &m.View, &m.Create, &m.Update, &m.Delete, &m.Transfer); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

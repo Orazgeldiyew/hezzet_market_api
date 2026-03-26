@@ -94,11 +94,12 @@ type LoginResponse struct {
 
 // UserPermission is a compact module-level permission summary for the frontend.
 type UserPermission struct {
-	Module string `json:"module"`
-	View   bool   `json:"view"`
-	Create bool   `json:"create"`
-	Update bool   `json:"update"`
-	Delete bool   `json:"delete"`
+	Module   string `json:"module"`
+	View     bool   `json:"view"`
+	Create   bool   `json:"create"`
+	Update   bool   `json:"update"`
+	Delete   bool   `json:"delete"`
+	Transfer bool   `json:"transfer"`
 }
 
 type TokenResponse struct {

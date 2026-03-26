@@ -7,7 +7,7 @@ import (
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
-var validActions = map[string]bool{"view": true, "create": true, "update": true, "delete": true}
+var validActions = map[string]bool{"view": true, "create": true, "update": true, "delete": true, "transfer": true}
 var roleCodeRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,49}$`)
 
 type Service struct {
