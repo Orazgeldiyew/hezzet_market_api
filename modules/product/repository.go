@@ -83,6 +83,17 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 	return p, err
 }
 
+func (r *Repository) GetByBarcode(ctx context.Context, barcode string) (Product, error) {
+	var productID int64
+	err := r.db.QueryRow(ctx,
+		`SELECT product_id FROM product_barcodes WHERE barcode = $1`, barcode,
+	).Scan(&productID)
+	if err != nil {
+		return Product{}, err
+	}
+	return r.GetByID(ctx, productID)
+}
+
 func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (Product, error) {
 	q := `
 		UPDATE products SET

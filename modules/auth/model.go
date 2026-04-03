@@ -100,6 +100,7 @@ type UserPermission struct {
 	Update   bool   `json:"update"`
 	Delete   bool   `json:"delete"`
 	Transfer bool   `json:"transfer"`
+	Return   bool   `json:"return"`
 }
 
 type TokenResponse struct {

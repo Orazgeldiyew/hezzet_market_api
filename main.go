@@ -104,6 +104,42 @@ func main() {
 		log.Printf("SMS workers started: count=%d provider=%s", cfg.SMSWorkers, provider.Name())
 	}
 
+	// ── Draft cleanup cron (cancel drafts older than 2 hours) ──────────────
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		log.Println("[draft-cleanup] started (every 1h, max age 2h)")
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("[draft-cleanup] shutting down")
+				return
+			case <-ticker.C:
+				cutoff := time.Now().Add(-2 * time.Hour)
+				tag, err := db.Exec(ctx, `
+					UPDATE stock_reservations SET status = 'released', released_at = now()
+					WHERE status = 'active'
+					AND sale_id IN (SELECT id FROM sales WHERE status = 'draft' AND created_at < $1)
+				`, cutoff)
+				if err != nil {
+					log.Printf("[draft-cleanup] release reservations error: %v", err)
+					continue
+				}
+				tag2, err := db.Exec(ctx, `
+					UPDATE sales SET status = 'cancelled' WHERE status = 'draft' AND created_at < $1
+				`, cutoff)
+				if err != nil {
+					log.Printf("[draft-cleanup] cancel drafts error: %v", err)
+					continue
+				}
+				if tag.RowsAffected() > 0 || tag2.RowsAffected() > 0 {
+					log.Printf("[draft-cleanup] released %d reservations, cancelled %d drafts",
+						tag.RowsAffected(), tag2.RowsAffected())
+				}
+			}
+		}
+	}()
+
 	// ── Router + HTTP server ────────────────────────────────────────────────
 	r := server.NewRouter(server.Deps{
 		DB:             db,

@@ -164,6 +164,30 @@ func (h *Handler) List(c *gin.Context) {
 	response.List(c, out.Items, page, out.Limit, out.Offset, out.Total)
 }
 
+// GetByBarcode godoc
+// @Summary      Find product by barcode
+// @Description  Returns a product matching the exact barcode (for scanner)
+// @Tags         Products
+// @Produce      json
+// @Security     BearerAuth
+// @Param        code  path  string  true  "Barcode"
+// @Success      200  {object}  response.APIResponse{data=Product}
+// @Failure      404  {object}  response.APIResponse
+// @Router       /api/products/by-barcode/{code} [get]
+func (h *Handler) GetByBarcode(c *gin.Context) {
+	code := strings.TrimSpace(c.Param("code"))
+	if code == "" {
+		c.Error(apperr.Validation("barcode is required"))
+		return
+	}
+	p, err := h.svc.GetByBarcode(c.Request.Context(), code)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, p)
+}
+
 // Get godoc
 // @Summary      Get product by ID
 // @Description  Get a single product by its ID

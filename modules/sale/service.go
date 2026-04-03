@@ -2,6 +2,7 @@ package sale
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -64,6 +65,7 @@ func (s *Service) ConfirmSale(ctx context.Context, saleID int64, req ConfirmSale
 
 	_, err := s.repo.ConfirmSale(ctx, saleID, req, userID, s.finRepo)
 	if err != nil {
+		log.Printf("[ConfirmSale] error saleID=%d: %v", saleID, err)
 		if isAppError(err) {
 			return SaleDetail{}, err
 		}
@@ -148,4 +150,14 @@ func (s *Service) ListSales(
 		Limit:  limit,
 		Offset: offset,
 	}, nil
+}
+
+func (s *Service) ReturnSale(ctx context.Context, saleID int64, req ReturnSaleRequest, userID int64) error {
+	if err := s.repo.ReturnSale(ctx, saleID, req, userID); err != nil {
+		if isAppError(err) {
+			return err
+		}
+		return apperr.Internal(err)
+	}
+	return nil
 }

@@ -406,3 +406,38 @@ func (h *Handler) GetReceipt(c *gin.Context) {
 
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }
+
+// ReturnSale godoc
+// @Summary      Return sale items (partial or full)
+// @Description  Returns items from a confirmed sale. If items array is empty, returns the entire sale.
+// @Tags         Sales
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path  int               true  "Sale ID"
+// @Param        body body  ReturnSaleRequest  true  "Items to return and reason"
+// @Success      200  {object}  response.APIResponse
+// @Failure      400  {object}  response.APIResponse
+// @Failure      404  {object}  response.APIResponse
+// @Failure      409  {object}  response.APIResponse
+// @Router       /api/sales/{id}/return [post]
+func (h *Handler) ReturnSale(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.Error(apperr.Validation("invalid sale id"))
+		return
+	}
+
+	var req ReturnSaleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(apperr.Validation("invalid request body"))
+		return
+	}
+
+	userID := extractUserID(c)
+	if err := h.svc.ReturnSale(c.Request.Context(), id, req, userID); err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, gin.H{"returned": true})
+}

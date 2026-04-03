@@ -2420,6 +2420,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/products/by-barcode/{code}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a product matching the exact barcode (for scanner)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Products"
+                ],
+                "summary": "Find product by barcode",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Barcode",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/product.Product"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/products/{id}": {
             "get": {
                 "security": [
@@ -4457,6 +4509,70 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sales/{id}/return": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns items from a confirmed sale. If items array is empty, returns the entire sale.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sales"
+                ],
+                "summary": "Return sale items (partial or full)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Sale ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Items to return and reason",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/sale.ReturnSaleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
                         }
@@ -8481,6 +8597,9 @@ const docTemplate = `{
                 "module": {
                     "type": "string"
                 },
+                "return": {
+                    "type": "boolean"
+                },
                 "transfer": {
                     "type": "boolean"
                 },
@@ -9208,6 +9327,9 @@ const docTemplate = `{
                 "module": {
                     "type": "string"
                 },
+                "return": {
+                    "type": "boolean"
+                },
                 "role_code": {
                     "type": "string"
                 },
@@ -9901,6 +10023,35 @@ const docTemplate = `{
                 },
                 "worker_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "sale.ReturnItemRequest": {
+            "type": "object",
+            "required": [
+                "qty_milli",
+                "sale_item_id"
+            ],
+            "properties": {
+                "qty_milli": {
+                    "type": "integer"
+                },
+                "sale_item_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "sale.ReturnSaleRequest": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/sale.ReturnItemRequest"
+                    }
+                },
+                "reason": {
+                    "type": "string"
                 }
             }
         },

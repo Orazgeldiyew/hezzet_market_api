@@ -67,13 +67,13 @@ func (s *Service) ListPOs(
 	status *string,
 	dateFrom, dateTo *time.Time,
 	limit, offset int,
-) ([]PurchaseOrder, int, error) {
+) ([]POListItem, int, error) {
 	out, total, err := s.repo.List(ctx, supplierID, warehouseID, status, dateFrom, dateTo, limit, offset)
 	if err != nil {
 		return nil, 0, apperr.Internal(err)
 	}
 	if out == nil {
-		out = []PurchaseOrder{}
+		out = []POListItem{}
 	}
 	return out, total, nil
 }

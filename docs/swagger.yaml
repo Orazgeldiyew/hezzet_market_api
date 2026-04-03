@@ -182,6 +182,8 @@ definitions:
         type: boolean
       module:
         type: string
+      return:
+        type: boolean
       transfer:
         type: boolean
       update:
@@ -665,6 +667,8 @@ definitions:
         type: boolean
       module:
         type: string
+      return:
+        type: boolean
       role_code:
         type: string
       role_id:
@@ -1125,6 +1129,25 @@ definitions:
     required:
     - items
     - warehouse_id
+    type: object
+  sale.ReturnItemRequest:
+    properties:
+      qty_milli:
+        type: integer
+      sale_item_id:
+        type: integer
+    required:
+    - qty_milli
+    - sale_item_id
+    type: object
+  sale.ReturnSaleRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/sale.ReturnItemRequest'
+        type: array
+      reason:
+        type: string
     type: object
   sale.Sale:
     properties:
@@ -3569,6 +3592,36 @@ paths:
       summary: Upload product photo
       tags:
       - Products
+  /api/products/by-barcode/{code}:
+    get:
+      description: Returns a product matching the exact barcode (for scanner)
+      parameters:
+      - description: Barcode
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.Product'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Find product by barcode
+      tags:
+      - Products
   /api/purchases:
     get:
       description: List purchase orders with optional filters and pagination.
@@ -4525,6 +4578,48 @@ paths:
             $ref: '#/definitions/response.APIResponse'
       security:
       - BearerAuth: []
+      tags:
+      - Sales
+  /api/sales/{id}/return:
+    post:
+      consumes:
+      - application/json
+      description: Returns items from a confirmed sale. If items array is empty, returns
+        the entire sale.
+      parameters:
+      - description: Sale ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Items to return and reason
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/sale.ReturnSaleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Return sale items (partial or full)
       tags:
       - Sales
   /api/sales/{id}/transfer:

@@ -451,7 +451,7 @@ func (r *Repository) List(
 	status *string,
 	dateFrom, dateTo *time.Time,
 	limit, offset int,
-) ([]PurchaseOrder, int, error) {
+) ([]POListItem, int, error) {
 
 	where := `
 		WHERE ($1::bigint IS NULL OR supplier_id = $1)
@@ -470,10 +470,14 @@ func (r *Repository) List(
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT `+poCols+`
-		FROM purchase_orders
+		SELECT po.id, po.supplier_id, po.warehouse_id, po.status, po.total_cents, po.items_count,
+		       po.note, po.created_by, po.created_at, po.received_at, po.received_by,
+		       s.name, w.name
+		FROM purchase_orders po
+		LEFT JOIN suppliers s ON s.id = po.supplier_id
+		LEFT JOIN warehouses w ON w.id = po.warehouse_id
 		`+where+`
-		ORDER BY created_at DESC, id DESC
+		ORDER BY po.created_at DESC, po.id DESC
 		LIMIT $6 OFFSET $7
 	`, supplierID, warehouseID, status, dateFrom, dateTo, limit, offset)
 	if err != nil {
@@ -481,13 +485,25 @@ func (r *Repository) List(
 	}
 	defer rows.Close()
 
-	var out []PurchaseOrder
+	var out []POListItem
 	for rows.Next() {
-		po, err := scanPO(rows)
+		var item POListItem
+		var supplierName, warehouseName *string
+		err := rows.Scan(
+			&item.ID, &item.SupplierID, &item.WarehouseID, &item.Status, &item.TotalCents, &item.ItemsCount,
+			&item.Note, &item.CreatedBy, &item.CreatedAt, &item.ReceivedAt, &item.ReceivedBy,
+			&supplierName, &warehouseName,
+		)
 		if err != nil {
 			return nil, 0, err
 		}
-		out = append(out, po)
+		if supplierName != nil {
+			item.SupplierName = *supplierName
+		}
+		if warehouseName != nil {
+			item.WarehouseName = *warehouseName
+		}
+		out = append(out, item)
 	}
 	return out, total, rows.Err()
 }

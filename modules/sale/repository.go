@@ -354,13 +354,13 @@ func (r *Repository) ConfirmSale(
 		_, err = tx.Exec(ctx, `
 			INSERT INTO warehouse_items
 				(warehouse_id, product_id, qty_milli, avg_cost_cents, total_cost_cents, updated_at)
-			VALUES ($1, $2, -$3, 0, 0, now())
+			VALUES ($1, $2, (0 - $3::bigint), 0, 0, now())
 			ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
-				qty_milli        = warehouse_items.qty_milli - $3,
-				total_cost_cents = GREATEST(warehouse_items.total_cost_cents - $4, 0),
+				qty_milli        = warehouse_items.qty_milli - $3::bigint,
+				total_cost_cents = GREATEST(warehouse_items.total_cost_cents - $4::bigint, 0),
 				avg_cost_cents   = CASE
-					WHEN (warehouse_items.qty_milli - $3) > 0
-						THEN ((warehouse_items.total_cost_cents - $4) * 1000) / (warehouse_items.qty_milli - $3)
+					WHEN (warehouse_items.qty_milli - $3::bigint) > 0
+						THEN ((warehouse_items.total_cost_cents - $4::bigint) * 1000) / (warehouse_items.qty_milli - $3::bigint)
 					ELSE 0
 				END,
 				updated_at = now()
@@ -488,10 +488,10 @@ func (r *Repository) ConfirmSale(
 
 func (r *Repository) TransferDraft(ctx context.Context, saleID, currentUserID, newCashierID int64, callerRoles []string) error {
 	var status string
-	var ownerUserID int64
+	var createdBy *int64
 	err := r.db.QueryRow(ctx,
-		`SELECT status, owner_user_id FROM sales WHERE id = $1`, saleID,
-	).Scan(&status, &ownerUserID)
+		`SELECT status, created_by FROM sales WHERE id = $1`, saleID,
+	).Scan(&status, &createdBy)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return apperr.NotFound("SALE_NOT_FOUND", "sale not found")
@@ -511,13 +511,12 @@ func (r *Repository) TransferDraft(ctx context.Context, saleID, currentUserID, n
 			break
 		}
 	}
-	if ownerUserID != currentUserID && !isManagerOrAdmin {
+	if createdBy != nil && *createdBy != currentUserID && !isManagerOrAdmin {
 		return apperr.Forbidden("only the owner or manager can transfer a draft")
 	}
 
 	ct, err := r.db.Exec(ctx,
-		`UPDATE sales SET cashier_id = $2, owner_user_id = $2, updated_at = now()
-		 WHERE id = $1 AND status = 'draft'`,
+		`UPDATE sales SET created_by = $2 WHERE id = $1 AND status = 'draft'`,
 		saleID, newCashierID,
 	)
 	if err != nil {
@@ -975,4 +974,246 @@ func (r *Repository) List(
 		out = append(out, item)
 	}
 	return out, total, rows.Err()
+}
+
+// ── ReturnSale (partial or full return of confirmed sale) ────────────────────
+
+func (r *Repository) ReturnSale(ctx context.Context, saleID int64, req ReturnSaleRequest, userID int64) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	uid := &userID
+
+	// 1. Lock sale and check status
+	var status string
+	var warehouseID int64
+	var saleCustomerID *int64
+	var totalCents, bonusUsedCents int64
+	err = tx.QueryRow(ctx, `
+		SELECT status, warehouse_id, customer_id, total_cents, bonus_used_cents
+		FROM sales WHERE id = $1 FOR UPDATE
+	`, saleID).Scan(&status, &warehouseID, &saleCustomerID, &totalCents, &bonusUsedCents)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperr.NotFound("SALE_NOT_FOUND", "sale not found")
+		}
+		return err
+	}
+	if status != "confirmed" && status != "partially_returned" {
+		return apperr.Conflict("SALE_NOT_RETURNABLE", "only confirmed or partially_returned sales can be returned")
+	}
+
+	// 2. If items is empty → full return (all items)
+	type saleItemInfo struct {
+		id             int64
+		productID      int64
+		qtyMilli       int64
+		costCents      int64
+		unitPriceCents int64
+		lineTotalCents int64
+	}
+
+	returnItems := req.Items
+	if len(returnItems) == 0 {
+		// Full return: fetch all sale items
+		rows, err := tx.Query(ctx, `
+			SELECT id, product_id, qty_milli, cost_cents, unit_price_cents, line_total_cents
+			FROM sale_items WHERE sale_id = $1 ORDER BY product_id
+		`, saleID)
+		if err != nil {
+			return err
+		}
+		var allItems []saleItemInfo
+		for rows.Next() {
+			var si saleItemInfo
+			if err := rows.Scan(&si.id, &si.productID, &si.qtyMilli, &si.costCents, &si.unitPriceCents, &si.lineTotalCents); err != nil {
+				rows.Close()
+				return err
+			}
+			allItems = append(allItems, si)
+		}
+		rows.Close()
+
+		// Check already returned quantities
+		for _, si := range allItems {
+			var alreadyReturned int64
+			_ = tx.QueryRow(ctx, `
+				SELECT COALESCE(SUM(qty_milli), 0) FROM sale_return_items WHERE sale_item_id = $1
+			`, si.id).Scan(&alreadyReturned)
+			remaining := si.qtyMilli - alreadyReturned
+			if remaining > 0 {
+				returnItems = append(returnItems, ReturnItemRequest{
+					SaleItemID: si.id,
+					QtyMilli:   remaining,
+				})
+			}
+		}
+	}
+
+	if len(returnItems) == 0 {
+		return apperr.Conflict("NOTHING_TO_RETURN", "all items already returned")
+	}
+
+	// 3. Create sale_returns header
+	var returnID int64
+	var returnTotalCents int64
+	err = tx.QueryRow(ctx, `
+		INSERT INTO sale_returns (sale_id, reason, total_cents, created_by)
+		VALUES ($1, $2, 0, $3)
+		RETURNING id
+	`, saleID, req.Reason, uid).Scan(&returnID)
+	if err != nil {
+		return err
+	}
+
+	// 4. Process each return item
+	for _, ri := range returnItems {
+		// Fetch original sale item
+		var origProductID, origQtyMilli, origCostCents, origUnitPrice, origLineTotal int64
+		err = tx.QueryRow(ctx, `
+			SELECT product_id, qty_milli, cost_cents, unit_price_cents, line_total_cents
+			FROM sale_items WHERE id = $1 AND sale_id = $2
+		`, ri.SaleItemID, saleID).Scan(&origProductID, &origQtyMilli, &origCostCents, &origUnitPrice, &origLineTotal)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return apperr.NotFound("SALE_ITEM_NOT_FOUND", "sale item not found in this sale")
+			}
+			return err
+		}
+
+		// Check already returned quantity
+		var alreadyReturned int64
+		_ = tx.QueryRow(ctx, `
+			SELECT COALESCE(SUM(qty_milli), 0) FROM sale_return_items WHERE sale_item_id = $1
+		`, ri.SaleItemID).Scan(&alreadyReturned)
+
+		if ri.QtyMilli > origQtyMilli-alreadyReturned {
+			return apperr.Validation(
+				fmt.Sprintf("return qty exceeds remaining for sale_item %d: remaining=%d, requested=%d",
+					ri.SaleItemID, origQtyMilli-alreadyReturned, ri.QtyMilli),
+			)
+		}
+
+		// Calculate refund (proportional to qty)
+		refundCents := lineTotalCents(ri.QtyMilli, origUnitPrice)
+		returnTotalCents += refundCents
+
+		// Calculate cost to restore (proportional)
+		costToRestore := (origCostCents * ri.QtyMilli) / origQtyMilli
+
+		// Insert sale_return_items
+		_, err = tx.Exec(ctx, `
+			INSERT INTO sale_return_items (return_id, sale_item_id, product_id, qty_milli, refund_cents)
+			VALUES ($1, $2, $3, $4, $5)
+		`, returnID, ri.SaleItemID, origProductID, ri.QtyMilli, refundCents)
+		if err != nil {
+			return err
+		}
+
+		// Restore stock
+		var currentQty, avgCost, wTotalCost int64
+		rowExists := true
+		err = tx.QueryRow(ctx, `
+			SELECT qty_milli, avg_cost_cents, total_cost_cents
+			FROM warehouse_items
+			WHERE warehouse_id = $1 AND product_id = $2
+			FOR UPDATE
+		`, warehouseID, origProductID).Scan(&currentQty, &avgCost, &wTotalCost)
+		if err != nil {
+			if err != pgx.ErrNoRows {
+				return err
+			}
+			rowExists = false
+		}
+
+		newQty := currentQty + ri.QtyMilli
+		newTotalCost := wTotalCost + costToRestore
+		newAvgCost := int64(0)
+		if newQty > 0 {
+			newAvgCost = (newTotalCost * 1000) / newQty
+		}
+
+		// Ledger entry
+		_, err = tx.Exec(ctx, `
+			INSERT INTO warehouse_item_details
+				(idempotency_key, warehouse_id, product_id, delta_milli, type, created_by)
+			VALUES (gen_random_uuid(), $1, $2, $3, 'sale_return', $4)
+		`, warehouseID, origProductID, ri.QtyMilli, uid)
+		if err != nil {
+			return err
+		}
+
+		if rowExists {
+			_, err = tx.Exec(ctx, `
+				UPDATE warehouse_items
+				SET qty_milli = $3, total_cost_cents = $4, avg_cost_cents = $5, updated_at = now()
+				WHERE warehouse_id = $1 AND product_id = $2
+			`, warehouseID, origProductID, newQty, newTotalCost, newAvgCost)
+		} else {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO warehouse_items
+					(warehouse_id, product_id, qty_milli, avg_cost_cents, total_cost_cents, updated_at)
+				VALUES ($1, $2, $3, $4, $5, now())
+			`, warehouseID, origProductID, newQty, newAvgCost, newTotalCost)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	// 5. Update return total
+	_, err = tx.Exec(ctx, `UPDATE sale_returns SET total_cents = $2 WHERE id = $1`, returnID, returnTotalCents)
+	if err != nil {
+		return err
+	}
+
+	// 6. Create refund finance transaction
+	if returnTotalCents > 0 {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO transactions
+				(payment_type_id, reason, status, amount_cents, type, related_table, related_id, created_by, created_at, updated_at)
+			VALUES (NULL, $1, 'paid', $2, 'expense', 'sale', $3, $4, now(), now())
+		`, fmt.Sprintf("Return for Sale #%d", saleID), returnTotalCents, saleID, uid)
+		if err != nil {
+			return err
+		}
+	}
+
+	// 7. Proportional bonus restoration
+	if bonusUsedCents > 0 && saleCustomerID != nil && totalCents > 0 {
+		bonusToRestore := (bonusUsedCents * returnTotalCents) / totalCents
+		if bonusToRestore > 0 {
+			_, err = tx.Exec(ctx, `
+				UPDATE customers SET bonus_points = bonus_points + $2, updated_at = now()
+				WHERE id = $1 AND deleted_at IS NULL
+			`, *saleCustomerID, bonusToRestore)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// 8. Determine new sale status
+	var totalSoldMilli, totalReturnedMilli int64
+	_ = tx.QueryRow(ctx, `SELECT COALESCE(SUM(qty_milli), 0) FROM sale_items WHERE sale_id = $1`, saleID).Scan(&totalSoldMilli)
+	_ = tx.QueryRow(ctx, `
+		SELECT COALESCE(SUM(sri.qty_milli), 0)
+		FROM sale_return_items sri
+		JOIN sale_returns sr ON sr.id = sri.return_id
+		WHERE sr.sale_id = $1
+	`, saleID).Scan(&totalReturnedMilli)
+
+	newStatus := "partially_returned"
+	if totalReturnedMilli >= totalSoldMilli {
+		newStatus = "returned"
+	}
+	_, err = tx.Exec(ctx, `UPDATE sales SET status = $2 WHERE id = $1`, saleID, newStatus)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }

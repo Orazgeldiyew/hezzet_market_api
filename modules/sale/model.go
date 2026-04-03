@@ -79,6 +79,16 @@ type TransferSaleRequest struct {
 	CashierID int64 `json:"cashier_id" binding:"required,gt=0"`
 }
 
+type ReturnItemRequest struct {
+	SaleItemID int64 `json:"sale_item_id" binding:"required,gt=0"`
+	QtyMilli   int64 `json:"qty_milli"    binding:"required,gt=0"`
+}
+
+type ReturnSaleRequest struct {
+	Items  []ReturnItemRequest `json:"items"`
+	Reason string              `json:"reason"`
+}
+
 // ── Responses ────────────────────────────────────────────────────────────────
 
 type SaleDetail struct {

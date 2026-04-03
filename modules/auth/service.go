@@ -32,6 +32,7 @@ type MatrixEntry struct {
 	Update   bool
 	Delete   bool
 	Transfer bool
+	Return   bool
 }
 
 type Service struct {
@@ -159,6 +160,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 					Update:   e.Update,
 					Delete:   e.Delete,
 					Transfer: e.Transfer,
+				Return:   e.Return,
 				})
 			}
 		}

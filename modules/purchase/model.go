@@ -58,6 +58,12 @@ type PODetail struct {
 	TransactionID int64          `json:"transaction_id"`
 }
 
+type POListItem struct {
+	PurchaseOrder
+	SupplierName  string `json:"supplier_name"`
+	WarehouseName string `json:"warehouse_name"`
+}
+
 type SupplierDebtRow struct {
 	SupplierID   int64  `json:"supplier_id"`
 	SupplierName string `json:"supplier_name"`

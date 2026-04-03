@@ -18,6 +18,7 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir, publicBas
 	read.Use(middleware.RequireRoles("operator", "cashier", "manager"))
 	{
 		read.GET("", h.List)
+		read.GET("/by-barcode/:code", h.GetByBarcode)
 		read.GET("/:id", h.Get)
 		read.GET("/:id/card", h.GetCard)
 		read.GET("/:id/categories", h.GetCategories)

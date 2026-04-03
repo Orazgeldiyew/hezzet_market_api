@@ -234,6 +234,7 @@ func (a *permAdapter) MatrixForRoles(ctx context.Context, roleCodes []string) ([
 			Update:   e.Update,
 			Delete:   e.Delete,
 			Transfer: e.Transfer,
+			Return:   e.Return,
 		}
 	}
 	return out, nil

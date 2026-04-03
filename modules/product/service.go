@@ -221,6 +221,17 @@ func (s *Service) Create(ctx context.Context, req CreateRequest, fh *multipart.F
 	return p, nil
 }
 
+func (s *Service) GetByBarcode(ctx context.Context, barcode string) (Product, error) {
+	p, err := s.repo.GetByBarcode(ctx, barcode)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return Product{}, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found for this barcode")
+		}
+		return Product{}, apperr.Internal(err)
+	}
+	return p, nil
+}
+
 func (s *Service) Get(ctx context.Context, id int64) (Product, error) {
 	p, err := s.repo.GetByID(ctx, id)
 	if err != nil {

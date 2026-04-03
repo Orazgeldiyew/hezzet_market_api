@@ -52,6 +52,11 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repo
 		h.TransferDraft,
 	)
 
+	sales.POST("/:id/return",
+		middleware.RequirePermission(permChecker, "sales", "return"),
+		h.ReturnSale,
+	)
+
 	sales.DELETE("/:id/items/:item_id",
 		middleware.RequireRoles("cashier", "operator", "manager"),
 		h.DeleteSaleItem,
