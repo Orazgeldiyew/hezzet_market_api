@@ -15,14 +15,21 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, cfg config.Config) *R
 		ShopPhone:   cfg.ReceiptShopPhone,
 		Footer:      cfg.ReceiptFooter,
 	}
+
+	uploadsDir := cfg.UploadsDir
+	if uploadsDir == "" {
+		uploadsDir = "./uploads"
+	}
+
 	repo := NewRepository(db, defaults)
-	h := NewHandler(repo)
+	h := NewHandler(repo, uploadsDir, cfg.PublicBaseURL)
 
 	g := rg.Group("/settings/receipt")
 	g.Use(middleware.RequireRoles("manager")) // admin + manager
 
 	g.GET("", h.GetSettings)
 	g.PUT("", h.UpdateSettings)
+	g.POST("/logo", h.UploadLogo)
 
 	return repo
 }

@@ -25,6 +25,9 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, financeRepo *finance.
 	workers.GET("/:id/fines", middleware.PaginationMiddleware(), h.ListFines)
 
 	// Debts
+	workers.GET("/debts/debtors", h.AllDebtors)
 	workers.POST("/:id/debts", h.CreateDebt)
 	workers.GET("/:id/debts", middleware.PaginationMiddleware(), h.ListDebts)
+	workers.GET("/debts/:debt_id", h.GetDebt)
+	workers.POST("/debts/:debt_id/pay", h.PayDebt)
 }

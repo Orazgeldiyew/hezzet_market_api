@@ -180,12 +180,12 @@ func (h *Handler) GetByBarcode(c *gin.Context) {
 		c.Error(apperr.Validation("barcode is required"))
 		return
 	}
-	p, err := h.svc.GetByBarcode(c.Request.Context(), code)
+	result, err := h.svc.GetByBarcode(c.Request.Context(), code)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	response.OK(c, p)
+	response.OK(c, result)
 }
 
 // Get godoc
@@ -229,7 +229,13 @@ func (h *Handler) Update(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	p, err := h.svc.Update(c.Request.Context(), id, req)
+	var userID *int64
+	if v, ok := c.Get("user_id"); ok {
+		if uid, ok := v.(int64); ok {
+			userID = &uid
+		}
+	}
+	p, err := h.svc.Update(c.Request.Context(), id, req, userID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -346,6 +352,34 @@ func (h *Handler) RemoveCategory(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"deleted": true})
+}
+
+// GetPriceHistory godoc
+// @Summary      Get price history
+// @Description  Get price change history for a product (manager/admin only)
+// @Tags         Products
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "Product ID"
+// @Success      200  {object}  response.APIResponse{data=[]PriceHistory}
+// @Failure      404  {object}  response.APIResponse
+// @Router       /api/products/{id}/price-history [get]
+func (h *Handler) GetPriceHistory(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	if id <= 0 {
+		c.Error(apperr.Validation("invalid id"))
+		return
+	}
+
+	pg, _ := c.Get("pagination")
+	page := pg.(middleware.Pagination)
+
+	items, total, err := h.svc.GetPriceHistory(c.Request.Context(), id, page.Limit, page.Offset)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.List(c, items, page.Page, page.Limit, page.Offset, total)
 }
 
 // UploadPhoto godoc

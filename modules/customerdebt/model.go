@@ -1,0 +1,46 @@
+package customerdebt
+
+import "time"
+
+type CustomerDebt struct {
+	ID             int64     `json:"id"`
+	CustomerID     int64     `json:"customer_id"`
+	CustomerName   string    `json:"customer_name,omitempty"`
+	SaleID         *int64    `json:"sale_id,omitempty"`
+	AmountCents    int64     `json:"amount_cents"`
+	RemainingCents int64     `json:"remaining_cents"`
+	Status         string    `json:"status"` // open, settled, cancelled
+	Note           *string   `json:"note,omitempty"`
+	CreatedBy      *int64    `json:"created_by,omitempty"`
+	CreatedByName  string    `json:"created_by_name,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type DebtPayment struct {
+	ID            int64     `json:"id"`
+	DebtID        int64     `json:"debt_id"`
+	AmountCents   int64     `json:"amount_cents"`
+	PaymentTypeID *int64    `json:"payment_type_id,omitempty"`
+	Note          *string   `json:"note,omitempty"`
+	CreatedBy     *int64    `json:"created_by,omitempty"`
+	CreatedByName string    `json:"created_by_name,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// ─── Requests ───────────────────────────────────────────────────────────────
+
+type PayRequest struct {
+	AmountCents   int64  `json:"amount_cents" binding:"required,gt=0"`
+	PaymentTypeID *int64 `json:"payment_type_id"`
+	Note          string `json:"note"`
+}
+
+// ─── Responses ──────────────────────────────────────────────────────────────
+
+type CustomerDebtSummary struct {
+	CustomerID   int64  `json:"customer_id"`
+	CustomerName string `json:"customer_name"`
+	TotalDebt    int64  `json:"total_debt_cents"`
+	OpenDebts    int    `json:"open_debts"`
+}

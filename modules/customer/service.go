@@ -30,12 +30,21 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Customer, erro
 		c.Type = *req.Type
 	}
 
-	if err := s.repo.Create(ctx, &c); err != nil {
+	if err := s.repo.Create(ctx, &c, req.CardCode); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			code, msg := "CUSTOMER_ALREADY_EXISTS", "customer already exists"
+			switch pgErr.ConstraintName {
+			case "idx_customers_card_code":
+				code, msg = "CARD_CODE_ALREADY_EXISTS", "card code already exists"
+			case "idx_customers_phone_unique":
+				code, msg = "PHONE_ALREADY_EXISTS", "phone number already exists"
+			case "idx_customers_email_unique":
+				code, msg = "EMAIL_ALREADY_EXISTS", "email already exists"
+			}
 			return Customer{}, &apperr.AppError{
-				Code:       "CUSTOMER_ALREADY_EXISTS",
-				Message:    "customer already exists",
+				Code:       code,
+				Message:    msg,
 				HTTPStatus: http.StatusConflict,
 				Err:        err,
 			}
@@ -129,6 +138,9 @@ func (s *Service) UpdateContact(ctx context.Context, id int64, req UpdateContact
 		if IsNotFound(err) {
 			return Customer{}, apperr.NotFound("NOT_FOUND", "customer not found")
 		}
+		if e := duplicateField(err); e != nil {
+			return Customer{}, e
+		}
 		return Customer{}, apperr.Internal(err)
 	}
 	return c, nil
@@ -139,7 +151,27 @@ func (s *Service) UpdateAdmin(ctx context.Context, id int64, req UpdateAdminRequ
 		if IsNotFound(err) {
 			return Customer{}, apperr.NotFound("NOT_FOUND", "customer not found")
 		}
+		if e := duplicateField(err); e != nil {
+			return Customer{}, e
+		}
 		return Customer{}, apperr.Internal(err)
 	}
 	return c, nil
+}
+
+func duplicateField(err error) *apperr.AppError {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+		return nil
+	}
+	code, msg := "CUSTOMER_ALREADY_EXISTS", "customer already exists"
+	switch pgErr.ConstraintName {
+	case "idx_customers_card_code":
+		code, msg = "CARD_CODE_ALREADY_EXISTS", "card code already exists"
+	case "idx_customers_phone_unique":
+		code, msg = "PHONE_ALREADY_EXISTS", "phone number already exists"
+	case "idx_customers_email_unique":
+		code, msg = "EMAIL_ALREADY_EXISTS", "email already exists"
+	}
+	return &apperr.AppError{Code: code, Message: msg, HTTPStatus: http.StatusConflict, Err: err}
 }

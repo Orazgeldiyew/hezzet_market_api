@@ -64,4 +64,6 @@ type MatrixEntry struct {
 	Delete   bool   `json:"delete"`
 	Transfer bool   `json:"transfer"`
 	Return   bool   `json:"return"`
+	Discount bool   `json:"discount"`
+	History  bool   `json:"history"`
 }

@@ -13,19 +13,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customer"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customerdebt"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/discountrule"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
 type Repository struct {
-	db           *pgxpool.Pool
-	baseURL      string // PUBLIC_BASE_URL for building product photo URLs
-	customerRepo *customer.Repository
+	db               *pgxpool.Pool
+	baseURL          string // PUBLIC_BASE_URL for building product photo URLs
+	customerRepo     *customer.Repository
+	debtRepo         *customerdebt.Repository
+	discountRuleRepo *discountrule.Repository
 }
 
 func NewRepository(db *pgxpool.Pool, baseURL string, customerRepo *customer.Repository) *Repository {
 	return &Repository{db: db, baseURL: baseURL, customerRepo: customerRepo}
 }
+
+func (r *Repository) SetDebtRepo(repo *customerdebt.Repository)       { r.debtRepo = repo }
+func (r *Repository) SetDiscountRuleRepo(repo *discountrule.Repository) { r.discountRuleRepo = repo }
 
 // photoURL converts a nullable product photo_path to a full public URL.
 func (r *Repository) photoURL(path *string) *string {
@@ -38,7 +45,7 @@ func (r *Repository) photoURL(path *string) *string {
 
 // ── column constants ─────────────────────────────────────────────────────────
 
-const saleCols = `id, warehouse_id, customer_id, worker_id, total_cents, cost_cents, bonus_used_cents, items_count, note, created_by, created_at, status`
+const saleCols = `id, warehouse_id, customer_id, worker_id, total_cents, cost_cents, bonus_used_cents, discount_percent, discount_cents, items_count, note, created_by, created_at, status`
 
 // ── scan helpers ─────────────────────────────────────────────────────────────
 
@@ -46,7 +53,8 @@ func scanSale(row pgx.Row) (Sale, error) {
 	var s Sale
 	err := row.Scan(
 		&s.ID, &s.WarehouseID, &s.CustomerID, &s.WorkerID, &s.TotalCents,
-		&s.CostCents, &s.BonusUsedCents, &s.ItemsCount, &s.Note, &s.CreatedBy, &s.CreatedAt,
+		&s.CostCents, &s.BonusUsedCents, &s.DiscountPercent, &s.DiscountCents,
+		&s.ItemsCount, &s.Note, &s.CreatedBy, &s.CreatedAt,
 		&s.Status,
 	)
 	return s, err
@@ -84,8 +92,9 @@ func (r *Repository) CreateSale(
 	}
 
 	priceMap := make(map[int64]int64, len(req.Items))
+	productDiscountMap := make(map[int64]int, len(req.Items))
 	rows, err := tx.Query(ctx,
-		`SELECT id, sale_price FROM products WHERE id = ANY($1) AND is_active = true`,
+		`SELECT id, sale_price, discount_percent FROM products WHERE id = ANY($1) AND is_active = true`,
 		productIDs,
 	)
 	if err != nil {
@@ -93,11 +102,13 @@ func (r *Repository) CreateSale(
 	}
 	for rows.Next() {
 		var pid, sp int64
-		if err := rows.Scan(&pid, &sp); err != nil {
+		var dp int
+		if err := rows.Scan(&pid, &sp, &dp); err != nil {
 			rows.Close()
 			return Sale{}, nil, err
 		}
 		priceMap[pid] = sp
+		productDiscountMap[pid] = dp
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -112,10 +123,23 @@ func (r *Repository) CreateSale(
 		}
 	}
 
-	// 2. Calculate total revenue
+	// 2. Auto-apply product discount if item has no explicit discount
+	for i := range req.Items {
+		if req.Items[i].DiscountPercent == 0 {
+			if pd := productDiscountMap[req.Items[i].ProductID]; pd > 0 {
+				req.Items[i].DiscountPercent = pd
+			}
+		}
+	}
+
+	// 3. Calculate total revenue (with per-item discounts)
 	var totalCents int64
 	for _, item := range req.Items {
-		totalCents += lineTotalCents(item.QtyMilli, priceMap[item.ProductID])
+		lt := lineTotalCents(item.QtyMilli, priceMap[item.ProductID])
+		if item.DiscountPercent > 0 && item.DiscountPercent <= 100 {
+			lt = lt - (lt*int64(item.DiscountPercent))/100
+		}
+		totalCents += lt
 	}
 
 	// 3. Insert sale header (status='draft', cost_cents=0)
@@ -149,6 +173,9 @@ func (r *Repository) CreateSale(
 		item := entry.item
 		unitPrice := priceMap[item.ProductID]
 		lineTotal := lineTotalCents(item.QtyMilli, unitPrice)
+		if item.DiscountPercent > 0 && item.DiscountPercent <= 100 {
+			lineTotal = lineTotal - (lineTotal*int64(item.DiscountPercent))/100
+		}
 
 		// 4a. Lock warehouse_items row
 		var currentQty int64
@@ -193,9 +220,9 @@ func (r *Repository) CreateSale(
 
 		// 4c. Insert sale_item (cost_cents=0, will be set at confirm time)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO sale_items (sale_id, product_id, qty_milli, unit_price_cents, cost_cents, line_total_cents)
-			VALUES ($1, $2, $3, $4, 0, $5)
-		`, sale.ID, item.ProductID, item.QtyMilli, unitPrice, lineTotal)
+			INSERT INTO sale_items (sale_id, product_id, qty_milli, unit_price_cents, cost_cents, line_total_cents, discount_percent)
+			VALUES ($1, $2, $3, $4, 0, $5, $6)
+		`, sale.ID, item.ProductID, item.QtyMilli, unitPrice, lineTotal, item.DiscountPercent)
 		if err != nil {
 			return Sale{}, nil, err
 		}
@@ -388,11 +415,31 @@ func (r *Repository) ConfirmSale(
 		totalCostCents += itemCost
 	}
 
-	// 4. Update sale to confirmed
+	// 4. Apply per-sale discount (manual or auto from threshold rules)
+	saleDiscountPercent := 0
+	var saleDiscountCents int64
+	if req.DiscountPercent != nil && *req.DiscountPercent > 0 && *req.DiscountPercent <= 100 {
+		// Manual discount from manager
+		saleDiscountPercent = *req.DiscountPercent
+	} else if r.discountRuleRepo != nil {
+		// Auto-apply threshold discount rule
+		rule, err := r.discountRuleRepo.FindMatchingRule(ctx, totalCents)
+		if err == nil && rule != nil {
+			saleDiscountPercent = rule.DiscountPercent
+		}
+	}
+	if saleDiscountPercent > 0 {
+		saleDiscountCents = (totalCents * int64(saleDiscountPercent)) / 100
+		totalCents = totalCents - saleDiscountCents
+	}
+
+	// 5. Update sale to confirmed
 	sale, err := scanSale(tx.QueryRow(ctx, `
-		UPDATE sales SET status = 'confirmed', cost_cents = $2, bonus_used_cents = $3 WHERE id = $1
+		UPDATE sales SET status = 'confirmed', cost_cents = $2, bonus_used_cents = $3,
+			total_cents = $4, discount_percent = $5, discount_cents = $6
+		WHERE id = $1
 		RETURNING `+saleCols,
-		saleID, totalCostCents, bonusUsed,
+		saleID, totalCostCents, bonusUsed, totalCents, saleDiscountPercent, saleDiscountCents,
 	))
 	if err != nil {
 		return Sale{}, err
@@ -475,6 +522,21 @@ func (r *Repository) ConfirmSale(
 		}
 		if _, err := finRepo.UpdateTransactionStatus(ctx, tx, finTxn.ID, txnStatus); err != nil {
 			return Sale{}, err
+		}
+	}
+
+	// 8. Customer debt — if payment_type is "debt" (id=4) and customer is set
+	if req.PaymentTypeID != nil && *req.PaymentTypeID == 4 && saleCustomerID != nil && r.debtRepo != nil {
+		paidAmount := int64(0)
+		if req.PaymentAmount != nil {
+			paidAmount = *req.PaymentAmount
+		}
+		debtAmount := effectiveAmount - paidAmount
+		if debtAmount > 0 {
+			debtNote := "Sale #" + strconv.FormatInt(saleID, 10)
+			if _, err := r.debtRepo.CreateDebt(ctx, tx, *saleCustomerID, &saleID, debtAmount, debtNote, uid); err != nil {
+				return Sale{}, err
+			}
 		}
 	}
 
@@ -709,7 +771,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Sale, []SaleItem, e
 
 	rows, err := r.db.Query(ctx, `
 		SELECT si.id, si.sale_id, si.product_id, si.qty_milli, si.unit_price_cents,
-		       si.cost_cents, si.line_total_cents, si.created_at,
+		       si.cost_cents, si.line_total_cents, si.discount_percent, si.created_at,
 		       p.name, p.photo_path
 		FROM sale_items si
 		JOIN products p ON p.id = si.product_id
@@ -727,7 +789,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Sale, []SaleItem, e
 		var photoPath *string
 		err := rows.Scan(
 			&si.ID, &si.SaleID, &si.ProductID, &si.QtyMilli, &si.UnitPriceCents,
-			&si.CostCents, &si.LineTotalCents, &si.CreatedAt,
+			&si.CostCents, &si.LineTotalCents, &si.DiscountPercent, &si.CreatedAt,
 			&si.ProductName, &photoPath,
 		)
 		if err != nil {
@@ -750,27 +812,35 @@ type ReceiptSaleRow struct {
 	WarehouseName string
 	CustomerName  string
 	WorkerName    string
+	PaymentMethod string // cash, card, bank_transfer, debt, etc.
 }
 
 type ReceiptItemRow struct {
-	ProductName    string
-	QtyMilli       int64
-	UnitType       string
-	UnitPriceCents int64
-	LineTotalCents int64
+	ProductName     string
+	QtyMilli        int64
+	UnitType        string
+	UnitPriceCents  int64
+	LineTotalCents  int64
+	DiscountPercent int
 }
 
 func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleRow, []ReceiptItemRow, error) {
 	var row ReceiptSaleRow
-	var cashierName, warehouseName, customerName, workerName *string
+	var cashierName, warehouseName, customerName, workerName, paymentMethod *string
 
 	err := r.db.QueryRow(ctx, `
 		SELECT s.id, s.warehouse_id, s.customer_id, s.worker_id, s.total_cents, s.cost_cents,
-		       s.bonus_used_cents, s.items_count, s.note, s.created_by, s.created_at, s.status,
+		       s.bonus_used_cents, s.discount_percent, s.discount_cents,
+		       s.items_count, s.note, s.created_by, s.created_at, s.status,
 		       u.username,
 		       w.name,
 		       c.name,
-		       wk.name
+		       wk.name,
+		       (SELECT pt.name FROM payments p
+		        JOIN transactions t ON t.id = p.transaction_id
+		        JOIN payment_types pt ON pt.id = p.payment_type_id
+		        WHERE t.related_table = 'sale' AND t.related_id = s.id
+		        ORDER BY p.id DESC LIMIT 1)
 		FROM sales s
 		LEFT JOIN users u ON u.id = s.created_by
 		LEFT JOIN warehouses w ON w.id = s.warehouse_id
@@ -779,9 +849,10 @@ func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleR
 		WHERE s.id = $1
 	`, id).Scan(
 		&row.ID, &row.WarehouseID, &row.CustomerID, &row.WorkerID, &row.TotalCents,
-		&row.CostCents, &row.BonusUsedCents, &row.ItemsCount, &row.Note, &row.CreatedBy, &row.CreatedAt,
+		&row.CostCents, &row.BonusUsedCents, &row.DiscountPercent, &row.DiscountCents,
+		&row.ItemsCount, &row.Note, &row.CreatedBy, &row.CreatedAt,
 		&row.Status,
-		&cashierName, &warehouseName, &customerName, &workerName,
+		&cashierName, &warehouseName, &customerName, &workerName, &paymentMethod,
 	)
 	if err != nil {
 		return ReceiptSaleRow{}, nil, err
@@ -798,9 +869,12 @@ func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleR
 	if workerName != nil {
 		row.WorkerName = *workerName
 	}
+	if paymentMethod != nil {
+		row.PaymentMethod = *paymentMethod
+	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT p.name, si.qty_milli, p.unit_type, si.unit_price_cents, si.line_total_cents
+		SELECT p.name, si.qty_milli, p.unit_type, si.unit_price_cents, si.line_total_cents, si.discount_percent
 		FROM sale_items si
 		JOIN products p ON p.id = si.product_id
 		WHERE si.sale_id = $1
@@ -814,7 +888,7 @@ func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleR
 	var items []ReceiptItemRow
 	for rows.Next() {
 		var it ReceiptItemRow
-		if err := rows.Scan(&it.ProductName, &it.QtyMilli, &it.UnitType, &it.UnitPriceCents, &it.LineTotalCents); err != nil {
+		if err := rows.Scan(&it.ProductName, &it.QtyMilli, &it.UnitType, &it.UnitPriceCents, &it.LineTotalCents, &it.DiscountPercent); err != nil {
 			return row, nil, err
 		}
 		items = append(items, it)
@@ -947,7 +1021,9 @@ func (r *Repository) List(
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT s.`+saleCols+`, c.name
+		SELECT s.id, s.warehouse_id, s.customer_id, s.worker_id, s.total_cents, s.cost_cents,
+		       s.bonus_used_cents, s.discount_percent, s.discount_cents, s.items_count, s.note,
+		       s.created_by, s.created_at, s.status, c.name
 		FROM sales s
 		LEFT JOIN customers c ON c.id = s.customer_id
 		`+where+`
@@ -964,7 +1040,8 @@ func (r *Repository) List(
 		var item SaleListItem
 		err := rows.Scan(
 			&item.ID, &item.WarehouseID, &item.CustomerID, &item.WorkerID, &item.TotalCents,
-			&item.CostCents, &item.BonusUsedCents, &item.ItemsCount, &item.Note, &item.CreatedBy, &item.CreatedAt,
+			&item.CostCents, &item.BonusUsedCents, &item.DiscountPercent, &item.DiscountCents,
+			&item.ItemsCount, &item.Note, &item.CreatedBy, &item.CreatedAt,
 			&item.Status,
 			&item.CustomerName,
 		)

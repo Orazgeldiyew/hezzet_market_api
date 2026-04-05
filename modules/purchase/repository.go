@@ -21,12 +21,12 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-// ── column constants ──────────────────────────────────────────────────────────
+
 
 const poCols = `id, supplier_id, warehouse_id, status, total_cents, items_count,
 	note, created_by, created_at, received_at, received_by`
 
-// ── scan helpers ──────────────────────────────────────────────────────────────
+
 
 func scanPO(row pgx.Row) (PurchaseOrder, error) {
 	var p PurchaseOrder
@@ -46,7 +46,7 @@ func isFKViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
 
-// ── CreatePO ─────────────────────────────────────────────────────────────────
+
 
 func (r *Repository) CreatePO(
 	ctx context.Context,

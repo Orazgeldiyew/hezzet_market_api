@@ -18,31 +18,38 @@ import (
 
 // ReceiptData holds all variables available in receipt templates.
 type ReceiptData struct {
-	ShopName       string
-	ShopAddress    string
-	ShopPhone      string
-	LogoURL        string
-	Footer         string
-	SaleID         int64
-	Date           string
-	Status         string
-	CashierName    string
-	WarehouseName  string
-	CustomerName   string
-	TotalCents     int64
-	BonusUsedCents int64
-	WorkerName     string
-	Note           string
-	Items          []ReceiptItem
+	ShopName        string
+	ShopAddress     string
+	ShopPhone       string
+	LogoURL         string
+	LogoWidth       string
+	LogoHeight      string
+	Footer          string
+	SaleID          int64
+	ReceiptNumber   string // YYYYMMDD-NNNNNN
+	Date            string
+	Status          string
+	CashierName     string
+	WarehouseName   string
+	CustomerName    string
+	TotalCents      int64
+	BonusUsedCents  int64
+	DiscountPercent int
+	DiscountCents   int64
+	PaymentMethod   string
+	WorkerName      string
+	Note            string
+	Items           []ReceiptItem
 }
 
 // ReceiptItem is a line item for the receipt template.
 type ReceiptItem struct {
-	ProductName    string
-	QtyMilli       int64
-	UnitType       string
-	UnitPriceCents int64
-	LineTotalCents int64
+	ProductName     string
+	QtyMilli        int64
+	UnitType        string
+	UnitPriceCents  int64
+	LineTotalCents  int64
+	DiscountPercent int
 }
 
 // templateFuncs provides money/qty/unit helpers for receipt templates.
@@ -71,9 +78,9 @@ var templateFuncs = template.FuncMap{
 	"unit": func(unitType string) string {
 		switch unitType {
 		case "weight":
-			return "кг"
+			return "kg"
 		case "volume":
-			return "л"
+			return "l"
 		default:
 			return ""
 		}
@@ -105,24 +112,24 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  {{if .LogoURL}}<div class="center"><img src="{{.LogoURL}}" style="max-width:50mm;max-height:20mm"></div>{{end}}
+  {{if .LogoURL}}<div class="center"><img src="{{.LogoURL}}" style="max-width:{{.LogoWidth}};max-height:{{.LogoHeight}}"></div>{{end}}
   <div class="center header">{{.ShopName}}</div>
   {{if .ShopAddress}}<div class="center info">{{.ShopAddress}}</div>{{end}}
-  {{if .ShopPhone}}<div class="center info">Тел: {{.ShopPhone}}</div>{{end}}
+  {{if .ShopPhone}}<div class="center info">Tel: {{.ShopPhone}}</div>{{end}}
 
   <hr>
-  <div class="meta"><b>Чек #{{printf "%05d" .SaleID}}</b></div>
-  <div class="meta">Дата: {{.Date}}</div>
-  <div class="meta">Кассир: {{.CashierName}}</div>
-  {{if .WarehouseName}}<div class="meta">Склад: {{.WarehouseName}}</div>{{end}}
-  {{if .CustomerName}}<div class="meta">Клиент: {{.CustomerName}}</div>{{end}}
+  <div class="meta"><b>Çek №{{.ReceiptNumber}}</b></div>
+  <div class="meta">Senesi: {{.Date}}</div>
+  <div class="meta">Kassir: {{.CashierName}}</div>
+  {{if .WarehouseName}}<div class="meta">Ammar: {{.WarehouseName}}</div>{{end}}
+  {{if .CustomerName}}<div class="meta">Müşderi: {{.CustomerName}}</div>{{end}}
 
   <hr>
   <table>
-    <tr><th>Товар</th><th class="r">Кол</th><th class="r">Цена</th><th class="r">Сумма</th></tr>
+    <tr><th>Haryt</th><th class="r">Sany</th><th class="r">Baha</th><th class="r">Jemi</th></tr>
     {{range .Items}}
     <tr>
-      <td>{{.ProductName}}</td>
+      <td>{{.ProductName}}{{if gt .DiscountPercent 0}} <small>(-{{.DiscountPercent}}%)</small>{{end}}</td>
       <td class="r">{{qty .QtyMilli .UnitType}}{{with unit .UnitType}} {{.}}{{end}}</td>
       <td class="r">{{money .UnitPriceCents}}</td>
       <td class="r">{{money .LineTotalCents}}</td>
@@ -131,10 +138,12 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
   </table>
 
   <hr>
-  <div class="total-line"><span>ИТОГО:</span><span>{{money .TotalCents}} TMT</span></div>
-  {{if gt .BonusUsedCents 0}}<div class="meta">Бонус: -{{money .BonusUsedCents}} TMT</div>{{end}}
-  {{if .WorkerName}}<div class="meta">Работник (кредит): {{.WorkerName}}</div>{{end}}
-  {{if .Note}}<div class="meta">Примечание: {{.Note}}</div>{{end}}
+  {{if gt .DiscountCents 0}}<div class="meta">Arzanladyş {{.DiscountPercent}}%: -{{money .DiscountCents}} TMT</div>{{end}}
+  <div class="total-line"><span>JEMI:</span><span>{{money .TotalCents}} TMT</span></div>
+  {{if .PaymentMethod}}<div class="meta">Töleg: {{.PaymentMethod}}</div>{{end}}
+  {{if gt .BonusUsedCents 0}}<div class="meta">Bonus: -{{money .BonusUsedCents}} TMT</div>{{end}}
+  {{if .WorkerName}}<div class="meta">Işgär (karz): {{.WorkerName}}</div>{{end}}
+  {{if .Note}}<div class="meta">Bellik: {{.Note}}</div>{{end}}
 
   {{if .Footer}}<hr><div class="center footer">{{.Footer}}</div>{{end}}
 
@@ -203,31 +212,40 @@ func ReceiptHandler(db *pgxpool.Pool, baseURL string, receiptRepo *receiptsettin
 		receiptItems := make([]ReceiptItem, len(items))
 		for i, it := range items {
 			receiptItems[i] = ReceiptItem{
-				ProductName:    it.ProductName,
-				QtyMilli:       it.QtyMilli,
-				UnitType:       it.UnitType,
-				UnitPriceCents: it.UnitPriceCents,
-				LineTotalCents: it.LineTotalCents,
+				ProductName:     it.ProductName,
+				QtyMilli:        it.QtyMilli,
+				UnitType:        it.UnitType,
+				UnitPriceCents:  it.UnitPriceCents,
+				LineTotalCents:  it.LineTotalCents,
+				DiscountPercent: it.DiscountPercent,
 			}
 		}
 
+		receiptNumber := saleRow.CreatedAt.Format("20060102") + "-" + fmt.Sprintf("%06d", saleRow.ID)
+
 		data := ReceiptData{
-			ShopName:       settings.ShopName,
-			ShopAddress:    settings.ShopAddress,
-			ShopPhone:      settings.ShopPhone,
-			LogoURL:        logoURL,
-			Footer:         settings.Footer,
-			SaleID:         saleRow.ID,
-			Date:           saleRow.CreatedAt.Format("02.01.2006 15:04"),
-			Status:         string(saleRow.Status),
-			CashierName:    saleRow.CashierName,
-			WarehouseName:  saleRow.WarehouseName,
-			CustomerName:   saleRow.CustomerName,
-			TotalCents:     saleRow.TotalCents,
-			BonusUsedCents: saleRow.BonusUsedCents,
-			WorkerName:     saleRow.WorkerName,
-			Note:           note,
-			Items:          receiptItems,
+			ShopName:        settings.ShopName,
+			ShopAddress:     settings.ShopAddress,
+			ShopPhone:       settings.ShopPhone,
+			LogoURL:         logoURL,
+			LogoWidth:       settings.LogoWidth,
+			LogoHeight:      settings.LogoHeight,
+			Footer:          settings.Footer,
+			SaleID:          saleRow.ID,
+			ReceiptNumber:   receiptNumber,
+			Date:            saleRow.CreatedAt.Format("02.01.2006 15:04"),
+			Status:          string(saleRow.Status),
+			CashierName:     saleRow.CashierName,
+			WarehouseName:   saleRow.WarehouseName,
+			CustomerName:    saleRow.CustomerName,
+			TotalCents:      saleRow.TotalCents,
+			BonusUsedCents:  saleRow.BonusUsedCents,
+			DiscountPercent: saleRow.DiscountPercent,
+			DiscountCents:   saleRow.DiscountCents,
+			PaymentMethod:   saleRow.PaymentMethod,
+			WorkerName:      saleRow.WorkerName,
+			Note:            note,
+			Items:           receiptItems,
 		}
 
 		html, err := RenderReceipt(data, settings.Template)

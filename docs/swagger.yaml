@@ -180,6 +180,8 @@ definitions:
         type: boolean
       delete:
         type: boolean
+      discount:
+        type: boolean
       module:
         type: string
       return:
@@ -303,6 +305,8 @@ definitions:
     type: object
   customer.CreateRequest:
     properties:
+      card_code:
+        type: string
       email:
         maxLength: 255
         type: string
@@ -346,6 +350,8 @@ definitions:
         type: string
       phone:
         type: string
+      total_debt_cents:
+        type: integer
       total_spent:
         type: integer
       type:
@@ -355,6 +361,8 @@ definitions:
     type: object
   customer.UpdateAdminRequest:
     properties:
+      card_code:
+        type: string
       is_active:
         type: boolean
       type:
@@ -665,6 +673,8 @@ definitions:
         type: boolean
       delete:
         type: boolean
+      discount:
+        type: boolean
       module:
         type: string
       return:
@@ -765,6 +775,26 @@ definitions:
       offset:
         type: integer
       total:
+        type: integer
+    type: object
+  product.PriceHistory:
+    properties:
+      changed_at:
+        type: string
+      changed_by:
+        type: integer
+      changed_by_name:
+        type: string
+      field:
+        description: '"purchase_price" or "sale_price"'
+        type: string
+      id:
+        type: integer
+      new_value:
+        type: integer
+      old_value:
+        type: integer
+      product_id:
         type: integer
     type: object
   product.Product:
@@ -932,7 +962,11 @@ definitions:
         type: string
       footer:
         type: string
+      logo_height:
+        type: string
       logo_path:
+        type: string
+      logo_width:
         type: string
       shop_address:
         type: string
@@ -949,7 +983,11 @@ definitions:
         type: string
       footer:
         type: string
+      logo_height:
+        type: string
       logo_path:
+        type: string
+      logo_width:
         type: string
       shop_address:
         type: string
@@ -1085,6 +1123,8 @@ definitions:
     properties:
       bonus_used_cents:
         type: integer
+      discount_percent:
+        type: integer
       force:
         description: |-
           Force allows confirming even when physical stock is insufficient (deficit sale).
@@ -1099,6 +1139,8 @@ definitions:
     type: object
   sale.CreateSaleItemRequest:
     properties:
+      discount_percent:
+        type: integer
       product_id:
         type: integer
       qty_milli:
@@ -1171,6 +1213,10 @@ definitions:
         type: integer
       customer_id:
         type: integer
+      discount_cents:
+        type: integer
+      discount_percent:
+        type: integer
       id:
         type: integer
       items_count:
@@ -1211,6 +1257,8 @@ definitions:
         type: integer
       created_at:
         type: string
+      discount_percent:
+        type: integer
       id:
         type: integer
       line_total_cents:
@@ -1252,6 +1300,10 @@ definitions:
         type: integer
       customer_name:
         type: string
+      discount_cents:
+        type: integer
+      discount_percent:
+        type: integer
       id:
         type: integer
       items_count:
@@ -1291,6 +1343,70 @@ definitions:
         type: integer
     required:
     - cashier_id
+    type: object
+  shift.CashRegister:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+    type: object
+  shift.CloseRequest:
+    properties:
+      closing_cash:
+        type: integer
+      note:
+        type: string
+    type: object
+  shift.OpenRequest:
+    properties:
+      opening_cash:
+        type: integer
+      register_id:
+        type: integer
+    required:
+    - register_id
+    type: object
+  shift.Shift:
+    properties:
+      cashier_name:
+        type: string
+      closed_at:
+        type: string
+      closed_by:
+        type: integer
+      closing_cash:
+        type: integer
+      difference:
+        type: integer
+      expected_cash:
+        type: integer
+      id:
+        type: integer
+      note:
+        type: string
+      opened_at:
+        type: string
+      opening_cash:
+        type: integer
+      register_id:
+        type: integer
+      register_name:
+        type: string
+      returns_total:
+        type: integer
+      sales_count:
+        type: integer
+      sales_total:
+        type: integer
+      status:
+        type: string
+      user_id:
+        type: integer
     type: object
   stock.BulkInItem:
     properties:
@@ -1604,6 +1720,8 @@ definitions:
     type: object
   workercard.CreateCardRequest:
     properties:
+      card_code:
+        type: string
       label:
         type: string
       worker_id:
@@ -3592,6 +3710,38 @@ paths:
       summary: Upload product photo
       tags:
       - Products
+  /api/products/{id}/price-history:
+    get:
+      description: Get price change history for a product (manager/admin only)
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/product.PriceHistory'
+                  type: array
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get price history
+      tags:
+      - Products
   /api/products/by-barcode/{code}:
     get:
       description: Returns a product matching the exact barcode (for scanner)
@@ -3942,6 +4092,27 @@ paths:
       summary: Update receipt settings
       tags:
       - ReceiptSettings
+  /api/registers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/shift.CashRegister'
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: List cash registers
+      tags:
+      - Shifts
   /api/reports/dashboard:
     get:
       description: Returns today's sales, low-stock count, pending payroll, and top
@@ -4664,6 +4835,190 @@ paths:
       summary: Transfer draft sale to another cashier
       tags:
       - Sales
+  /api/settings/receipt/logo:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a logo image for receipts (jpg/jpeg/png/webp, max 2MB)
+      parameters:
+      - description: Logo image (jpg/jpeg/png/webp, max 2MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/receiptsettings.ReceiptSettings'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload receipt logo
+      tags:
+      - ReceiptSettings
+  /api/shifts:
+    get:
+      parameters:
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: integer
+      - description: Filter by register ID
+        in: query
+        name: register_id
+        type: integer
+      - description: Filter by status (open, closed)
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List shifts
+      tags:
+      - Shifts
+  /api/shifts/{id}:
+    get:
+      parameters:
+      - description: Shift ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/shift.Shift'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get shift details (Z-report)
+      tags:
+      - Shifts
+  /api/shifts/{id}/close:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Shift ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Closing cash and note
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/shift.CloseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/shift.Shift'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Close a shift
+      tags:
+      - Shifts
+  /api/shifts/current:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/shift.Shift'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current open shift
+      tags:
+      - Shifts
+  /api/shifts/open:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Register ID and opening cash
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/shift.OpenRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/shift.Shift'
+              type: object
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Open a new shift
+      tags:
+      - Shifts
   /api/stock/balance:
     get:
       parameters:

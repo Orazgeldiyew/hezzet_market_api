@@ -10,7 +10,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/receiptsettings"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository, publicBaseURL string, receiptRepo *receiptsettings.Repository, customerRepo *customer.Repository, permChecker middleware.PermissionChecker) {
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository, publicBaseURL string, receiptRepo *receiptsettings.Repository, customerRepo *customer.Repository, permChecker middleware.PermissionChecker) *Repository {
 	repo := NewRepository(db, publicBaseURL, customerRepo)
 	svc := NewService(repo, finRepo)
 	h := NewHandler(svc, receiptRepo, publicBaseURL)
@@ -61,4 +61,6 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repo
 		middleware.RequireRoles("cashier", "operator", "manager"),
 		h.DeleteSaleItem,
 	)
+
+	return repo
 }

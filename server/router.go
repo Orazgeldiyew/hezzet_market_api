@@ -22,16 +22,21 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/receiptsettings"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/reports"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customer"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customerdebt"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/discountrule"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/favorite"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/inventory"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/notification"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/payroll"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/permissions"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/product"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/purchase"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/sale"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/shift"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/stock"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/supplier"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/supplierdebt"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/warehouse"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workercard"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workerfinance"
@@ -174,7 +179,7 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	// ── Sales ──
 	receiptRepo := receiptsettings.RegisterRoutes(api, deps.DB, deps.Cfg)
-	sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo, customerRepo, permRepo)
+	saleRepo := sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo, customerRepo, permRepo)
 
 	// ── Purchases ──
 	purchase.RegisterRoutes(mod("purchases"), deps.DB, finRepo)
@@ -189,6 +194,23 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	// ── Favorites (per-user, any authenticated user) ──
 	favorite.RegisterRoutes(api, deps.DB)
+
+	// ── Inventory (stock counting) ──
+	inventory.RegisterRoutes(stockGroup, deps.DB)
+
+	// ── Customer Debts ──
+	debtRepo := customerdebt.RegisterRoutes(api, deps.DB)
+	saleRepo.SetDebtRepo(debtRepo)
+
+	// ── Discount Rules (threshold discounts) ──
+	discountRuleRepo := discountrule.RegisterRoutes(api, deps.DB)
+	saleRepo.SetDiscountRuleRepo(discountRuleRepo)
+
+	// ── Supplier Debts ──
+	supplierdebt.RegisterRoutes(api, deps.DB)
+
+	// ── Shifts (cash register management) ──
+	shift.RegisterRoutes(api, deps.DB)
 
 	// ── Notifications (admin-only, no module permission needed) ──
 	notification.RegisterRoutes(api, deps.DB, deps.NotifQueue, deps.NotifPhoneRepo)
@@ -235,6 +257,8 @@ func (a *permAdapter) MatrixForRoles(ctx context.Context, roleCodes []string) ([
 			Delete:   e.Delete,
 			Transfer: e.Transfer,
 			Return:   e.Return,
+			Discount: e.Discount,
+			History:  e.History,
 		}
 	}
 	return out, nil

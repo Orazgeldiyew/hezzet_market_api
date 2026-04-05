@@ -2965,6 +2965,61 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/products/{id}/price-history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get price change history for a product (manager/admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Products"
+                ],
+                "summary": "Get price history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Product ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/product.PriceHistory"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/purchases": {
             "get": {
                 "security": [
@@ -3463,6 +3518,45 @@ const docTemplate = `{
                         "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/registers": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shifts"
+                ],
+                "summary": "List cash registers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/shift.CashRegister"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -4637,6 +4731,323 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/settings/receipt/logo": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload a logo image for receipts (jpg/jpeg/png/webp, max 2MB)",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ReceiptSettings"
+                ],
+                "summary": "Upload receipt logo",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Logo image (jpg/jpeg/png/webp, max 2MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/receiptsettings.ReceiptSettings"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/shifts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shifts"
+                ],
+                "summary": "List shifts",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Filter by user ID",
+                        "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by register ID",
+                        "name": "register_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by status (open, closed)",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/shifts/current": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shifts"
+                ],
+                "summary": "Get current open shift",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/shift.Shift"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/shifts/open": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shifts"
+                ],
+                "summary": "Open a new shift",
+                "parameters": [
+                    {
+                        "description": "Register ID and opening cash",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/shift.OpenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/shift.Shift"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/shifts/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shifts"
+                ],
+                "summary": "Get shift details (Z-report)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Shift ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/shift.Shift"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/shifts/{id}/close": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Shifts"
+                ],
+                "summary": "Close a shift",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Shift ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Closing cash and note",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/shift.CloseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/shift.Shift"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
                         }
@@ -8594,6 +9005,9 @@ const docTemplate = `{
                 "delete": {
                     "type": "boolean"
                 },
+                "discount": {
+                    "type": "boolean"
+                },
                 "module": {
                     "type": "string"
                 },
@@ -8784,6 +9198,9 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "card_code": {
+                    "type": "string"
+                },
                 "email": {
                     "type": "string",
                     "maxLength": 255
@@ -8843,6 +9260,9 @@ const docTemplate = `{
                 "phone": {
                     "type": "string"
                 },
+                "total_debt_cents": {
+                    "type": "integer"
+                },
                 "total_spent": {
                     "type": "integer"
                 },
@@ -8857,6 +9277,9 @@ const docTemplate = `{
         "customer.UpdateAdminRequest": {
             "type": "object",
             "properties": {
+                "card_code": {
+                    "type": "string"
+                },
                 "is_active": {
                     "type": "boolean"
                 },
@@ -9324,6 +9747,9 @@ const docTemplate = `{
                 "delete": {
                     "type": "boolean"
                 },
+                "discount": {
+                    "type": "boolean"
+                },
                 "module": {
                     "type": "string"
                 },
@@ -9477,6 +9903,36 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "product.PriceHistory": {
+            "type": "object",
+            "properties": {
+                "changed_at": {
+                    "type": "string"
+                },
+                "changed_by": {
+                    "type": "integer"
+                },
+                "changed_by_name": {
+                    "type": "string"
+                },
+                "field": {
+                    "description": "\"purchase_price\" or \"sale_price\"",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "new_value": {
+                    "type": "integer"
+                },
+                "old_value": {
+                    "type": "integer"
+                },
+                "product_id": {
                     "type": "integer"
                 }
             }
@@ -9725,7 +10181,13 @@ const docTemplate = `{
                 "footer": {
                     "type": "string"
                 },
+                "logo_height": {
+                    "type": "string"
+                },
                 "logo_path": {
+                    "type": "string"
+                },
+                "logo_width": {
                     "type": "string"
                 },
                 "shop_address": {
@@ -9751,7 +10213,13 @@ const docTemplate = `{
                 "footer": {
                     "type": "string"
                 },
+                "logo_height": {
+                    "type": "string"
+                },
                 "logo_path": {
+                    "type": "string"
+                },
+                "logo_width": {
                     "type": "string"
                 },
                 "shop_address": {
@@ -9964,6 +10432,9 @@ const docTemplate = `{
                 "bonus_used_cents": {
                     "type": "integer"
                 },
+                "discount_percent": {
+                    "type": "integer"
+                },
                 "force": {
                     "description": "Force allows confirming even when physical stock is insufficient (deficit sale).\nThe warehouse item qty_milli will go negative.",
                     "type": "boolean"
@@ -9986,6 +10457,9 @@ const docTemplate = `{
                 "qty_milli"
             ],
             "properties": {
+                "discount_percent": {
+                    "type": "integer"
+                },
                 "product_id": {
                     "type": "integer"
                 },
@@ -10088,6 +10562,12 @@ const docTemplate = `{
                 "customer_id": {
                     "type": "integer"
                 },
+                "discount_cents": {
+                    "type": "integer"
+                },
+                "discount_percent": {
+                    "type": "integer"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -10148,6 +10628,9 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "discount_percent": {
+                    "type": "integer"
                 },
                 "id": {
                     "type": "integer"
@@ -10211,6 +10694,12 @@ const docTemplate = `{
                 "customer_name": {
                     "type": "string"
                 },
+                "discount_cents": {
+                    "type": "integer"
+                },
+                "discount_percent": {
+                    "type": "integer"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -10266,6 +10755,104 @@ const docTemplate = `{
             ],
             "properties": {
                 "cashier_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "shift.CashRegister": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "shift.CloseRequest": {
+            "type": "object",
+            "properties": {
+                "closing_cash": {
+                    "type": "integer"
+                },
+                "note": {
+                    "type": "string"
+                }
+            }
+        },
+        "shift.OpenRequest": {
+            "type": "object",
+            "required": [
+                "register_id"
+            ],
+            "properties": {
+                "opening_cash": {
+                    "type": "integer"
+                },
+                "register_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "shift.Shift": {
+            "type": "object",
+            "properties": {
+                "cashier_name": {
+                    "type": "string"
+                },
+                "closed_at": {
+                    "type": "string"
+                },
+                "closed_by": {
+                    "type": "integer"
+                },
+                "closing_cash": {
+                    "type": "integer"
+                },
+                "difference": {
+                    "type": "integer"
+                },
+                "expected_cash": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "opened_at": {
+                    "type": "string"
+                },
+                "opening_cash": {
+                    "type": "integer"
+                },
+                "register_id": {
+                    "type": "integer"
+                },
+                "register_name": {
+                    "type": "string"
+                },
+                "returns_total": {
+                    "type": "integer"
+                },
+                "sales_count": {
+                    "type": "integer"
+                },
+                "sales_total": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "integer"
                 }
             }
@@ -10727,6 +11314,9 @@ const docTemplate = `{
                 "worker_id"
             ],
             "properties": {
+                "card_code": {
+                    "type": "string"
+                },
                 "label": {
                     "type": "string"
                 },

@@ -34,14 +34,14 @@ func (r *Repository) Create(ctx context.Context, p *Product) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := `
-		INSERT INTO products (name, sku, unit, purchase_price, sale_price, is_active, unit_type)
-		VALUES ($1,$2,$3::unit_enum,$4,$5,$6,$7::unit_type_enum)
+		INSERT INTO products (name, sku, unit, purchase_price, sale_price, is_active, unit_type, discount_percent)
+		VALUES ($1,$2,$3::unit_enum,$4,$5,$6,$7::unit_type_enum,$8)
 		RETURNING id, unit_scale, created_at, updated_at
 	`
 	// Pass typed enums as plain strings — pgx sends them as text which PostgreSQL
 	// accepts for enum parameters when combined with an explicit cast in the query.
 	if err := tx.QueryRow(ctx, q,
-		p.Name, p.SKU, string(p.Unit), p.PurchasePrice, p.SalePrice, p.IsActive, string(p.UnitType),
+		p.Name, p.SKU, string(p.Unit), p.PurchasePrice, p.SalePrice, p.IsActive, string(p.UnitType), p.DiscountPercent,
 	).Scan(&p.ID, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		return err
 	}
@@ -60,17 +60,15 @@ func (r *Repository) Create(ctx context.Context, p *Product) error {
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 	q := `
-		SELECT id, name, sku, unit, purchase_price, sale_price, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
+		SELECT id, name, sku, unit, purchase_price, sale_price, discount_percent, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
 		FROM products WHERE id=$1 AND is_active=true
 	`
 	var p Product
-	// Scan PostgreSQL enum columns into plain strings first, then cast to typed enums.
-	// pgx v5 does not auto-convert unknown enum OIDs to custom Go string types.
 	var unitStr, unitTypeStr string
 	var photoPath *string
 	err := r.db.QueryRow(ctx, q, id).Scan(
 		&p.ID, &p.Name, &p.SKU, &unitStr,
-		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
+		&p.PurchasePrice, &p.SalePrice, &p.DiscountPercent, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
@@ -104,9 +102,10 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 			sale_price    = COALESCE($6, sale_price),
 			is_active     = COALESCE($7, is_active),
 			unit_type     = COALESCE($8::unit_type_enum, unit_type),
+			discount_percent = COALESCE($9, discount_percent),
 			updated_at    = now()
 		WHERE id=$1
-		RETURNING id, name, sku, unit, purchase_price, sale_price, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
+		RETURNING id, name, sku, unit, purchase_price, sale_price, discount_percent, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
 	`
 	// Convert *UnitType and *Unit to *string so pgx sends NULL when nil,
 	// which COALESCE correctly interprets as "keep existing value".
@@ -118,10 +117,10 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 	var photoPath *string
 	err := r.db.QueryRow(ctx, q,
 		id, req.Name, req.SKU, unitParam,
-		req.PurchasePrice, req.SalePrice, req.IsActive, unitTypeParam,
+		req.PurchasePrice, req.SalePrice, req.IsActive, unitTypeParam, req.DiscountPercent,
 	).Scan(
 		&p.ID, &p.Name, &p.SKU, &unitStr,
-		&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
+		&p.PurchasePrice, &p.SalePrice, &p.DiscountPercent, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
@@ -197,7 +196,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.is_active, p.unit_type, p.unit_scale, p.photo_path, p.created_at, p.updated_at
+		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.discount_percent, p.is_active, p.unit_type, p.unit_scale, p.photo_path, p.created_at, p.updated_at
 		FROM products p
 		LEFT JOIN product_barcodes pb ON pb.product_id = p.id
 		WHERE p.is_active = true
@@ -223,7 +222,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		var photoPath *string
 		if err := rows.Scan(
 			&p.ID, &p.Name, &p.SKU, &unitStr,
-			&p.PurchasePrice, &p.SalePrice, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
+			&p.PurchasePrice, &p.SalePrice, &p.DiscountPercent, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -284,6 +283,57 @@ func (r *Repository) UpdatePhotoPath(ctx context.Context, productID int64, path 
 }
 
 func IsNoRows(err error) bool { return err == pgx.ErrNoRows }
+
+// ─── Price history ──────────────────────────────────────────────────────────
+
+func (r *Repository) LogPriceChange(ctx context.Context, productID int64, field string, oldVal, newVal int64, userID *int64) error {
+	if oldVal == newVal {
+		return nil
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO price_history (product_id, field, old_value, new_value, changed_by)
+		VALUES ($1, $2, $3, $4, $5)
+	`, productID, field, oldVal, newVal, userID)
+	return err
+}
+
+func (r *Repository) GetPriceHistory(ctx context.Context, productID int64, limit, offset int) ([]PriceHistory, int, error) {
+	var total int
+	err := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM price_history WHERE product_id = $1`, productID,
+	).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT ph.id, ph.product_id, ph.field, ph.old_value, ph.new_value,
+		       ph.changed_by, COALESCE(u.full_name, ''), ph.changed_at
+		FROM price_history ph
+		LEFT JOIN users u ON u.id = ph.changed_by
+		WHERE ph.product_id = $1
+		ORDER BY ph.changed_at DESC
+		LIMIT $2 OFFSET $3
+	`, productID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var out []PriceHistory
+	for rows.Next() {
+		var h PriceHistory
+		if err := rows.Scan(&h.ID, &h.ProductID, &h.Field, &h.OldValue, &h.NewValue,
+			&h.ChangedBy, &h.ChangedByName, &h.ChangedAt); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, h)
+	}
+	if out == nil {
+		out = []PriceHistory{}
+	}
+	return out, total, rows.Err()
+}
 
 //
 // ===== Product ↔ Barcodes (one-to-many) =====

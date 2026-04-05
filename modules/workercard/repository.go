@@ -56,13 +56,24 @@ func (r *Repository) GetByCardCode(ctx context.Context, code string) (WorkerCard
 	return c, nil
 }
 
-func (r *Repository) Add(ctx context.Context, workerID int64, label string) (WorkerCard, error) {
+func (r *Repository) Add(ctx context.Context, workerID int64, label string, cardCode *string) (WorkerCard, error) {
 	var c WorkerCard
-	err := r.db.QueryRow(ctx, `
-		INSERT INTO worker_cards (worker_id, label, card_code)
-		VALUES ($1, $2, upper(substring(md5(gen_random_uuid()::text), 1, 8)))
-		RETURNING id, worker_id, card_code, label, enabled, created_at
-	`, workerID, label).Scan(&c.ID, &c.WorkerID, &c.CardCode, &c.Label, &c.Enabled, &c.CreatedAt)
+	var err error
+
+	if cardCode != nil && *cardCode != "" {
+		err = r.db.QueryRow(ctx, `
+			INSERT INTO worker_cards (worker_id, label, card_code)
+			VALUES ($1, $2, $3)
+			RETURNING id, worker_id, card_code, label, enabled, created_at
+		`, workerID, label, *cardCode).Scan(&c.ID, &c.WorkerID, &c.CardCode, &c.Label, &c.Enabled, &c.CreatedAt)
+	} else {
+		err = r.db.QueryRow(ctx, `
+			INSERT INTO worker_cards (worker_id, label, card_code)
+			VALUES ($1, $2, upper(substring(md5(gen_random_uuid()::text), 1, 8)))
+			RETURNING id, worker_id, card_code, label, enabled, created_at
+		`, workerID, label).Scan(&c.ID, &c.WorkerID, &c.CardCode, &c.Label, &c.Enabled, &c.CreatedAt)
+	}
+
 	if err != nil {
 		return WorkerCard{}, apperr.Internal(err)
 	}

@@ -73,3 +73,15 @@ type DebtListResult struct {
 	Limit  int          `json:"limit"`
 	Offset int          `json:"offset"`
 }
+
+type PayDebtRequest struct {
+	AmountCents int64  `json:"amount_cents" binding:"required,gt=0"`
+	Note        string `json:"note"`
+}
+
+type WorkerDebtSummary struct {
+	WorkerID   int64  `json:"worker_id"`
+	WorkerName string `json:"worker_name"`
+	TotalDebt  int64  `json:"total_debt_cents"`
+	OpenDebts  int    `json:"open_debts"`
+}

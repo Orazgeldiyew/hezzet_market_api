@@ -184,6 +184,84 @@ func (r *Repository) SettleDebts(ctx context.Context, tx pgx.Tx, workerID int64)
 	return err
 }
 
+// GetDebtByID returns a single debt.
+func (r *Repository) GetDebtByID(ctx context.Context, id int64) (WorkerDebt, error) {
+	return scanDebt(r.db.QueryRow(ctx, fmt.Sprintf(`SELECT %s FROM worker_debts WHERE id = $1`, debtCols), id))
+}
+
+// AllDebtors returns workers with open debts.
+func (r *Repository) AllDebtors(ctx context.Context) ([]WorkerDebtSummary, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT wd.worker_id, w.name,
+		       SUM(wd.remaining_cents) AS total_debt,
+		       COUNT(*) AS open_debts
+		FROM worker_debts wd
+		JOIN workers w ON w.id = wd.worker_id
+		WHERE wd.status = 'open'
+		GROUP BY wd.worker_id, w.name
+		ORDER BY total_debt DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []WorkerDebtSummary
+	for rows.Next() {
+		var s WorkerDebtSummary
+		if err := rows.Scan(&s.WorkerID, &s.WorkerName, &s.TotalDebt, &s.OpenDebts); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	if out == nil {
+		out = []WorkerDebtSummary{}
+	}
+	return out, rows.Err()
+}
+
+// PayDebt records a partial/full payment on a debt.
+func (r *Repository) PayDebt(ctx context.Context, debtID int64, amountCents int64) (WorkerDebt, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return WorkerDebt{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var remaining int64
+	var status string
+	err = tx.QueryRow(ctx,
+		`SELECT remaining_cents, status FROM worker_debts WHERE id = $1 FOR UPDATE`, debtID,
+	).Scan(&remaining, &status)
+	if err != nil {
+		return WorkerDebt{}, err
+	}
+	if status != "open" {
+		return WorkerDebt{}, pgx.ErrNoRows
+	}
+	if amountCents > remaining {
+		return WorkerDebt{}, fmt.Errorf("payment amount exceeds remaining debt")
+	}
+
+	newRemaining := remaining - amountCents
+	newStatus := "open"
+	if newRemaining == 0 {
+		newStatus = "settled"
+	}
+
+	d, err := scanDebt(tx.QueryRow(ctx, fmt.Sprintf(`
+		UPDATE worker_debts SET remaining_cents = $2, status = $3, updated_at = now()
+		WHERE id = $1 RETURNING %s`, debtCols), debtID, newRemaining, newStatus))
+	if err != nil {
+		return WorkerDebt{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return WorkerDebt{}, err
+	}
+	return d, nil
+}
+
 // BeginTx starts a database transaction.
 func (r *Repository) BeginTx(ctx context.Context) (pgx.Tx, error) {
 	return r.db.Begin(ctx)

@@ -12,8 +12,9 @@ type WorkerCard struct {
 }
 
 type CreateCardRequest struct {
-	WorkerID int64  `json:"worker_id" binding:"required,gt=0"`
-	Label    string `json:"label"`
+	WorkerID int64   `json:"worker_id" binding:"required,gt=0"`
+	Label    string  `json:"label"`
+	CardCode *string `json:"card_code"`
 }
 
 type UpdateCardRequest struct {

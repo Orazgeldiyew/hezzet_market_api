@@ -35,4 +35,11 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir, publicBas
 		write.DELETE("/:id/categories/:categoryId", h.RemoveCategory)
 		write.POST("/:id/photo", h.UploadPhoto)
 	}
+
+	// Price history: manager/admin only
+	priceHistory := rg.Group("/products")
+	priceHistory.Use(middleware.RequireRoles("manager"))
+	{
+		priceHistory.GET("/:id/price-history", h.GetPriceHistory)
+	}
 }

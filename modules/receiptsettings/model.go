@@ -6,6 +6,8 @@ type ReceiptSettings struct {
 	ShopAddress string `json:"shop_address"`
 	ShopPhone   string `json:"shop_phone"`
 	LogoPath    string `json:"logo_path"`
+	LogoWidth   string `json:"logo_width"`
+	LogoHeight  string `json:"logo_height"`
 	Footer      string `json:"footer"`
 	Template    string `json:"template"`
 	DeleteCode  string `json:"delete_code"`
@@ -18,6 +20,8 @@ type UpdateRequest struct {
 	ShopAddress *string `json:"shop_address"`
 	ShopPhone   *string `json:"shop_phone"`
 	LogoPath    *string `json:"logo_path"`
+	LogoWidth   *string `json:"logo_width"`
+	LogoHeight  *string `json:"logo_height"`
 	Footer      *string `json:"footer"`
 	Template    *string `json:"template"`
 	DeleteCode  *string `json:"delete_code"`

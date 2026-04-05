@@ -82,7 +82,7 @@ func (h *Handler) Add(c *gin.Context) {
 		c.Error(apperr.Validation("worker_id is required"))
 		return
 	}
-	card, err := h.repo.Add(c.Request.Context(), req.WorkerID, req.Label)
+	card, err := h.repo.Add(c.Request.Context(), req.WorkerID, req.Label, req.CardCode)
 	if err != nil {
 		c.Error(err)
 		return

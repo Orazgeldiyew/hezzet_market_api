@@ -229,3 +229,49 @@ func (h *Handler) ListDebts(c *gin.Context) {
 	}
 	response.List(c, out.Items, page, out.Limit, out.Offset, out.Total)
 }
+
+func (h *Handler) AllDebtors(c *gin.Context) {
+	items, err := h.svc.repo.AllDebtors(c.Request.Context())
+	if err != nil {
+		c.Error(apperr.Internal(err))
+		return
+	}
+	response.OK(c, items)
+}
+
+func (h *Handler) PayDebt(c *gin.Context) {
+	debtID, err := strconv.ParseInt(c.Param("debt_id"), 10, 64)
+	if err != nil || debtID <= 0 {
+		c.Error(apperr.Validation("invalid debt id"))
+		return
+	}
+	var req PayDebtRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	d, err := h.svc.repo.PayDebt(c.Request.Context(), debtID, req.AmountCents)
+	if err != nil {
+		if err.Error() == "payment amount exceeds remaining debt" {
+			c.Error(apperr.Validation(err.Error()))
+			return
+		}
+		c.Error(apperr.Internal(err))
+		return
+	}
+	response.OK(c, d)
+}
+
+func (h *Handler) GetDebt(c *gin.Context) {
+	debtID, err := strconv.ParseInt(c.Param("debt_id"), 10, 64)
+	if err != nil || debtID <= 0 {
+		c.Error(apperr.Validation("invalid debt id"))
+		return
+	}
+	d, err := h.svc.repo.GetDebtByID(c.Request.Context(), debtID)
+	if err != nil {
+		c.Error(apperr.Internal(err))
+		return
+	}
+	response.OK(c, d)
+}

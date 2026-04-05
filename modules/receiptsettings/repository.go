@@ -19,13 +19,13 @@ func NewRepository(db *pgxpool.Pool, defaults Defaults) *Repository {
 
 // Get reads the singleton row and merges NULLs with env defaults.
 func (r *Repository) Get(ctx context.Context) (ReceiptSettings, error) {
-	var shopName, shopAddr, shopPhone, logoPath, footer, tmpl, deleteCode *string
+	var shopName, shopAddr, shopPhone, logoPath, logoWidth, logoHeight, footer, tmpl, deleteCode *string
 
 	err := r.db.QueryRow(ctx, `
-		SELECT shop_name, shop_address, shop_phone, logo_path, footer, template, delete_code
+		SELECT shop_name, shop_address, shop_phone, logo_path, logo_width, logo_height, footer, template, delete_code
 		FROM receipt_settings
 		WHERE id = 1
-	`).Scan(&shopName, &shopAddr, &shopPhone, &logoPath, &footer, &tmpl, &deleteCode)
+	`).Scan(&shopName, &shopAddr, &shopPhone, &logoPath, &logoWidth, &logoHeight, &footer, &tmpl, &deleteCode)
 	if err != nil {
 		return ReceiptSettings{}, err
 	}
@@ -35,6 +35,8 @@ func (r *Repository) Get(ctx context.Context) (ReceiptSettings, error) {
 		ShopAddress: coalesce(shopAddr, r.defaults.ShopAddress),
 		ShopPhone:   coalesce(shopPhone, r.defaults.ShopPhone),
 		LogoPath:    deref(logoPath),
+		LogoWidth:   coalesce(logoWidth, "50mm"),
+		LogoHeight:  coalesce(logoHeight, "20mm"),
 		Footer:      coalesce(footer, r.defaults.Footer),
 		Template:    deref(tmpl),
 		DeleteCode:  coalesce(deleteCode, "0000"),
@@ -64,6 +66,8 @@ func (r *Repository) Update(ctx context.Context, req UpdateRequest) error {
 	add("shop_address", req.ShopAddress)
 	add("shop_phone", req.ShopPhone)
 	add("logo_path", req.LogoPath)
+	add("logo_width", req.LogoWidth)
+	add("logo_height", req.LogoHeight)
 	add("footer", req.Footer)
 	add("template", req.Template)
 	add("delete_code", req.DeleteCode)

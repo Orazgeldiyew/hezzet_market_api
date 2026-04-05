@@ -348,8 +348,8 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	if !isAdmin(currentRoles(c)) && currentUID != id {
-		c.Error(apperr.Forbidden("forbidden"))
+	if !isAdmin(currentRoles(c)) {
+		c.Error(apperr.Forbidden("only admin can change passwords"))
 		return
 	}
 

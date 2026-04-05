@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strconv"
 	"path/filepath"
 	"strings"
 
@@ -178,9 +179,13 @@ func (s *Service) Create(ctx context.Context, req CreateRequest, fh *multipart.F
 	if err := s.repo.Create(ctx, &p); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			code, msg := "PRODUCT_ALREADY_EXISTS", "product with this sku already exists"
+			if pgErr.ConstraintName == "product_barcodes_barcode_key" {
+				code, msg = "BARCODE_ALREADY_EXISTS", "barcode already exists"
+			}
 			return Product{}, &apperr.AppError{
-				Code:    "PRODUCT_ALREADY_EXISTS",
-				Message: "product with this sku or barcode already exists",
+				Code:    code,
+				Message: msg,
 				Err:     err,
 			}
 		}
@@ -221,15 +226,37 @@ func (s *Service) Create(ctx context.Context, req CreateRequest, fh *multipart.F
 	return p, nil
 }
 
-func (s *Service) GetByBarcode(ctx context.Context, barcode string) (Product, error) {
+func (s *Service) GetByBarcode(ctx context.Context, barcode string) (BarcodeResult, error) {
+	// 1. Try exact match first (normal barcode)
 	p, err := s.repo.GetByBarcode(ctx, barcode)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return Product{}, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found for this barcode")
-		}
-		return Product{}, apperr.Internal(err)
+	if err == nil {
+		return BarcodeResult{Product: p}, nil
 	}
-	return p, nil
+	if err != pgx.ErrNoRows {
+		return BarcodeResult{}, apperr.Internal(err)
+	}
+
+	// 2. Try parsing as weight barcode: prefix "2", length 13
+	//    Format: 2 PPPPP WWWWW C (product code + weight in grams)
+	if len(barcode) == 13 && barcode[0] == '2' {
+		productCode := barcode[1:6] // 5 digits
+		weightStr := barcode[7:12]  // 5 digits (grams)
+
+		// Find product by internal code (stored as barcode "PPPPP")
+		p, err := s.repo.GetByBarcode(ctx, productCode)
+		if err == nil {
+			weight, _ := strconv.ParseInt(weightStr, 10, 64)
+			if weight > 0 {
+				return BarcodeResult{
+					Product:  p,
+					QtyMilli: weight, // grams = milli-kg
+					IsWeight: true,
+				}, nil
+			}
+		}
+	}
+
+	return BarcodeResult{}, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found for this barcode")
 }
 
 func (s *Service) Get(ctx context.Context, id int64) (Product, error) {
@@ -271,19 +298,20 @@ func (s *Service) GetCard(ctx context.Context, id int64) (Card, error) {
 	}, nil
 }
 
-func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest) (Product, error) {
-	// When unit_type or unit is being changed we must validate the combined
-	// (effective) state: either field may be absent in the request, so we load
-	// the current product and merge before validating.
-	if req.UnitType != nil || req.Unit != nil {
-		current, err := s.repo.GetByID(ctx, id)
-		if err != nil {
-			if err == pgx.ErrNoRows {
-				return Product{}, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found")
-			}
-			return Product{}, apperr.Internal(err)
+func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest, userID *int64) (Product, error) {
+	// Load current product for validation and price-history comparison.
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return Product{}, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found")
 		}
+		return Product{}, apperr.Internal(err)
+	}
 
+	// When unit_type or unit is being changed we must validate the combined
+	// (effective) state: either field may be absent in the request, so we
+	// merge before validating.
+	if req.UnitType != nil || req.Unit != nil {
 		effectiveUnitType := current.UnitType
 		if req.UnitType != nil {
 			effectiveUnitType = *req.UnitType
@@ -306,13 +334,25 @@ func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest) (Prod
 		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			code, msg := "PRODUCT_ALREADY_EXISTS", "product with this sku already exists"
+			if pgErr.ConstraintName == "product_barcodes_barcode_key" {
+				code, msg = "BARCODE_ALREADY_EXISTS", "barcode already exists"
+			}
 			return Product{}, &apperr.AppError{
-				Code:    "PRODUCT_ALREADY_EXISTS",
-				Message: "product with this sku or barcode already exists",
+				Code:    code,
+				Message: msg,
 				Err:     err,
 			}
 		}
 		return Product{}, apperr.Internal(err)
+	}
+
+	// Log price changes
+	if req.PurchasePrice != nil && *req.PurchasePrice != current.PurchasePrice {
+		_ = s.repo.LogPriceChange(ctx, id, "purchase_price", current.PurchasePrice, *req.PurchasePrice, userID)
+	}
+	if req.SalePrice != nil && *req.SalePrice != current.SalePrice {
+		_ = s.repo.LogPriceChange(ctx, id, "sale_price", current.SalePrice, *req.SalePrice, userID)
 	}
 
 	// Update categories if provided.
@@ -459,6 +499,23 @@ func (s *Service) RemoveCategory(ctx context.Context, productID, categoryID int6
 		return apperr.NotFound("NOT_FOUND", "link not found")
 	}
 	return nil
+}
+
+// ─── Price history ──────────────────────────────────────────────────────────
+
+func (s *Service) GetPriceHistory(ctx context.Context, productID int64, limit, offset int) ([]PriceHistory, int, error) {
+	// Verify product exists
+	if _, err := s.repo.GetByID(ctx, productID); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, 0, apperr.NotFound("PRODUCT_NOT_FOUND", "product not found")
+		}
+		return nil, 0, apperr.Internal(err)
+	}
+	items, total, err := s.repo.GetPriceHistory(ctx, productID, limit, offset)
+	if err != nil {
+		return nil, 0, apperr.Internal(err)
+	}
+	return items, total, nil
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

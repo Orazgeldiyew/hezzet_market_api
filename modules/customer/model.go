@@ -4,29 +4,31 @@ package customer
 import "time"
 
 type Customer struct {
-	ID          int64      `json:"id"`
-	Name        string     `json:"name"`
-	Phone       string     `json:"phone"`
-	Email       string     `json:"email"`
-	Type        string     `json:"type"`
-	TotalSpent  int64      `json:"total_spent"`
-	BonusPoints int64      `json:"bonus_points"`
-	CardCode    string     `json:"card_code"`
-	IsActive    bool       `json:"is_active"`
-	Notes       string     `json:"notes"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	ID             int64      `json:"id"`
+	Name           string     `json:"name"`
+	Phone          string     `json:"phone"`
+	Email          string     `json:"email"`
+	Type           string     `json:"type"`
+	TotalSpent     int64      `json:"total_spent"`
+	BonusPoints    int64      `json:"bonus_points"`
+	TotalDebtCents int64      `json:"total_debt_cents"`
+	CardCode       string     `json:"card_code"`
+	IsActive       bool       `json:"is_active"`
+	Notes          string     `json:"notes"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
 }
 
 // ---------- Requests ----------
 
 type CreateRequest struct {
-	Name  string  `json:"name" binding:"required,min=1,max=255"`
-	Phone string  `json:"phone" binding:"omitempty,max=50"`
-	Email string  `json:"email" binding:"omitempty,email,max=255"`
-	Type  *string `json:"type" binding:"omitempty,oneof=regular vip wholesale"`
-	Notes string  `json:"notes"`
+	Name     string  `json:"name" binding:"required,min=1,max=255"`
+	Phone    string  `json:"phone" binding:"omitempty,max=50"`
+	Email    string  `json:"email" binding:"omitempty,email,max=255"`
+	Type     *string `json:"type" binding:"omitempty,oneof=regular vip wholesale"`
+	Notes    string  `json:"notes"`
+	CardCode *string `json:"card_code"`
 }
 
 // UpdateRequest используется в handler Update (если ты его оставляешь).
@@ -54,6 +56,7 @@ type UpdateContactRequest struct {
 type UpdateAdminRequest struct {
 	Type     *string `json:"type" binding:"omitempty"`
 	IsActive *bool   `json:"is_active"`
+	CardCode *string `json:"card_code"`
 }
 
 // ---------- Responses ----------

@@ -19,6 +19,8 @@ type Sale struct {
 	TotalCents      int64      `json:"total_cents"`
 	CostCents       int64      `json:"cost_cents"`
 	BonusUsedCents  int64      `json:"bonus_used_cents"`
+	DiscountPercent int        `json:"discount_percent"`
+	DiscountCents   int64      `json:"discount_cents"`
 	ItemsCount      int        `json:"items_count"`
 	Note            *string    `json:"note,omitempty"`
 	CreatedBy       *int64     `json:"created_by,omitempty"`
@@ -45,14 +47,16 @@ type SaleItem struct {
 	UnitPriceCents  int64     `json:"unit_price_cents"`
 	CostCents       int64     `json:"cost_cents"`
 	LineTotalCents  int64     `json:"line_total_cents"`
+	DiscountPercent int       `json:"discount_percent"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 
 // ── Requests ─────────────────────────────────────────────────────────────────
 
 type CreateSaleItemRequest struct {
-	ProductID int64 `json:"product_id" binding:"required,gt=0"`
-	QtyMilli  int64 `json:"qty_milli" binding:"required,gt=0"`
+	ProductID       int64 `json:"product_id" binding:"required,gt=0"`
+	QtyMilli        int64 `json:"qty_milli" binding:"required,gt=0"`
+	DiscountPercent int   `json:"discount_percent"`
 }
 
 type CreateSaleRequest struct {
@@ -66,10 +70,11 @@ type CreateSaleRequest struct {
 }
 
 type ConfirmSaleRequest struct {
-	PaymentTypeID  *int64  `json:"payment_type_id"`
-	PaymentAmount  *int64  `json:"payment_amount"`
-	PaymentNote    *string `json:"payment_note"`
-	BonusUsedCents *int64  `json:"bonus_used_cents"`
+	PaymentTypeID   *int64  `json:"payment_type_id"`
+	PaymentAmount   *int64  `json:"payment_amount"`
+	PaymentNote     *string `json:"payment_note"`
+	BonusUsedCents  *int64  `json:"bonus_used_cents"`
+	DiscountPercent *int    `json:"discount_percent"`
 	// Force allows confirming even when physical stock is insufficient (deficit sale).
 	// The warehouse item qty_milli will go negative.
 	Force bool `json:"force"`
