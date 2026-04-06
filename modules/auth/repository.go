@@ -206,8 +206,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 
 	countQ := `
 		SELECT COUNT(*) FROM users
-		WHERE deleted_at IS NULL
-		  AND ($1 = '' OR username ILIKE '%' || $1 || '%' OR full_name ILIKE '%' || $1 || '%')
+		WHERE deleted_at IS NULL 		  AND ($1 = '' OR username ILIKE '%' || $1 || '%' OR full_name ILIKE '%' || $1 || '%')
 	`
 	var total int
 	if err := r.db.QueryRow(ctx, countQ, search).Scan(&total); err != nil {
@@ -230,8 +229,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	q := fmt.Sprintf(`
 		SELECT %s
 		FROM users
-		WHERE deleted_at IS NULL
-		  AND ($1 = '' OR username ILIKE '%%' || $1 || '%%' OR full_name ILIKE '%%' || $1 || '%%')
+		WHERE deleted_at IS NULL 		  AND ($1 = '' OR username ILIKE '%%' || $1 || '%%' OR full_name ILIKE '%%' || $1 || '%%')
 		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
 	`, userCols, col, dir)

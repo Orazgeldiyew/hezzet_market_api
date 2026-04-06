@@ -227,6 +227,13 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, created
 		return UserWithRoles{}, err
 	}
 
+	// Prevent creating a second admin
+	for _, r := range roles {
+		if r == "admin" {
+			return UserWithRoles{}, apperr.Forbidden("admin role cannot be assigned to new users")
+		}
+	}
+
 	n, err := s.repo.CountRolesByCodes(ctx, roles)
 	if err != nil {
 		return UserWithRoles{}, apperr.Internal(err)
@@ -364,6 +371,18 @@ func (s *Service) UpdateUser(ctx context.Context, id int64, req UpdateUserReques
 		}
 		if err := validateAdminExclusive(roles); err != nil {
 			return UserWithRoles{}, err
+		}
+
+		// Prevent giving admin role to non-admin user
+		currentRoles, _ := s.repo.GetUserRoles(ctx, id)
+		isCurrentAdmin := false
+		for _, r := range currentRoles {
+			if r == "admin" { isCurrentAdmin = true; break }
+		}
+		for _, r := range roles {
+			if r == "admin" && !isCurrentAdmin {
+				return UserWithRoles{}, apperr.Forbidden("admin role cannot be assigned")
+			}
 		}
 
 		n, err := s.repo.CountRolesByCodes(ctx, roles)

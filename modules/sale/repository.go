@@ -16,6 +16,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/customerdebt"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/discountrule"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/receiptsettings"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
@@ -25,6 +26,7 @@ type Repository struct {
 	customerRepo     *customer.Repository
 	debtRepo         *customerdebt.Repository
 	discountRuleRepo *discountrule.Repository
+	receiptRepo      *receiptsettings.Repository
 }
 
 func NewRepository(db *pgxpool.Pool, baseURL string, customerRepo *customer.Repository) *Repository {
@@ -540,6 +542,22 @@ func (r *Repository) ConfirmSale(
 		}
 	}
 
+	// 9. Auto-accrue bonus points for customer (based on bonus_percent setting)
+	if saleCustomerID != nil && r.customerRepo != nil && totalCents > 0 {
+		bonusPercent := 1 // default 1%
+		if r.receiptRepo != nil {
+			if bp, err := r.receiptRepo.GetBonusPercent(ctx); err == nil && bp > 0 {
+				bonusPercent = bp
+			}
+		}
+		bonusCents := (totalCents * int64(bonusPercent)) / 100
+		if bonusCents > 0 {
+			if err := r.customerRepo.AddSpentTx(ctx, tx, *saleCustomerID, totalCents, bonusCents); err != nil {
+				return Sale{}, err
+			}
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return Sale{}, err
 	}
@@ -813,6 +831,7 @@ type ReceiptSaleRow struct {
 	CustomerName  string
 	WorkerName    string
 	PaymentMethod string // cash, card, bank_transfer, debt, etc.
+	PaidCents     int64  // amount actually paid
 }
 
 type ReceiptItemRow struct {
@@ -840,7 +859,10 @@ func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleR
 		        JOIN transactions t ON t.id = p.transaction_id
 		        JOIN payment_types pt ON pt.id = p.payment_type_id
 		        WHERE t.related_table = 'sale' AND t.related_id = s.id
-		        ORDER BY p.id DESC LIMIT 1)
+		        ORDER BY p.id DESC LIMIT 1),
+		       COALESCE((SELECT SUM(p.amount_cents) FROM payments p
+		        JOIN transactions t ON t.id = p.transaction_id
+		        WHERE t.related_table = 'sale' AND t.related_id = s.id), 0)
 		FROM sales s
 		LEFT JOIN users u ON u.id = s.created_by
 		LEFT JOIN warehouses w ON w.id = s.warehouse_id
@@ -852,7 +874,7 @@ func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleR
 		&row.CostCents, &row.BonusUsedCents, &row.DiscountPercent, &row.DiscountCents,
 		&row.ItemsCount, &row.Note, &row.CreatedBy, &row.CreatedAt,
 		&row.Status,
-		&cashierName, &warehouseName, &customerName, &workerName, &paymentMethod,
+		&cashierName, &warehouseName, &customerName, &workerName, &paymentMethod, &row.PaidCents,
 	)
 	if err != nil {
 		return ReceiptSaleRow{}, nil, err

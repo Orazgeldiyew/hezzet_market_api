@@ -12,6 +12,7 @@ import (
 
 func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository, publicBaseURL string, receiptRepo *receiptsettings.Repository, customerRepo *customer.Repository, permChecker middleware.PermissionChecker) *Repository {
 	repo := NewRepository(db, publicBaseURL, customerRepo)
+	repo.receiptRepo = receiptRepo
 	svc := NewService(repo, finRepo)
 	h := NewHandler(svc, receiptRepo, publicBaseURL)
 

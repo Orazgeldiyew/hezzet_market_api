@@ -20,26 +20,28 @@ func NewRepository(db *pgxpool.Pool, defaults Defaults) *Repository {
 // Get reads the singleton row and merges NULLs with env defaults.
 func (r *Repository) Get(ctx context.Context) (ReceiptSettings, error) {
 	var shopName, shopAddr, shopPhone, logoPath, logoWidth, logoHeight, footer, tmpl, deleteCode *string
+	var bonusPercent int
 
 	err := r.db.QueryRow(ctx, `
-		SELECT shop_name, shop_address, shop_phone, logo_path, logo_width, logo_height, footer, template, delete_code
+		SELECT shop_name, shop_address, shop_phone, logo_path, logo_width, logo_height, footer, template, delete_code, bonus_percent
 		FROM receipt_settings
 		WHERE id = 1
-	`).Scan(&shopName, &shopAddr, &shopPhone, &logoPath, &logoWidth, &logoHeight, &footer, &tmpl, &deleteCode)
+	`).Scan(&shopName, &shopAddr, &shopPhone, &logoPath, &logoWidth, &logoHeight, &footer, &tmpl, &deleteCode, &bonusPercent)
 	if err != nil {
 		return ReceiptSettings{}, err
 	}
 
 	return ReceiptSettings{
-		ShopName:    coalesce(shopName, r.defaults.ShopName),
-		ShopAddress: coalesce(shopAddr, r.defaults.ShopAddress),
-		ShopPhone:   coalesce(shopPhone, r.defaults.ShopPhone),
-		LogoPath:    deref(logoPath),
-		LogoWidth:   coalesce(logoWidth, "50mm"),
-		LogoHeight:  coalesce(logoHeight, "20mm"),
-		Footer:      coalesce(footer, r.defaults.Footer),
-		Template:    deref(tmpl),
-		DeleteCode:  coalesce(deleteCode, "0000"),
+		ShopName:     coalesce(shopName, r.defaults.ShopName),
+		ShopAddress:  coalesce(shopAddr, r.defaults.ShopAddress),
+		ShopPhone:    coalesce(shopPhone, r.defaults.ShopPhone),
+		LogoPath:     deref(logoPath),
+		LogoWidth:    coalesce(logoWidth, "50mm"),
+		LogoHeight:   coalesce(logoHeight, "20mm"),
+		Footer:       coalesce(footer, r.defaults.Footer),
+		Template:     deref(tmpl),
+		DeleteCode:   coalesce(deleteCode, "0000"),
+		BonusPercent: bonusPercent,
 	}, nil
 }
 
@@ -72,6 +74,12 @@ func (r *Repository) Update(ctx context.Context, req UpdateRequest) error {
 	add("template", req.Template)
 	add("delete_code", req.DeleteCode)
 
+	if req.BonusPercent != nil {
+		sets = append(sets, fmt.Sprintf("bonus_percent = $%d", idx))
+		args = append(args, *req.BonusPercent)
+		idx++
+	}
+
 	if len(sets) == 0 {
 		return nil
 	}
@@ -91,6 +99,13 @@ func (r *Repository) GetDeleteCode(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return coalesce(code, "0000"), nil
+}
+
+// GetBonusPercent returns the current bonus percent setting.
+func (r *Repository) GetBonusPercent(ctx context.Context) (int, error) {
+	var bp int
+	err := r.db.QueryRow(ctx, `SELECT bonus_percent FROM receipt_settings WHERE id = 1`).Scan(&bp)
+	return bp, err
 }
 
 func coalesce(val *string, def string) string {

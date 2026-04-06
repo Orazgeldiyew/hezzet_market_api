@@ -28,6 +28,7 @@ type ReceiptData struct {
 	SaleID          int64
 	ReceiptNumber   string // YYYYMMDD-NNNNNN
 	Date            string
+	Time            string
 	Status          string
 	CashierName     string
 	WarehouseName   string
@@ -37,6 +38,8 @@ type ReceiptData struct {
 	DiscountPercent int
 	DiscountCents   int64
 	PaymentMethod   string
+	PaidCents       int64
+	ChangeCents     int64
 	WorkerName      string
 	Note            string
 	Items           []ReceiptItem
@@ -100,8 +103,8 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
     .info { font-size: 11px; color: #333; }
     hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
     .meta { font-size: 11px; margin: 2px 0; }
-    table { width: 100%; border-collapse: collapse; margin: 4px 0; }
-    th, td { padding: 1px 0; font-size: 11px; text-align: left; vertical-align: top; }
+    table { width: 100%; border-collapse: collapse; margin: 4px 0; border: 1px solid #000; }
+    th, td { padding: 2px 4px; font-size: 11px; text-align: left; vertical-align: top; border: 1px solid #000; }
     .r { text-align: right; }
     .total-line { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin: 4px 0; }
     .footer { font-size: 10px; color: #555; margin-top: 6px; }
@@ -120,6 +123,7 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
   <hr>
   <div class="meta"><b>Çek №{{.ReceiptNumber}}</b></div>
   <div class="meta">Senesi: {{.Date}}</div>
+  <div class="meta">Wagt: {{.Time}}</div>
   <div class="meta">Kassir: {{.CashierName}}</div>
   {{if .WarehouseName}}<div class="meta">Ammar: {{.WarehouseName}}</div>{{end}}
   {{if .CustomerName}}<div class="meta">Müşderi: {{.CustomerName}}</div>{{end}}
@@ -138,8 +142,11 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
   </table>
 
   <hr>
-  {{if gt .DiscountCents 0}}<div class="meta">Arzanladyş {{.DiscountPercent}}%: -{{money .DiscountCents}} TMT</div>{{end}}
-  <div class="total-line"><span>JEMI:</span><span>{{money .TotalCents}} TMT</span></div>
+  <div class="meta" style="display:flex;justify-content:space-between"><span><b>Umumy jemi:</b> {{money .TotalCents}} TMT</span><span>Arz%: {{.DiscountPercent}}</span></div>
+  <hr>
+  <div class="meta" style="display:flex;justify-content:space-between"><span>Tölenen: {{money .PaidCents}} TMT</span><span>Arz Muk: {{money .DiscountCents}} TMT</span></div>
+  <hr>
+  <div class="meta"><b>Gaýtargy: {{money .ChangeCents}} TMT</b></div>
   {{if .PaymentMethod}}<div class="meta">Töleg: {{.PaymentMethod}}</div>{{end}}
   {{if gt .BonusUsedCents 0}}<div class="meta">Bonus: -{{money .BonusUsedCents}} TMT</div>{{end}}
   {{if .WorkerName}}<div class="meta">Işgär (karz): {{.WorkerName}}</div>{{end}}
@@ -233,7 +240,8 @@ func ReceiptHandler(db *pgxpool.Pool, baseURL string, receiptRepo *receiptsettin
 			Footer:          settings.Footer,
 			SaleID:          saleRow.ID,
 			ReceiptNumber:   receiptNumber,
-			Date:            saleRow.CreatedAt.Format("02.01.2006 15:04"),
+			Date:            saleRow.CreatedAt.Format("02.01.2006"),
+			Time:            saleRow.CreatedAt.Format("15:04"),
 			Status:          string(saleRow.Status),
 			CashierName:     saleRow.CashierName,
 			WarehouseName:   saleRow.WarehouseName,
@@ -243,6 +251,8 @@ func ReceiptHandler(db *pgxpool.Pool, baseURL string, receiptRepo *receiptsettin
 			DiscountPercent: saleRow.DiscountPercent,
 			DiscountCents:   saleRow.DiscountCents,
 			PaymentMethod:   saleRow.PaymentMethod,
+			PaidCents:       saleRow.PaidCents,
+			ChangeCents:     max(saleRow.PaidCents-saleRow.TotalCents, 0),
 			WorkerName:      saleRow.WorkerName,
 			Note:            note,
 			Items:           receiptItems,
