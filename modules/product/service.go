@@ -236,13 +236,12 @@ func (s *Service) GetByBarcode(ctx context.Context, barcode string) (BarcodeResu
 		return BarcodeResult{}, apperr.Internal(err)
 	}
 
-	// 2. Try parsing as weight barcode: prefix "2", length 13
-	//    Format: 2 PPPPP WWWWW C (product code + weight in grams)
-	if len(barcode) == 13 && barcode[0] == '2' {
-		productCode := barcode[1:6] // 5 digits
-		weightStr := barcode[7:12]  // 5 digits (grams)
+	// 2. Try parsing as weight barcode: length 13
+	//    Format: PPPPPPP WWWWWW (7-digit product code + 6-digit weight in grams)
+	if len(barcode) == 13 {
+		productCode := barcode[0:7] // 7 digits
+		weightStr := barcode[7:13]  // 6 digits (grams)
 
-		// Find product by internal code (stored as barcode "PPPPP")
 		p, err := s.repo.GetByBarcode(ctx, productCode)
 		if err == nil {
 			weight, _ := strconv.ParseInt(weightStr, 10, 64)
