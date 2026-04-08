@@ -5,6 +5,7 @@ import "time"
 
 type Customer struct {
 	ID             int64      `json:"id"`
+	UserID         *int64     `json:"user_id,omitempty"`
 	Name           string     `json:"name"`
 	Phone          string     `json:"phone"`
 	Email          string     `json:"email"`
@@ -23,6 +24,7 @@ type Customer struct {
 // ---------- Requests ----------
 
 type CreateRequest struct {
+	UserID   *int64  `json:"user_id"`
 	Name     string  `json:"name" binding:"required,min=1,max=255"`
 	Phone    string  `json:"phone" binding:"omitempty,max=50"`
 	Email    string  `json:"email" binding:"omitempty,email,max=255"`

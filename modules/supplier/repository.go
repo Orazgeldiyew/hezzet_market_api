@@ -22,23 +22,23 @@ func IsNotFound(err error) bool {
 
 func (r *Repository) Create(ctx context.Context, s *Supplier) error {
 	q := `
-		INSERT INTO suppliers (name, phone, email, address, is_active)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, is_active, created_at
+		INSERT INTO suppliers (name, phone, email, address, is_active, user_id)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, user_id, is_active, created_at
 	`
-	return r.db.QueryRow(ctx, q, s.Name, s.Phone, s.Email, s.Address, s.IsActive).
-		Scan(&s.ID, &s.IsActive, &s.CreatedAt)
+	return r.db.QueryRow(ctx, q, s.Name, s.Phone, s.Email, s.Address, s.IsActive, s.UserID).
+		Scan(&s.ID, &s.UserID, &s.IsActive, &s.CreatedAt)
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int) (Supplier, error) {
 	var s Supplier
 	q := `
-		SELECT id, name, phone, email, address, is_active, created_at
+		SELECT id, user_id, name, phone, email, address, is_active, created_at
 		FROM suppliers
 		WHERE id=$1
 	`
 	err := r.db.QueryRow(ctx, q, id).
-		Scan(&s.ID, &s.Name, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt)
+		Scan(&s.ID, &s.UserID, &s.Name, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt)
 	return s, err
 }
 
@@ -79,7 +79,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT id, name, phone, email, address, is_active, created_at
+		SELECT id, user_id, name, phone, email, address, is_active, created_at
 		FROM suppliers
 		WHERE is_active = true
 		  AND ($1 = '' OR
@@ -99,7 +99,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	var out []Supplier
 	for rows.Next() {
 		var s Supplier
-		if err := rows.Scan(&s.ID, &s.Name, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, s)
@@ -126,7 +126,7 @@ func (r *Repository) Update(ctx context.Context, id int, req UpdateRequest) (Sup
 		req.Address,
 		req.IsActive,
 		id,
-	).Scan(&s.ID, &s.Name, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt)
+	).Scan(&s.ID, &s.UserID, &s.Name, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt)
 
 	return s, err
 }

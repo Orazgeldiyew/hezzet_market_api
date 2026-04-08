@@ -21,21 +21,21 @@ func IsNotFound(err error) bool { return err == pgx.ErrNoRows }
 
 func (r *Repository) Create(ctx context.Context, c *Customer, cardCode *string) error {
 	cardExpr := "upper(substring(md5(gen_random_uuid()::text), 1, 8))"
-	args := []any{c.Name, c.Phone, c.Email, c.Type, c.Notes, c.IsActive}
+	args := []any{c.Name, c.Phone, c.Email, c.Type, c.Notes, c.IsActive, c.UserID}
 
 	if cardCode != nil && *cardCode != "" {
-		cardExpr = "$7"
+		cardExpr = fmt.Sprintf("$%d", len(args)+1)
 		args = append(args, *cardCode)
 	}
 
 	q := fmt.Sprintf(`
-		INSERT INTO customers (name, phone, email, type, notes, is_active, card_code)
-		VALUES ($1, $2, $3, $4, $5, $6, %s)
-		RETURNING id, total_spent, bonus_points, card_code, is_active, created_at, updated_at
+		INSERT INTO customers (name, phone, email, type, notes, is_active, user_id, card_code)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, %s)
+		RETURNING id, user_id, total_spent, bonus_points, card_code, is_active, created_at, updated_at
 	`, cardExpr)
 
 	return r.db.QueryRow(ctx, q, args...).Scan(
-		&c.ID, &c.TotalSpent, &c.BonusPoints, &c.CardCode, &c.IsActive, &c.CreatedAt, &c.UpdatedAt,
+		&c.ID, &c.UserID, &c.TotalSpent, &c.BonusPoints, &c.CardCode, &c.IsActive, &c.CreatedAt, &c.UpdatedAt,
 	)
 }
 
@@ -43,14 +43,14 @@ func (r *Repository) Create(ctx context.Context, c *Customer, cardCode *string) 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Customer, error) {
 	var c Customer
 	q := `
-		SELECT id, name, phone, email, type, total_spent, bonus_points,
+		SELECT id, user_id, name, phone, email, type, total_spent, bonus_points,
 		       COALESCE((SELECT SUM(remaining_cents) FROM customer_debts WHERE customer_id = customers.id AND status = 'open'), 0),
 		       card_code, is_active, notes, created_at, updated_at, deleted_at
 		FROM customers
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
+		&c.ID, &c.UserID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
 		&c.CardCode, &c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
 	)
 	return c, err
@@ -60,14 +60,14 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Customer, error) {
 func (r *Repository) GetByCardCode(ctx context.Context, code string) (Customer, error) {
 	var c Customer
 	q := `
-		SELECT id, name, phone, email, type, total_spent, bonus_points,
+		SELECT id, user_id, name, phone, email, type, total_spent, bonus_points,
 		       COALESCE((SELECT SUM(remaining_cents) FROM customer_debts WHERE customer_id = customers.id AND status = 'open'), 0),
 		       card_code, is_active, notes, created_at, updated_at, deleted_at
 		FROM customers
 		WHERE card_code = $1 AND deleted_at IS NULL
 	`
 	err := r.db.QueryRow(ctx, q, code).Scan(
-		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
+		&c.ID, &c.UserID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
 		&c.CardCode, &c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
 	)
 	return c, err
@@ -113,7 +113,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	q := fmt.Sprintf(`
-		SELECT id, name, phone, email, type, total_spent, bonus_points,
+		SELECT id, user_id, name, phone, email, type, total_spent, bonus_points,
 		       COALESCE((SELECT SUM(remaining_cents) FROM customer_debts WHERE customer_id = customers.id AND status = 'open'), 0),
 		       card_code, is_active, notes, created_at, updated_at, deleted_at
 		FROM customers
@@ -138,7 +138,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	for rows.Next() {
 		var c Customer
 		if err := rows.Scan(
-			&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
+			&c.ID, &c.UserID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
 			&c.CardCode, &c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
 		); err != nil {
 			return nil, 0, err
@@ -177,7 +177,7 @@ func (r *Repository) AddSpent(ctx context.Context, id int64, amountCents int64, 
 	`
 	var c Customer
 	err := r.db.QueryRow(ctx, q, amountCents, bonusCents, id).Scan(
-		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
+		&c.ID, &c.UserID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
 		&c.CardCode, &c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
 	)
 	return c, err
@@ -232,7 +232,7 @@ func (r *Repository) UpdateContact(ctx context.Context, id int64, req UpdateCont
 	err := r.db.QueryRow(ctx, q,
 		req.Name, req.Phone, req.Email, req.Notes, id,
 	).Scan(
-		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
+		&c.ID, &c.UserID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
 		&c.CardCode, &c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
 	)
 	return c, err
@@ -253,7 +253,7 @@ func (r *Repository) UpdateAdmin(ctx context.Context, id int64, req UpdateAdminR
 	`
 	var c Customer
 	err := r.db.QueryRow(ctx, q, req.Type, req.IsActive, req.CardCode, id).Scan(
-		&c.ID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
+		&c.ID, &c.UserID, &c.Name, &c.Phone, &c.Email, &c.Type, &c.TotalSpent, &c.BonusPoints, &c.TotalDebtCents,
 		&c.CardCode, &c.IsActive, &c.Notes, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt,
 	)
 	return c, err

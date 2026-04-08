@@ -4,6 +4,7 @@ import "time"
 
 type Worker struct {
 	ID         int64      `json:"id"`
+	UserID     *int64     `json:"user_id,omitempty"`
 	Name       string     `json:"name"`
 	Position   string     `json:"position"`
 	Department string     `json:"department"`
@@ -20,6 +21,7 @@ type Worker struct {
 }
 
 type CreateRequest struct {
+	UserID     *int64   `json:"user_id"`
 	Name       string   `json:"name" binding:"required,min=1,max=255"`
 	Position   string   `json:"position" binding:"omitempty,max=100"`
 	Department string   `json:"department" binding:"omitempty,max=100"`

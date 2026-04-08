@@ -19,26 +19,26 @@ func isNotFound(err error) bool { return err == pgx.ErrNoRows }
 
 func (r *Repository) Create(ctx context.Context, w *Worker) error {
 	q := `
-		INSERT INTO workers (name, position, department, phone, email, address, salary, hire_date, notes, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, is_active, created_at, updated_at
+		INSERT INTO workers (name, position, department, phone, email, address, salary, hire_date, notes, is_active, user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id, user_id, is_active, created_at, updated_at
 	`
 	return r.db.QueryRow(ctx, q,
 		w.Name, w.Position, w.Department, w.Phone, w.Email,
-		w.Address, w.Salary, w.HireDate, w.Notes, w.IsActive,
-	).Scan(&w.ID, &w.IsActive, &w.CreatedAt, &w.UpdatedAt)
+		w.Address, w.Salary, w.HireDate, w.Notes, w.IsActive, w.UserID,
+	).Scan(&w.ID, &w.UserID, &w.IsActive, &w.CreatedAt, &w.UpdatedAt)
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Worker, error) {
 	var w Worker
 	q := `
-		SELECT id, name, position, department, phone, email, address,
+		SELECT id, user_id, name, position, department, phone, email, address,
 		       salary, hire_date, is_active, notes, created_at, updated_at, deleted_at
 		FROM workers
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&w.ID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
+		&w.ID, &w.UserID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
 		&w.Salary, &w.HireDate, &w.IsActive, &w.Notes, &w.CreatedAt, &w.UpdatedAt, &w.DeletedAt,
 	)
 	return w, err
@@ -80,7 +80,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	q := fmt.Sprintf(`
-		SELECT id, name, position, department, phone, email, address,
+		SELECT id, user_id, name, position, department, phone, email, address,
 		       salary, hire_date, is_active, notes, created_at, updated_at, deleted_at
 		FROM workers
 		WHERE deleted_at IS NULL
@@ -103,7 +103,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	for rows.Next() {
 		var w Worker
 		if err := rows.Scan(
-			&w.ID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
+			&w.ID, &w.UserID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
 			&w.Salary, &w.HireDate, &w.IsActive, &w.Notes, &w.CreatedAt, &w.UpdatedAt, &w.DeletedAt,
 		); err != nil {
 			return nil, 0, err
@@ -141,7 +141,7 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (W
 			notes      = COALESCE($10, notes),
 			updated_at = now()
 		WHERE id = $11 AND deleted_at IS NULL
-		RETURNING id, name, position, department, phone, email, address,
+		RETURNING id, user_id, name, position, department, phone, email, address,
 		          salary, hire_date, is_active, notes, created_at, updated_at, deleted_at
 	`
 	var w Worker
@@ -149,7 +149,7 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (W
 		req.Name, req.Position, req.Department, req.Phone, req.Email,
 		req.Address, req.Salary, hireDate, req.IsActive, req.Notes, id,
 	).Scan(
-		&w.ID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
+		&w.ID, &w.UserID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
 		&w.Salary, &w.HireDate, &w.IsActive, &w.Notes, &w.CreatedAt, &w.UpdatedAt, &w.DeletedAt,
 	)
 	return w, err

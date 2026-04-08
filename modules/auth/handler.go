@@ -53,7 +53,7 @@ func isAdmin(roles []string) bool {
 // @Success      201   {object}  response.APIResponse{data=UserWithRoles}
 // @Failure      400   {object}  response.APIResponse
 // @Failure      409   {object}  response.APIResponse
-// @Router       /auth/register [post]
+// @Router       /api/auth/register [post]
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -78,7 +78,7 @@ func (h *Handler) Register(c *gin.Context) {
 // @Success      200   {object}  response.APIResponse{data=LoginResponse}
 // @Failure      400   {object}  response.APIResponse
 // @Failure      401   {object}  response.APIResponse
-// @Router       /auth/login [post]
+// @Router       /api/auth/login [post]
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -103,7 +103,7 @@ func (h *Handler) Login(c *gin.Context) {
 // @Success      200   {object}  response.APIResponse{data=TokenResponse}
 // @Failure      400   {object}  response.APIResponse
 // @Failure      401   {object}  response.APIResponse
-// @Router       /auth/refresh [post]
+// @Router       /api/auth/refresh [post]
 func (h *Handler) RefreshToken(c *gin.Context) {
 	var req RefreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -131,7 +131,7 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      409   {object}  response.APIResponse
-// @Router       /auth/users [post]
+// @Router       /api/auth/users [post]
 func (h *Handler) CreateUser(c *gin.Context) {
 	callerID, ok := currentUserID(c)
 	if !ok {
@@ -167,7 +167,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 // @Success      200              {object}  response.APIResponse{data=ListResponse}
 // @Failure      401              {object}  response.APIResponse
 // @Failure      403              {object}  response.APIResponse
-// @Router       /auth/users [get]
+// @Router       /api/auth/users [get]
 func (h *Handler) ListUsers(c *gin.Context) {
 	page := 1
 	limit := 10
@@ -250,7 +250,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /auth/users/{id} [get]
+// @Router       /api/auth/users/{id} [get]
 func (h *Handler) GetUser(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	out, err := h.svc.GetUser(c.Request.Context(), id)
@@ -275,7 +275,7 @@ func (h *Handler) GetUser(c *gin.Context) {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /auth/users/{id} [patch]
+// @Router       /api/auth/users/{id} [patch]
 func (h *Handler) UpdateUser(c *gin.Context) {
 	callerID, ok := currentUserID(c)
 	if !ok {
@@ -308,7 +308,7 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /auth/users/{id} [delete]
+// @Router       /api/auth/users/{id} [delete]
 func (h *Handler) DeleteUser(c *gin.Context) {
 	actorID, ok := currentUserID(c)
 	if !ok {
@@ -338,7 +338,7 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /auth/users/{id}/password [post]
+// @Router       /api/auth/users/{id}/password [post]
 func (h *Handler) ChangePassword(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 
@@ -380,7 +380,7 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 // @Failure      401   {object}  response.APIResponse
 // @Failure      403   {object}  response.APIResponse
 // @Failure      404   {object}  response.APIResponse
-// @Router       /auth/users/{id}/block [post]
+// @Router       /api/auth/users/{id}/block [post]
 func (h *Handler) BlockUser(c *gin.Context) {
 	callerID, ok := currentUserID(c)
 	if !ok {
@@ -415,7 +415,7 @@ func (h *Handler) BlockUser(c *gin.Context) {
 // @Failure      401  {object}  response.APIResponse
 // @Failure      403  {object}  response.APIResponse
 // @Failure      404  {object}  response.APIResponse
-// @Router       /auth/users/{id}/unblock [post]
+// @Router       /api/auth/users/{id}/unblock [post]
 func (h *Handler) UnblockUser(c *gin.Context) {
 	callerID, ok := currentUserID(c)
 	if !ok {

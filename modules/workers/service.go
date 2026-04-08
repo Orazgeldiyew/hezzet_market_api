@@ -15,6 +15,7 @@ func NewService(repo *Repository) *Service { return &Service{repo: repo} }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Worker, error) {
 	w := Worker{
+		UserID:     req.UserID,
 		Name:       req.Name,
 		Position:   req.Position,
 		Department: req.Department,

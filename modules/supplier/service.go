@@ -16,6 +16,7 @@ func NewService(repo *Repository) *Service {
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Supplier, error) {
 	sup := Supplier{
+		UserID:   req.UserID,
 		Name:     req.Name,
 		Phone:    req.Phone,
 		Email:    req.Email,

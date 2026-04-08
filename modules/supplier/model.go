@@ -5,6 +5,7 @@ import "time"
 // Supplier represents a product supplier
 type Supplier struct {
 	ID        int       `json:"id"`
+	UserID    *int64    `json:"user_id,omitempty"`
 	Name      string    `json:"name"`
 	Phone     string    `json:"phone"`
 	Email     string    `json:"email"`
@@ -15,6 +16,7 @@ type Supplier struct {
 
 // CreateRequest for creating new supplier
 type CreateRequest struct {
+	UserID  *int64 `json:"user_id"`
 	Name    string `json:"name" binding:"required,min=1,max=255"`
 	Phone   string `json:"phone" binding:"max=50"`
 	Email   string `json:"email" binding:"omitempty,email,max=255"`
