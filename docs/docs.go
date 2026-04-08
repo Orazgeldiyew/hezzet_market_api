@@ -9008,6 +9008,9 @@ const docTemplate = `{
                 "discount": {
                     "type": "boolean"
                 },
+                "history": {
+                    "type": "boolean"
+                },
                 "module": {
                     "type": "string"
                 },
@@ -9750,6 +9753,9 @@ const docTemplate = `{
                 "discount": {
                     "type": "boolean"
                 },
+                "history": {
+                    "type": "boolean"
+                },
                 "module": {
                     "type": "string"
                 },
@@ -9949,6 +9955,10 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "discount_percent": {
+                    "description": "centralized discount set by admin/manager",
+                    "type": "integer"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -10065,6 +10075,9 @@ const docTemplate = `{
                         "type": "integer"
                     }
                 },
+                "discount_percent": {
+                    "type": "integer"
+                },
                 "is_active": {
                     "type": "boolean"
                 },
@@ -10175,6 +10188,9 @@ const docTemplate = `{
         "receiptsettings.ReceiptSettings": {
             "type": "object",
             "properties": {
+                "bonus_percent": {
+                    "type": "integer"
+                },
                 "delete_code": {
                     "type": "string"
                 },
@@ -10207,6 +10223,9 @@ const docTemplate = `{
         "receiptsettings.UpdateRequest": {
             "type": "object",
             "properties": {
+                "bonus_percent": {
+                    "type": "integer"
+                },
                 "delete_code": {
                     "type": "string"
                 },
@@ -11663,7 +11682,8 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Market backend (products, stock, income, sales)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
-
+	LeftDelim:        "{{",
+	RightDelim:       "}}",
 }
 
 func init() {

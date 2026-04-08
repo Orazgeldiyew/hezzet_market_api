@@ -182,6 +182,8 @@ definitions:
         type: boolean
       discount:
         type: boolean
+      history:
+        type: boolean
       module:
         type: string
       return:
@@ -675,6 +677,8 @@ definitions:
         type: boolean
       discount:
         type: boolean
+      history:
+        type: boolean
       module:
         type: string
       return:
@@ -805,6 +809,9 @@ definitions:
         type: array
       created_at:
         type: string
+      discount_percent:
+        description: centralized discount set by admin/manager
+        type: integer
       id:
         type: integer
       is_active:
@@ -885,6 +892,8 @@ definitions:
         items:
           type: integer
         type: array
+      discount_percent:
+        type: integer
       is_active:
         type: boolean
       name:
@@ -958,6 +967,8 @@ definitions:
     type: object
   receiptsettings.ReceiptSettings:
     properties:
+      bonus_percent:
+        type: integer
       delete_code:
         type: string
       footer:
@@ -979,6 +990,8 @@ definitions:
     type: object
   receiptsettings.UpdateRequest:
     properties:
+      bonus_percent:
+        type: integer
       delete_code:
         type: string
       footer:
