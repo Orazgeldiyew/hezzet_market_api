@@ -24,7 +24,7 @@ func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config, auditMid
 	svc := NewService(repo, cfg)
 	h := NewHandler(svc)
 
-	g := r.Group("/auth")
+	g := r.Group("/api/auth")
 	{
 		// Public
 		g.POST("/login", h.Login)
