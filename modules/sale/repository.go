@@ -933,6 +933,8 @@ func (r *Repository) GetTransactionIDBySaleID(ctx context.Context, saleID int64)
 
 // ── DeleteSaleItem (draft only: removes item, releases reservation, updates totals) ──
 
+// ── DeleteSaleItem (draft only: removes item, releases reservation, updates totals) ──
+
 func (r *Repository) DeleteSaleItem(
 	ctx context.Context,
 	saleID int64,
@@ -961,18 +963,12 @@ func (r *Repository) DeleteSaleItem(
 		return Sale{}, nil, apperr.Conflict("SALE_NOT_DRAFT", "sale must be in draft status")
 	}
 
-	// 2. Guard: cannot delete last item
-	if itemsCount == 1 {
-		return Sale{}, nil, apperr.Conflict(
-			"SALE_LAST_ITEM_DELETE_FORBIDDEN",
-			"cannot delete the last item from a sale",
-		)
-	}
-
-	// 3. Fetch sale item
+	// 2. Fetch sale item
 	var productID, lineTotalCents int64
 	err = tx.QueryRow(ctx, `
-		SELECT product_id, line_total_cents FROM sale_items WHERE id = $1 AND sale_id = $2
+		SELECT product_id, line_total_cents
+		FROM sale_items
+		WHERE id = $1 AND sale_id = $2
 	`, itemID, saleID).Scan(&productID, &lineTotalCents)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -981,7 +977,49 @@ func (r *Repository) DeleteSaleItem(
 		return Sale{}, nil, err
 	}
 
-	// 4. Release stock reservation
+	// 3. If this is the last item, cancel the whole draft sale
+	if itemsCount == 1 {
+		// release all active reservations of this sale
+		_, err = tx.Exec(ctx, `
+			UPDATE stock_reservations
+			SET status = 'released', released_at = now()
+			WHERE sale_id = $1 AND status = 'active'
+		`, saleID)
+		if err != nil {
+			return Sale{}, nil, err
+		}
+
+		// delete all sale items of this sale
+		_, err = tx.Exec(ctx, `
+			DELETE FROM sale_items
+			WHERE sale_id = $1
+		`, saleID)
+		if err != nil {
+			return Sale{}, nil, err
+		}
+
+		// cancel sale and zero totals
+		sale, err := scanSale(tx.QueryRow(ctx, `
+			UPDATE sales
+			SET status = 'cancelled',
+			    total_cents = 0,
+			    items_count = 0
+			WHERE id = $1
+			RETURNING `+saleCols,
+			saleID,
+		))
+		if err != nil {
+			return Sale{}, nil, err
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return Sale{}, nil, err
+		}
+
+		return sale, []SaleItem{}, nil
+	}
+
+	// 4. Release stock reservation for this item's product
 	_, err = tx.Exec(ctx, `
 		UPDATE stock_reservations
 		SET status = 'released', released_at = now()
@@ -992,14 +1030,20 @@ func (r *Repository) DeleteSaleItem(
 	}
 
 	// 5. Delete sale item
-	_, err = tx.Exec(ctx, `DELETE FROM sale_items WHERE id = $1`, itemID)
+	_, err = tx.Exec(ctx, `
+		DELETE FROM sale_items
+		WHERE id = $1
+	`, itemID)
 	if err != nil {
 		return Sale{}, nil, err
 	}
 
 	// 6. Update sale header
 	_, err = tx.Exec(ctx, `
-		UPDATE sales SET total_cents = total_cents - $2, items_count = items_count - 1 WHERE id = $1
+		UPDATE sales
+		SET total_cents = total_cents - $2,
+		    items_count = items_count - 1
+		WHERE id = $1
 	`, saleID, lineTotalCents)
 	if err != nil {
 		return Sale{}, nil, err
@@ -1009,14 +1053,13 @@ func (r *Repository) DeleteSaleItem(
 		return Sale{}, nil, err
 	}
 
-	// 7. Refetch updated sale + items (outside TX)
+	// 7. Refetch updated sale + items
 	sale, items, err := r.GetByID(ctx, saleID)
 	if err != nil {
 		return Sale{}, nil, err
 	}
 	return sale, items, nil
 }
-
 // ── List ─────────────────────────────────────────────────────────────────────
 
 func (r *Repository) List(

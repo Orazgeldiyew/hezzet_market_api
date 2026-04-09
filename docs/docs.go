@@ -5335,6 +5335,11 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/sales/{id}/items/{item_id}/decrease": {
+            "patch": {
+                "responses": {}
+            }
+        },
         "/api/sales/{id}/receipt": {
             "get": {
                 "security": [
@@ -9227,6 +9232,9 @@ const docTemplate = `{
                         "vip",
                         "wholesale"
                     ]
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -9274,6 +9282,9 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -11232,6 +11243,9 @@ const docTemplate = `{
                 "phone": {
                     "type": "string",
                     "maxLength": 50
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -11258,6 +11272,9 @@ const docTemplate = `{
                 },
                 "phone": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -11569,6 +11586,9 @@ const docTemplate = `{
                 "salary": {
                     "type": "number",
                     "minimum": 0
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -11658,6 +11678,9 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         }
@@ -11682,7 +11705,6 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Market backend (products, stock, income, sales)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
-
 }
 
 func init() {

@@ -327,6 +327,8 @@ definitions:
         - vip
         - wholesale
         type: string
+      user_id:
+        type: integer
     required:
     - name
     type: object
@@ -360,6 +362,8 @@ definitions:
         type: string
       updated_at:
         type: string
+      user_id:
+        type: integer
     type: object
   customer.UpdateAdminRequest:
     properties:
@@ -1666,6 +1670,8 @@ definitions:
       phone:
         maxLength: 50
         type: string
+      user_id:
+        type: integer
     required:
     - name
     type: object
@@ -1685,6 +1691,8 @@ definitions:
         type: string
       phone:
         type: string
+      user_id:
+        type: integer
     type: object
   supplier.UpdateRequest:
     properties:
@@ -1893,6 +1901,8 @@ definitions:
       salary:
         minimum: 0
         type: number
+      user_id:
+        type: integer
     required:
     - name
     type: object
@@ -1956,6 +1966,8 @@ definitions:
         type: number
       updated_at:
         type: string
+      user_id:
+        type: integer
     type: object
 info:
   contact: {}
@@ -5201,6 +5213,9 @@ paths:
       summary: Delete item from draft sale
       tags:
       - Sales
+  /api/sales/{id}/items/{item_id}/decrease:
+    patch:
+      responses: {}
   /api/sales/{id}/receipt:
     get:
       description: Returns an HTML page formatted for an 80mm thermal printer. Uses

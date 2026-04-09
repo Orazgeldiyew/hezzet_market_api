@@ -5331,6 +5331,11 @@
                 }
             }
         },
+        "/api/sales/{id}/items/{item_id}/decrease": {
+            "patch": {
+                "responses": {}
+            }
+        },
         "/api/sales/{id}/receipt": {
             "get": {
                 "security": [
@@ -9223,6 +9228,9 @@
                         "vip",
                         "wholesale"
                     ]
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -9270,6 +9278,9 @@
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -11228,6 +11239,9 @@
                 "phone": {
                     "type": "string",
                     "maxLength": 50
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -11254,6 +11268,9 @@
                 },
                 "phone": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -11565,6 +11582,9 @@
                 "salary": {
                     "type": "number",
                     "minimum": 0
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -11654,6 +11674,9 @@
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         }
