@@ -33,7 +33,7 @@ func NewRepository(db *pgxpool.Pool, baseURL string, customerRepo *customer.Repo
 	return &Repository{db: db, baseURL: baseURL, customerRepo: customerRepo}
 }
 
-func (r *Repository) SetDebtRepo(repo *customerdebt.Repository)       { r.debtRepo = repo }
+func (r *Repository) SetDebtRepo(repo *customerdebt.Repository)         { r.debtRepo = repo }
 func (r *Repository) SetDiscountRuleRepo(repo *discountrule.Repository) { r.discountRuleRepo = repo }
 
 // photoURL converts a nullable product photo_path to a full public URL.
@@ -963,7 +963,10 @@ func (r *Repository) DeleteSaleItem(
 
 	// 2. Guard: cannot delete last item
 	if itemsCount == 1 {
-		return Sale{}, nil, apperr.Validation("cannot delete the last item from a sale")
+		return Sale{}, nil, apperr.Conflict(
+			"SALE_LAST_ITEM_DELETE_FORBIDDEN",
+			"cannot delete the last item from a sale",
+		)
 	}
 
 	// 3. Fetch sale item
@@ -1315,4 +1318,106 @@ func (r *Repository) ReturnSale(ctx context.Context, saleID int64, req ReturnSal
 	}
 
 	return tx.Commit(ctx)
+}
+func (r *Repository) DecreaseDraftSaleItemQty(
+	ctx context.Context,
+	saleID int64,
+	itemID int64,
+) (Sale, []SaleItem, error) {
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return Sale{}, nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Проверка sale = draft
+	var status string
+	err = tx.QueryRow(ctx, `
+		SELECT status FROM sales WHERE id = $1 FOR UPDATE
+	`, saleID).Scan(&status)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return Sale{}, nil, apperr.NotFound("SALE_NOT_FOUND", "sale not found")
+		}
+		return Sale{}, nil, err
+	}
+	if status != "draft" {
+		return Sale{}, nil, apperr.Conflict("SALE_NOT_DRAFT", "sale must be draft")
+	}
+
+	// 2. Берём item
+	var productID, qtyMilli, unitPrice int64
+	var discount int
+
+	err = tx.QueryRow(ctx, `
+		SELECT product_id, qty_milli, unit_price_cents, discount_percent
+		FROM sale_items
+		WHERE id = $1 AND sale_id = $2
+		FOR UPDATE
+	`, itemID, saleID).Scan(&productID, &qtyMilli, &unitPrice, &discount)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return Sale{}, nil, apperr.NotFound("SALE_ITEM_NOT_FOUND", "item not found")
+		}
+		return Sale{}, nil, err
+	}
+
+	// ❗ ГЛАВНАЯ СТРОКА (фикс)
+	if qtyMilli <= 1000 {
+		return Sale{}, nil, apperr.Conflict(
+			"MIN_QTY",
+			"cannot decrease below 1, use delete",
+		)
+	}
+
+	newQty := qtyMilli - 1000
+
+	oldTotal := lineTotalCents(qtyMilli, unitPrice)
+	newTotal := lineTotalCents(newQty, unitPrice)
+
+	if discount > 0 {
+		oldTotal -= (oldTotal * int64(discount)) / 100
+		newTotal -= (newTotal * int64(discount)) / 100
+	}
+
+	diff := oldTotal - newTotal
+
+	// 3. update item
+	_, err = tx.Exec(ctx, `
+		UPDATE sale_items
+		SET qty_milli = $3,
+		    line_total_cents = $4
+		WHERE id = $1 AND sale_id = $2
+	`, itemID, saleID, newQty, newTotal)
+	if err != nil {
+		return Sale{}, nil, err
+	}
+
+	// 4. update reservation
+	_, err = tx.Exec(ctx, `
+		UPDATE stock_reservations
+		SET qty_milli = $3
+		WHERE sale_id = $1 AND product_id = $2 AND status = 'active'
+	`, saleID, productID, newQty)
+	if err != nil {
+		return Sale{}, nil, err
+	}
+
+	// 5. update total
+	_, err = tx.Exec(ctx, `
+		UPDATE sales
+		SET total_cents = total_cents - $2
+		WHERE id = $1
+	`, saleID, diff)
+	if err != nil {
+		return Sale{}, nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Sale{}, nil, err
+	}
+
+	return r.GetByID(ctx, saleID)
 }

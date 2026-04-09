@@ -441,3 +441,26 @@ func (h *Handler) ReturnSale(c *gin.Context) {
 	}
 	response.OK(c, gin.H{"returned": true})
 }
+// Decrease item qty
+// @Router /api/sales/{id}/items/{item_id}/decrease [patch]
+func (h *Handler) DecreaseItem(c *gin.Context) {
+	saleID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Error(apperr.Validation("invalid sale id"))
+		return
+	}
+
+	itemID, err := strconv.ParseInt(c.Param("item_id"), 10, 64)
+	if err != nil {
+		c.Error(apperr.Validation("invalid item id"))
+		return
+	}
+
+	out, err := h.svc.DecreaseItem(c.Request.Context(), saleID, itemID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	response.OK(c, out)
+}
