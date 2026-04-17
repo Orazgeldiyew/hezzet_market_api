@@ -161,10 +161,10 @@ func (r *Repository) ReceivePO(
 
 	// 1. Lock PO and check status
 	var status string
-	var warehouseID, totalCents int64
+	var supplierID, warehouseID, totalCents int64
 	err = tx.QueryRow(ctx, `
-		SELECT status, warehouse_id, total_cents FROM purchase_orders WHERE id = $1 FOR UPDATE
-	`, poID).Scan(&status, &warehouseID, &totalCents)
+		SELECT status, supplier_id, warehouse_id, total_cents FROM purchase_orders WHERE id = $1 FOR UPDATE
+	`, poID).Scan(&status, &supplierID, &warehouseID, &totalCents)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return PurchaseOrder{}, apperr.NotFound("PO_NOT_FOUND", "purchase order not found")
@@ -264,6 +264,16 @@ func (r *Repository) ReceivePO(
 		CreatedBy:    uid,
 	}
 	if err := finRepo.CreateTransaction(ctx, tx, &finTxn); err != nil {
+		return PurchaseOrder{}, err
+	}
+
+	// 6. Create supplier debt record
+	_, err = tx.Exec(ctx, `
+		INSERT INTO supplier_debts
+			(supplier_id, purchase_id, amount_cents, remaining_cents, note, created_by)
+		VALUES ($1, $2, $3, $3, $4, $5)
+	`, supplierID, poID, totalCents, &reason, uid)
+	if err != nil {
 		return PurchaseOrder{}, err
 	}
 
@@ -454,16 +464,16 @@ func (r *Repository) List(
 ) ([]POListItem, int, error) {
 
 	where := `
-		WHERE ($1::bigint IS NULL OR supplier_id = $1)
-		  AND ($2::bigint IS NULL OR warehouse_id = $2)
-		  AND ($3::text   IS NULL OR status = $3)
-		  AND ($4::timestamptz IS NULL OR created_at >= $4)
-		  AND ($5::timestamptz IS NULL OR created_at <= $5)
+		WHERE ($1::bigint IS NULL OR po.supplier_id = $1)
+		  AND ($2::bigint IS NULL OR po.warehouse_id = $2)
+		  AND ($3::text   IS NULL OR po.status = $3)
+		  AND ($4::timestamptz IS NULL OR po.created_at >= $4)
+		  AND ($5::timestamptz IS NULL OR po.created_at <= $5)
 	`
 
 	var total int
 	if err := r.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM purchase_orders `+where,
+		`SELECT COUNT(*) FROM purchase_orders po `+where,
 		supplierID, warehouseID, status, dateFrom, dateTo,
 	).Scan(&total); err != nil {
 		return nil, 0, err
@@ -472,10 +482,13 @@ func (r *Repository) List(
 	rows, err := r.db.Query(ctx, `
 		SELECT po.id, po.supplier_id, po.warehouse_id, po.status, po.total_cents, po.items_count,
 		       po.note, po.created_by, po.created_at, po.received_at, po.received_by,
-		       s.name, w.name
+		       s.name, w.name,
+		       COALESCE(uc.full_name, ''), COALESCE(ur.full_name, '')
 		FROM purchase_orders po
-		LEFT JOIN suppliers s ON s.id = po.supplier_id
-		LEFT JOIN warehouses w ON w.id = po.warehouse_id
+		LEFT JOIN suppliers s  ON s.id  = po.supplier_id
+		LEFT JOIN warehouses w ON w.id  = po.warehouse_id
+		LEFT JOIN users uc     ON uc.id = po.created_by
+		LEFT JOIN users ur     ON ur.id = po.received_by
 		`+where+`
 		ORDER BY po.created_at DESC, po.id DESC
 		LIMIT $6 OFFSET $7
@@ -493,6 +506,7 @@ func (r *Repository) List(
 			&item.ID, &item.SupplierID, &item.WarehouseID, &item.Status, &item.TotalCents, &item.ItemsCount,
 			&item.Note, &item.CreatedBy, &item.CreatedAt, &item.ReceivedAt, &item.ReceivedBy,
 			&supplierName, &warehouseName,
+			&item.CreatedByName, &item.ReceivedByName,
 		)
 		if err != nil {
 			return nil, 0, err

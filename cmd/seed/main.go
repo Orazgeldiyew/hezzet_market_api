@@ -36,7 +36,7 @@ func main() {
 		{"payment types", seedPaymentTypes},
 		{"cash register", seedCashRegister},
 		{"receipt settings", seedReceiptSettings},
-		{"warehouse", seedWarehouse},
+		{"warehouse", seedWarehouse},	
 	}
 
 	for _, s := range steps {

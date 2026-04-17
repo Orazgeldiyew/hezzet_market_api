@@ -103,9 +103,9 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
     .info { font-size: 11px; color: #333; }
     hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
     .meta { font-size: 11px; margin: 2px 0; }
-    table { width: 100%; border-collapse: collapse; margin: 4px 0; border: 1px solid #000; }
-    th, td { padding: 2px 4px; font-size: 11px; text-align: left; vertical-align: top; border: 1px solid #000; }
-    .r { text-align: right; }
+    table { width: 100%; border-collapse: collapse; margin: 4px 0; border: 2px solid #000; }
+    th { padding: 4px 3px; font-size: 11px; text-align: center; vertical-align: middle; border: 2px solid #000; background: #e0e0e0; font-weight: bold; }
+    td { padding: 3px 3px; font-size: 11px; text-align: center; vertical-align: middle; border: 1px solid #000; }
     .total-line { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin: 4px 0; }
     .footer { font-size: 10px; color: #555; margin-top: 6px; }
     @media print {
@@ -115,18 +115,18 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  {{if .LogoURL}}<div class="center"><img src="{{.LogoURL}}" style="max-width:{{.LogoWidth}};max-height:{{.LogoHeight}}"></div>{{end}}
+  {{if .LogoURL}}<div class="center"><img src="{{.LogoURL}}" style="max-width:100px;max-height:40px"></div>{{end}}
   <div class="center header">{{.ShopName}}</div>
   {{if .ShopAddress}}<div class="center info">{{.ShopAddress}}</div>{{end}}
   {{if .ShopPhone}}<div class="center info">Tel: {{.ShopPhone}}</div>{{end}}
 
   <hr>
-  <div class="meta"><b>Çek №{{.ReceiptNumber}}</b></div>
-  <div class="meta">Senesi: {{.Date}}</div>
-  <div class="meta">Wagt: {{.Time}}</div>
-  <div class="meta">Kassir: {{.CashierName}}</div>
-  {{if .WarehouseName}}<div class="meta">Ammar: {{.WarehouseName}}</div>{{end}}
-  {{if .CustomerName}}<div class="meta">Müşderi: {{.CustomerName}}</div>{{end}}
+  <div class="meta center"><b>Çek №{{.ReceiptNumber}}</b></div>
+  <div class="meta center">Senesi: {{.Date}}</div>
+  <div class="meta center">Wagt: {{.Time}}</div>
+  <div class="meta center">Kassir: {{.CashierName}}</div>
+  {{if .WarehouseName}}<div class="center meta">Ammar: {{.WarehouseName}}</div>{{end}}
+  {{if .CustomerName}}<div class="center meta">Müşderi: {{.CustomerName}}</div>{{end}}
 
   <hr>
   <table>
@@ -134,9 +134,9 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
     {{range .Items}}
     <tr>
       <td>{{.ProductName}}{{if gt .DiscountPercent 0}} <small>(-{{.DiscountPercent}}%)</small>{{end}}</td>
-      <td class="r">{{qty .QtyMilli .UnitType}}{{with unit .UnitType}} {{.}}{{end}}</td>
-      <td class="r">{{money .UnitPriceCents}}</td>
-      <td class="r">{{money .LineTotalCents}}</td>
+      <td class="center r">{{qty .QtyMilli .UnitType}}{{with unit .UnitType}} {{.}}{{end}}</td>
+      <td class="center r">{{money .UnitPriceCents}}</td>
+      <td class="center r">{{money .LineTotalCents}}</td>
     </tr>
     {{end}}
   </table>

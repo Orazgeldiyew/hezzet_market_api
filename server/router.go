@@ -30,6 +30,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/notification"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/payroll"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/permissions"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/printer"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/product"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/purchase"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/sale"
@@ -37,6 +38,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/stock"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/supplier"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/supplierdebt"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/supplierreturn"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/warehouse"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workercard"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workerfinance"
@@ -208,6 +210,14 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	// ── Supplier Debts ──
 	supplierdebt.RegisterRoutes(api, deps.DB)
+
+	// ── Supplier Returns ──
+	supplierreturn.RegisterRoutes(mod("purchases"), deps.DB, permRepo)
+
+	// ── Printers (admin only) ──
+	printerSvc := printer.RegisterRoutes(api, deps.DB, deps.Cfg.UploadsDir)
+	// Wire auto-print into sales: after ConfirmSale → print receipt to register's printer.
+	saleRepo.SetPrinterService(printerSvc)
 
 	// ── Shifts (cash register management) ──
 	shift.RegisterRoutes(api, deps.DB)

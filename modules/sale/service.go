@@ -11,6 +11,11 @@ import (
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
+// PrinterService is an optional hook for auto-printing receipts on confirm.
+type PrinterService interface {
+	PrintSale(ctx context.Context, saleID int64, registerID *int64) error
+}
+
 type Service struct {
 	repo    *Repository
 	finRepo *finance.Repository
@@ -73,7 +78,44 @@ func (s *Service) ConfirmSale(ctx context.Context, saleID int64, req ConfirmSale
 	}
 
 	// Fetch full detail (items + txn ID)
-	return s.GetSale(ctx, saleID)
+	detail, err := s.GetSale(ctx, saleID)
+	if err != nil {
+		return detail, err
+	}
+
+	// Auto-print receipt (fire-and-forget — printer errors must not break the sale)
+	if printerSv := s.repo.PrinterService(); printerSv != nil {
+		log.Printf("[AutoPrint] START saleID=%d userID=%d", saleID, userID)
+
+		// Get register_id from user's current open shift
+		var regID *int64
+		var rid int64
+		err := s.repo.DB().QueryRow(ctx, `
+			SELECT register_id FROM shifts
+			WHERE user_id = $1 AND status = 'open'
+			ORDER BY opened_at DESC LIMIT 1
+		`, userID).Scan(&rid)
+		if err != nil {
+			log.Printf("[AutoPrint] no open shift for userID=%d: %v", userID, err)
+		} else {
+			regID = &rid
+			log.Printf("[AutoPrint] found register_id=%d", rid)
+		}
+
+		go func() {
+			printCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if perr := printerSv.PrintSale(printCtx, saleID, regID); perr != nil {
+				log.Printf("[AutoPrint] FAILED saleID=%d: %v", saleID, perr)
+			} else {
+				log.Printf("[AutoPrint] OK saleID=%d", saleID)
+			}
+		}()
+	} else {
+		log.Printf("[AutoPrint] printer service is nil — skipping")
+	}
+
+	return detail, nil
 }
 
 func (s *Service) CancelSale(ctx context.Context, saleID int64, userID int64) error {

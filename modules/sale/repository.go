@@ -27,6 +27,7 @@ type Repository struct {
 	debtRepo         *customerdebt.Repository
 	discountRuleRepo *discountrule.Repository
 	receiptRepo      *receiptsettings.Repository
+	printerSv        PrinterService
 }
 
 func NewRepository(db *pgxpool.Pool, baseURL string, customerRepo *customer.Repository) *Repository {
@@ -35,6 +36,9 @@ func NewRepository(db *pgxpool.Pool, baseURL string, customerRepo *customer.Repo
 
 func (r *Repository) SetDebtRepo(repo *customerdebt.Repository)         { r.debtRepo = repo }
 func (r *Repository) SetDiscountRuleRepo(repo *discountrule.Repository) { r.discountRuleRepo = repo }
+func (r *Repository) SetPrinterService(p PrinterService)                { r.printerSv = p }
+func (r *Repository) PrinterService() PrinterService                    { return r.printerSv }
+func (r *Repository) DB() *pgxpool.Pool                                 { return r.db }
 
 // photoURL converts a nullable product photo_path to a full public URL.
 func (r *Repository) photoURL(path *string) *string {

@@ -20,7 +20,9 @@
       "Read(//home/rustem/hezzet_market/**)",
       "Bash(npx tsc:*)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\)['data']; print\\(f\\\\\"total_debt={d['total_debt_cents']}\\\\\"\\)\")",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('OK' if d.get\\('success'\\) else 'FAIL'\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('OK' if d.get\\('success'\\) else 'FAIL'\\)\")",
+      "Bash(grep -l \"ALTER TABLE sales\" /home/rustem/Desktop/hezzet_market_backend/migrations/*.up.sql)",
+      "Bash(grep -h \"ALTER TABLE sales\" /home/rustem/Desktop/hezzet_market_backend/migrations/*.up.sql)"
     ],
     "additionalDirectories": [
       "/home/rustem/hezzet_market/src/pages/cashier",

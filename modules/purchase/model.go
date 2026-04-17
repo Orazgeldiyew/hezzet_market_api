@@ -60,8 +60,10 @@ type PODetail struct {
 
 type POListItem struct {
 	PurchaseOrder
-	SupplierName  string `json:"supplier_name"`
-	WarehouseName string `json:"warehouse_name"`
+	SupplierName   string `json:"supplier_name"`
+	WarehouseName  string `json:"warehouse_name"`
+	CreatedByName  string `json:"created_by_name"`
+	ReceivedByName string `json:"received_by_name,omitempty"`
 }
 
 type SupplierDebtRow struct {

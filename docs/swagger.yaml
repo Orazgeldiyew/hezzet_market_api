@@ -746,6 +746,37 @@ definitions:
       name:
         type: string
     type: object
+  printer.CreateRequest:
+    properties:
+      ip_address:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      port:
+        type: integer
+      register_id:
+        type: integer
+    required:
+    - ip_address
+    - name
+    type: object
+  printer.UpdateRequest:
+    properties:
+      ip_address:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      port:
+        type: integer
+      register_id:
+        type: integer
+    type: object
   product.Card:
     properties:
       categories:
@@ -1710,6 +1741,38 @@ definitions:
       phone:
         maxLength: 50
         type: string
+    type: object
+  supplierreturn.CreateItemRequest:
+    properties:
+      product_id:
+        type: integer
+      qty_milli:
+        type: integer
+      unit_cost_cents:
+        minimum: 0
+        type: integer
+    required:
+    - product_id
+    - qty_milli
+    - unit_cost_cents
+    type: object
+  supplierreturn.CreateRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/supplierreturn.CreateItemRequest'
+        minItems: 1
+        type: array
+      note:
+        type: string
+      supplier_id:
+        type: integer
+      warehouse_id:
+        type: integer
+    required:
+    - items
+    - supplier_id
+    - warehouse_id
     type: object
   warehouse.CreateRequest:
     properties:
@@ -3803,6 +3866,109 @@ paths:
       summary: Permission matrix (roles x modules x actions)
       tags:
       - Permissions
+  /api/printers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List printers
+      tags:
+      - Printers
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Printer data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/printer.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create printer
+      tags:
+      - Printers
+  /api/printers/{id}:
+    delete:
+      parameters:
+      - description: Printer ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete printer
+      tags:
+      - Printers
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Printer ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Printer data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/printer.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update printer
+      tags:
+      - Printers
+  /api/printers/{id}/test:
+    post:
+      parameters:
+      - description: Printer ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Send test print
+      tags:
+      - Printers
   /api/products:
     get:
       description: Get paginated list of active products with optional search
@@ -5923,6 +6089,142 @@ paths:
       summary: Transfer Stock
       tags:
       - Stock
+  /api/supplier-returns:
+    get:
+      parameters:
+      - description: Supplier ID
+        in: query
+        name: supplier_id
+        type: integer
+      - description: Warehouse ID
+        in: query
+        name: warehouse_id
+        type: integer
+      - description: Status (draft|confirmed|cancelled)
+        in: query
+        name: status
+        type: string
+      - description: RFC3339
+        in: query
+        name: date_from
+        type: string
+      - description: RFC3339
+        in: query
+        name: date_to
+        type: string
+      - description: page
+        in: query
+        name: page
+        type: integer
+      - description: limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List supplier returns
+      tags:
+      - SupplierReturns
+    post:
+      consumes:
+      - application/json
+      description: Create a draft supplier return. Call POST /:id/confirm to confirm
+        and deduct stock.
+      parameters:
+      - description: Return request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/supplierreturn.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create supplier return (draft)
+      tags:
+      - SupplierReturns
+  /api/supplier-returns/{id}:
+    get:
+      parameters:
+      - description: Return ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get supplier return detail
+      tags:
+      - SupplierReturns
+  /api/supplier-returns/{id}/cancel:
+    post:
+      parameters:
+      - description: Return ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Cancel supplier return
+      tags:
+      - SupplierReturns
+  /api/supplier-returns/{id}/confirm:
+    post:
+      description: Deducts stock from warehouse and reduces supplier debt.
+      parameters:
+      - description: Return ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Confirm supplier return
+      tags:
+      - SupplierReturns
   /api/suppliers:
     get:
       description: Get paginated list of active suppliers with optional search by
