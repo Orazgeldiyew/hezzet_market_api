@@ -33,13 +33,16 @@ type ReceiptData struct {
 	CashierName     string
 	WarehouseName   string
 	CustomerName    string
-	TotalCents      int64
-	BonusUsedCents  int64
-	DiscountPercent int
-	DiscountCents   int64
-	PaymentMethod   string
-	PaidCents       int64
-	ChangeCents     int64
+	TotalCents           int64
+	BonusUsedCents       int64
+	DiscountPercent      int   // sale-level only (legacy)
+	DiscountCents        int64 // sale-level only (legacy)
+	SubtotalCents        int64 // before any discount (item + sale-level)
+	TotalDiscountCents   int64 // combined item + sale discount amount
+	TotalDiscountPercent int   // combined discount as a percentage of subtotal
+	PaymentMethod        string
+	PaidCents            int64
+	ChangeCents          int64
 	WorkerName      string
 	Note            string
 	Items           []ReceiptItem
@@ -101,13 +104,19 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
     .center { text-align: center; }
     .header { font-size: 16px; font-weight: bold; margin-bottom: 2px; }
     .info { font-size: 11px; color: #333; }
-    hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
-    .meta { font-size: 11px; margin: 2px 0; }
-    table { width: 100%; border-collapse: collapse; margin: 4px 0; border: 2px solid #000; }
-    th { padding: 4px 3px; font-size: 11px; text-align: center; vertical-align: middle; border: 2px solid #000; background: #e0e0e0; font-weight: bold; }
-    td { padding: 3px 3px; font-size: 11px; text-align: center; vertical-align: middle; border: 1px solid #000; }
-    .total-line { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin: 4px 0; }
-    .footer { font-size: 10px; color: #555; margin-top: 6px; }
+    .sep { border-top: 1px solid #000; margin: 6px 0; }
+    .meta-table { width: 100%; font-size: 11px; margin: 4px 0; border-collapse: collapse; }
+    .meta-table td { padding: 1px 0; }
+    .meta-table td:last-child { text-align: right; font-weight: bold; }
+    .items-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0; }
+    .items-table th, .items-table td { border: 1px solid #000; padding: 4px 6px; }
+    .items-table th { text-align: left; font-weight: bold; }
+    .items-table td.num { text-align: right; white-space: nowrap; }
+    .totals { font-size: 11px; margin: 6px 0; }
+    .totals-row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .change { font-size: 13px; font-weight: bold; margin: 6px 0; }
+    .extra { font-size: 11px; margin: 2px 0; }
+    .footer { font-size: 11px; color: #333; margin-top: 8px; }
     @media print {
       body { width: 80mm; margin: 0; padding: 2mm; }
       @page { size: 80mm auto; margin: 0; }
@@ -115,44 +124,47 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  {{if .LogoURL}}<div class="center"><img src="{{.LogoURL}}" style="max-width:100px;max-height:40px"></div>{{end}}
+  {{if .LogoURL}}<div class="center"><img src="{{.LogoURL}}" style="max-width:{{if .LogoWidth}}{{.LogoWidth}}{{else}}70px{{end}};max-height:{{if .LogoHeight}}{{.LogoHeight}}{{else}}30px{{end}}"></div>{{end}}
   <div class="center header">{{.ShopName}}</div>
   {{if .ShopAddress}}<div class="center info">{{.ShopAddress}}</div>{{end}}
-  {{if .ShopPhone}}<div class="center info">Tel: {{.ShopPhone}}</div>{{end}}
+  {{if .ShopPhone}}<div class="center info">{{.ShopPhone}}</div>{{end}}
 
-  <hr>
-  <div class="meta center"><b>Çek №{{.ReceiptNumber}}</b></div>
-  <div class="meta center">Senesi: {{.Date}}</div>
-  <div class="meta center">Wagt: {{.Time}}</div>
-  <div class="meta center">Kassir: {{.CashierName}}</div>
-  {{if .WarehouseName}}<div class="center meta">Ammar: {{.WarehouseName}}</div>{{end}}
-  {{if .CustomerName}}<div class="center meta">Müşderi: {{.CustomerName}}</div>{{end}}
+  <div class="sep"></div>
 
-  <hr>
-  <table>
-    <tr><th>Haryt</th><th class="r">Sany</th><th class="r">Baha</th><th class="r">Jemi</th></tr>
+  <table class="meta-table">
+    <tr><td>Çek №</td><td>{{.ReceiptNumber}}</td></tr>
+    <tr><td>Senesi</td><td>{{.Date}}</td></tr>
+    <tr><td>Wagt</td><td>{{.Time}}</td></tr>
+    <tr><td>Kassir</td><td>{{.CashierName}}</td></tr>
+    {{if .WarehouseName}}<tr><td>Ammar</td><td>{{.WarehouseName}}</td></tr>{{end}}
+    {{if .CustomerName}}<tr><td>Müşderi</td><td>{{.CustomerName}}</td></tr>{{end}}
+  </table>
+
+  <table class="items-table">
+    <tr><th>Haryt</th><th>Sany</th><th>Baha</th><th>Jemi</th></tr>
     {{range .Items}}
     <tr>
-      <td>{{.ProductName}}{{if gt .DiscountPercent 0}} <small>(-{{.DiscountPercent}}%)</small>{{end}}</td>
-      <td class="center r">{{qty .QtyMilli .UnitType}}{{with unit .UnitType}} {{.}}{{end}}</td>
-      <td class="center r">{{money .UnitPriceCents}}</td>
-      <td class="center r">{{money .LineTotalCents}}</td>
+      <td>{{.ProductName}}{{if gt .DiscountPercent 0}} (-{{.DiscountPercent}}%){{end}}</td>
+      <td class="num">{{qty .QtyMilli .UnitType}}{{with unit .UnitType}} {{.}}{{end}}</td>
+      <td class="num">{{money .UnitPriceCents}}</td>
+      <td class="num">{{money .LineTotalCents}}</td>
     </tr>
     {{end}}
   </table>
 
-  <hr>
-  <div class="meta" style="display:flex;justify-content:space-between"><span><b>Umumy jemi:</b> {{money .TotalCents}} TMT</span><span>Arz%: {{.DiscountPercent}}</span></div>
-  <hr>
-  <div class="meta" style="display:flex;justify-content:space-between"><span>Tölenen: {{money .PaidCents}} TMT</span><span>Arz Muk: {{money .DiscountCents}} TMT</span></div>
-  <hr>
-  <div class="meta"><b>Gaýtargy: {{money .ChangeCents}} TMT</b></div>
-  {{if .PaymentMethod}}<div class="meta">Töleg: {{.PaymentMethod}}</div>{{end}}
-  {{if gt .BonusUsedCents 0}}<div class="meta">Bonus: -{{money .BonusUsedCents}} TMT</div>{{end}}
-  {{if .WorkerName}}<div class="meta">Işgär (karz): {{.WorkerName}}</div>{{end}}
-  {{if .Note}}<div class="meta">Bellik: {{.Note}}</div>{{end}}
+  <div class="totals">
+    <div class="totals-row"><span><b>Umumy jemi: {{money .TotalCents}} TMT</b></span><span>Arz%: {{.TotalDiscountPercent}}</span></div>
+    <div class="totals-row"><span>Tölenen: {{money .PaidCents}} TMT</span><span>Arz Muk: {{money .TotalDiscountCents}} TMT</span></div>
+  </div>
 
-  {{if .Footer}}<hr><div class="center footer">{{.Footer}}</div>{{end}}
+  <div class="change">Gaýtargy: {{money .ChangeCents}} TMT</div>
+
+  {{if .PaymentMethod}}<div class="extra">Töleg: {{.PaymentMethod}}</div>{{end}}
+  {{if gt .BonusUsedCents 0}}<div class="extra">Bonus: -{{money .BonusUsedCents}} TMT</div>{{end}}
+  {{if .WorkerName}}<div class="extra">Işgär (karz): {{.WorkerName}}</div>{{end}}
+  {{if .Note}}<div class="extra">Bellik: {{.Note}}</div>{{end}}
+
+  {{if .Footer}}<div class="sep"></div><div class="center footer">{{.Footer}}</div>{{end}}
 
   <script>window.onload=function(){window.print();}</script>
 </body>

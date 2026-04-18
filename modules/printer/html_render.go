@@ -1,0 +1,158 @@
+package printer
+
+import (
+	"bytes"
+	"fmt"
+	"image"
+	_ "image/png"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"time"
+)
+
+// RenderHTMLToImage uses headless Chrome to render HTML to a PNG image
+// sized to fit a thermal printer (widthPx pixels wide).
+func RenderHTMLToImage(html string, widthPx int) (image.Image, error) {
+	tmpDir, err := os.MkdirTemp("", "receipt-*")
+	if err != nil {
+		return nil, fmt.Errorf("tmpdir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	htmlPath := filepath.Join(tmpDir, "receipt.html")
+	pngPath := filepath.Join(tmpDir, "receipt.png")
+
+	// Inject overriding style AFTER the template so its !important rules win.
+	// We want the receipt to fill the full printer width (widthPx) with a larger font for thermal print.
+	overrideCSS := fmt.Sprintf(
+		`<style>
+			html, body { margin: 0 !important; padding: 0 !important; width: %dpx !important; max-width: %dpx !important; }
+			body { padding: 6px 10px !important; font-size: 26px !important; line-height: 1.3 !important; font-family: 'Courier New', monospace !important; }
+			.header { font-size: 32px !important; }
+			.info, .meta, .totals, .totals-row, .extra { font-size: 26px !important; }
+			.meta-table, .meta-table td { font-size: 23px !important; }
+			.footer { font-size: 23px !important; }
+			.items-table, .items-table th, .items-table td { font-size: 25px !important; }
+			.change { font-size: 30px !important; font-weight: bold !important; margin: 10px 0 !important; padding: 6px 0 !important; border-top: 2px solid #000 !important; border-bottom: 2px solid #000 !important; }
+			img { display: none !important; }
+			.items-table th, .items-table td { padding: 6px 8px !important; }
+			.meta-table td { padding: 2px 0 !important; }
+		</style>`,
+		widthPx, widthPx,
+	)
+	wrappedHTML := html + overrideCSS
+	if err := os.WriteFile(htmlPath, []byte(wrappedHTML), 0644); err != nil {
+		return nil, fmt.Errorf("write html: %w", err)
+	}
+
+	cmd := exec.Command("google-chrome",
+		"--headless=new",
+		"--disable-gpu",
+		"--no-sandbox",
+		"--hide-scrollbars",
+		"--default-background-color=FFFFFFFF",
+		"--virtual-time-budget=2000",
+		fmt.Sprintf("--window-size=%d,3000", widthPx),
+		fmt.Sprintf("--screenshot=%s", pngPath),
+		"file://"+htmlPath,
+	)
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Run() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			return nil, fmt.Errorf("chrome render: %w", err)
+		}
+	case <-time.After(15 * time.Second):
+		_ = cmd.Process.Kill()
+		return nil, fmt.Errorf("chrome render timeout")
+	}
+
+	f, err := os.Open(pngPath)
+	if err != nil {
+		return nil, fmt.Errorf("open png: %w", err)
+	}
+	defer f.Close()
+
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil, fmt.Errorf("decode png: %w", err)
+	}
+	return cropWhiteBottom(img), nil
+}
+
+// cropWhiteBottom trims trailing all-white rows so the ticket is short.
+func cropWhiteBottom(img image.Image) image.Image {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	lastNonWhite := -1
+	for y := h - 1; y >= 0; y-- {
+		found := false
+		for x := 0; x < w; x++ {
+			r, g, bl, _ := img.At(x+b.Min.X, y+b.Min.Y).RGBA()
+			if (r+g+bl)/3 < 55000 {
+				found = true
+				break
+			}
+		}
+		if found {
+			lastNonWhite = y
+			break
+		}
+	}
+	if lastNonWhite < 0 {
+		return img
+	}
+	cropH := lastNonWhite + 24
+	if cropH > h {
+		cropH = h
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, w, cropH))
+	for y := 0; y < cropH; y++ {
+		for x := 0; x < w; x++ {
+			dst.Set(x, y, img.At(x+b.Min.X, y+b.Min.Y))
+		}
+	}
+	return dst
+}
+
+// BuildRasterReceipt renders HTML to image via headless Chrome and wraps it
+// in ESC/POS init + raster + cut commands ready for TCP send.
+func BuildRasterReceipt(html string, widthPx int) ([]byte, error) {
+	return BuildFullReceipt("", html, widthPx)
+}
+
+// BuildFullReceipt prepends a logo (encoded directly from PNG for maximum clarity)
+// before the HTML-rendered receipt body. The logo is sent as its own ESC/POS raster
+// image, so it is not downscaled by Chrome and retains full resolution on thermal paper.
+// Pass logoPath="" to skip the logo.
+func BuildFullReceipt(logoPath, html string, widthPx int) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.Write(cmdInit)
+
+	// ── Logo (centered, rendered separately from PNG so it stays crisp) ──
+	// Use ~55% of printer width — prominent without touching the edges.
+	if logoPath != "" {
+		logoMaxW := widthPx * 11 / 20
+		if logoBytes, err := EncodeLogo(logoPath, logoMaxW); err == nil {
+			buf.Write(cmdAlignCtr)
+			buf.Write(logoBytes)
+			buf.Write(cmdLineFeed)
+		}
+	}
+
+	// ── HTML body (rendered via headless Chrome, logo hidden via CSS) ──
+	img, err := RenderHTMLToImage(html, widthPx)
+	if err != nil {
+		return nil, err
+	}
+	buf.Write(cmdAlignLeft)
+	buf.Write(encodeRasterImage(img))
+
+	buf.Write(cmdLineFeed)
+	buf.Write(cmdLineFeed)
+	buf.Write(cmdCut)
+	return buf.Bytes(), nil
+}

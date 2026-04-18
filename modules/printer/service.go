@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/sale"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
@@ -97,82 +99,143 @@ func (s *Service) PrintSale(ctx context.Context, saleID int64, registerID *int64
 	return SendToTCP(p.IPAddress, p.Port, data)
 }
 
-// buildSaleReceipt fetches sale + items + shop info and returns ESC/POS bytes.
+// buildSaleReceipt fetches sale data, renders the HTML receipt template,
+// then converts it to ESC/POS raster bytes (so the thermal print matches the on-screen design).
 func (s *Service) buildSaleReceipt(ctx context.Context, saleID int64) ([]byte, error) {
-	var rd ReceiptData
-
-	// Shop info from receipt_settings (use defaults if NULL)
-	var logoPath string
+	// ── Shop / receipt settings (all fields for HTML template) ──
+	var shopName, shopAddress, shopPhone, footer, logoPath, customTemplate string
+	var logoWidth, logoHeight *string
 	_ = s.db.QueryRow(ctx, `
-		SELECT COALESCE(shop_name, ''), COALESCE(shop_address, ''), COALESCE(shop_phone, ''),
-		       COALESCE(footer, ''), COALESCE(logo_path, '')
+		SELECT COALESCE(shop_name, 'Hezzet Market'), COALESCE(shop_address, ''), COALESCE(shop_phone, ''),
+		       COALESCE(footer, 'Satyn alanyňyz üçin sag boluň!'),
+		       COALESCE(logo_path, ''), COALESCE(template, ''),
+		       logo_width, logo_height
 		FROM receipt_settings LIMIT 1
-	`).Scan(&rd.ShopName, &rd.ShopAddress, &rd.ShopPhone, &rd.Footer, &logoPath)
+	`).Scan(&shopName, &shopAddress, &shopPhone, &footer, &logoPath, &customTemplate, &logoWidth, &logoHeight)
 
-	if rd.ShopName == "" {
-		rd.ShopName = "Hezzet Market"
-	}
-
-	// Load and encode logo if present
-	if logoPath != "" && s.uploadsDir != "" {
-		fullPath := filepath.Join(s.uploadsDir, logoPath)
-		if logoBytes, err := EncodeLogo(fullPath, maxWidth80mm); err == nil {
-			rd.LogoBytes = logoBytes
-		} else {
-			log.Printf("[buildSaleReceipt] logo encode failed: %v", err)
-		}
-	}
-
-	// Sale header — sale_number derived from id + date
-	var cashierName *string
+	// Sale header
+	var cashierName, warehouseName, customerName, workerName, paymentMethod, note *string
 	var saleIDInt int64
-	err := s.db.QueryRow(ctx, `
+	var totalCents, discountCents, bonusUsedCents, paidCents int64
+	var discountPercent int
+	var createdAt time.Time
+
+	if err := s.db.QueryRow(ctx, `
 		SELECT s.id, s.created_at, s.total_cents, s.discount_cents, s.discount_percent, s.bonus_used_cents,
-		       u.full_name
+		       u.full_name, w.name, c.name, wk.name, s.note,
+		       (SELECT pt.name FROM payments p
+		        JOIN transactions t ON t.id = p.transaction_id
+		        JOIN payment_types pt ON pt.id = p.payment_type_id
+		        WHERE t.related_table = 'sale' AND t.related_id = s.id
+		        ORDER BY p.id DESC LIMIT 1),
+		       COALESCE((SELECT SUM(p.amount_cents) FROM payments p
+		        JOIN transactions t ON t.id = p.transaction_id
+		        WHERE t.related_table = 'sale' AND t.related_id = s.id), 0)
 		FROM sales s
 		LEFT JOIN users u ON u.id = s.created_by
+		LEFT JOIN warehouses w ON w.id = s.warehouse_id
+		LEFT JOIN customers c ON c.id = s.customer_id
+		LEFT JOIN workers wk ON wk.id = s.worker_id AND wk.deleted_at IS NULL
 		WHERE s.id = $1
-	`, saleID).Scan(&saleIDInt, &rd.CreatedAt, &rd.TotalCents, &rd.DiscountCents, &rd.DiscountPct, &rd.BonusUsedCents, &cashierName)
-	if err == nil {
-		rd.SaleNumber = fmt.Sprintf("%s-%06d", rd.CreatedAt.Format("20060102"), saleIDInt)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if cashierName != nil {
-		rd.CashierName = *cashierName
+	`, saleID).Scan(&saleIDInt, &createdAt, &totalCents, &discountCents, &discountPercent, &bonusUsedCents,
+		&cashierName, &warehouseName, &customerName, &workerName, &note, &paymentMethod, &paidCents); err != nil {
+		return nil, fmt.Errorf("fetch sale: %w", err)
 	}
 
 	// Items
 	rows, err := s.db.Query(ctx, `
-		SELECT p.name, si.qty_milli, si.unit_price_cents, si.line_total_cents
+		SELECT p.name, si.qty_milli, p.unit_type, si.unit_price_cents, si.line_total_cents, si.discount_percent
 		FROM sale_items si
 		JOIN products p ON p.id = si.product_id
 		WHERE si.sale_id = $1
 		ORDER BY si.id
 	`, saleID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch items: %w", err)
 	}
 	defer rows.Close()
 
+	var items []sale.ReceiptItem
+	var subtotalCents int64
 	for rows.Next() {
-		var it ReceiptItem
-		if err := rows.Scan(&it.Name, &it.QtyMilli, &it.UnitPriceCents, &it.LineTotalCents); err != nil {
+		var it sale.ReceiptItem
+		if err := rows.Scan(&it.ProductName, &it.QtyMilli, &it.UnitType, &it.UnitPriceCents, &it.LineTotalCents, &it.DiscountPercent); err != nil {
 			return nil, err
 		}
-		rd.Items = append(rd.Items, it)
+		items = append(items, it)
+		subtotalCents += (it.QtyMilli*it.UnitPriceCents + 500) / 1000
+	}
+	totalDiscountCents := subtotalCents - totalCents - bonusUsedCents
+	if totalDiscountCents < 0 {
+		totalDiscountCents = 0
+	}
+	totalDiscountPercent := 0
+	if subtotalCents > 0 {
+		totalDiscountPercent = int(totalDiscountCents * 100 / subtotalCents)
 	}
 
-	// Paid (sum of payments for this sale)
-	_ = s.db.QueryRow(ctx, `
-		SELECT COALESCE(SUM(pm.amount_cents), 0)
-		FROM payments pm
-		JOIN transactions t ON t.id = pm.transaction_id
-		WHERE t.related_table = 'sale' AND t.related_id = $1
-	`, saleID).Scan(&rd.PaidCents)
+	// Logo URL — use file:// so headless Chrome can load it
+	var logoURL string
+	if logoPath != "" && s.uploadsDir != "" {
+		abs, _ := filepath.Abs(filepath.Join(s.uploadsDir, logoPath))
+		logoURL = "file://" + abs
+	}
 
-	return BuildReceipt(rd), nil
+	changeCents := paidCents - totalCents
+	if changeCents < 0 {
+		changeCents = 0
+	}
+
+	data := sale.ReceiptData{
+		ShopName:             shopName,
+		ShopAddress:          shopAddress,
+		ShopPhone:            shopPhone,
+		LogoURL:              logoURL,
+		LogoWidth:            derefStr(logoWidth),
+		LogoHeight:           derefStr(logoHeight),
+		Footer:               footer,
+		SaleID:               saleIDInt,
+		ReceiptNumber:        fmt.Sprintf("%s-%06d", createdAt.Format("20060102"), saleIDInt),
+		Date:                 createdAt.Format("02.01.2006"),
+		Time:                 createdAt.Format("15:04"),
+		CashierName:          derefStr(cashierName),
+		WarehouseName:        derefStr(warehouseName),
+		CustomerName:         derefStr(customerName),
+		WorkerName:           derefStr(workerName),
+		PaymentMethod:        derefStr(paymentMethod),
+		Note:                 derefStr(note),
+		TotalCents:           totalCents,
+		BonusUsedCents:       bonusUsedCents,
+		DiscountPercent:      discountPercent,
+		DiscountCents:        discountCents,
+		SubtotalCents:        subtotalCents,
+		TotalDiscountCents:   totalDiscountCents,
+		TotalDiscountPercent: totalDiscountPercent,
+		PaidCents:            paidCents,
+		ChangeCents:          changeCents,
+		Items:                items,
+	}
+
+	html, err := sale.RenderReceipt(data, customTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("render html: %w", err)
+	}
+
+	// Resolve absolute logo path so the printer can embed it at full resolution
+	var absLogoPath string
+	if logoPath != "" && s.uploadsDir != "" {
+		absLogoPath, _ = filepath.Abs(filepath.Join(s.uploadsDir, logoPath))
+	}
+
+	log.Printf("[buildSaleReceipt] rendering HTML→image for saleID=%d (html size=%d, logo=%q)", saleID, len(html), absLogoPath)
+	return BuildFullReceipt(absLogoPath, html, maxWidth80mm)
+}
+
+func derefStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 func buildTestPage(name, ip string) []byte {

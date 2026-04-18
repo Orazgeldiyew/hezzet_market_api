@@ -83,7 +83,7 @@ func (s *Service) ConfirmSale(ctx context.Context, saleID int64, req ConfirmSale
 		return detail, err
 	}
 
-	// Auto-print receipt (fire-and-forget — printer errors must not break the sale)
+	// Auto-print receipt to thermal printer via TCP (fire-and-forget — printer errors must not break the sale)
 	if printerSv := s.repo.PrinterService(); printerSv != nil {
 		log.Printf("[AutoPrint] START saleID=%d userID=%d", saleID, userID)
 

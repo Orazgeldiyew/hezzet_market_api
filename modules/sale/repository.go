@@ -507,9 +507,8 @@ func (r *Repository) ConfirmSale(
 		if req.PaymentTypeID == nil {
 			return Sale{}, apperr.Validation("payment_type_id is required when payment_amount is provided")
 		}
-		if *req.PaymentAmount > effectiveAmount {
-			return Sale{}, apperr.Validation("payment_amount cannot exceed sale total after bonus")
-		}
+		// Allow payment_amount > effectiveAmount: the excess is customer change (sdaça),
+		// and the stored amount is what the cashier physically received.
 
 		p := finance.Payment{
 			TransactionID: finTxn.ID,
