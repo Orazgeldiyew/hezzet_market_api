@@ -14,9 +14,10 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, lowStockDefault int64
 	g := rg.Group("/reports")
 	g.Use(middleware.RequireRoles("manager", "admin"))
 
-	g.GET("/dashboard",      h.Dashboard)
-	g.GET("/sales",          h.SalesByPeriod)
-	g.GET("/sales/products", h.SalesByProduct)
-	g.GET("/sales/export",   h.ExportSales)
-	g.GET("/stock/export",   h.ExportStock)
+	g.GET("/dashboard",            h.Dashboard)
+	g.GET("/sales",                h.SalesByPeriod)
+	g.GET("/sales/products",       h.SalesByProduct)
+	g.GET("/sales/export",         h.ExportSales)
+	g.GET("/stock/export",         h.ExportStock)
+	g.GET("/reorder-suggestions",  h.ReorderSuggestions)
 }

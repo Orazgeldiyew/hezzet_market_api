@@ -55,6 +55,7 @@ type Config struct {
 	LowStockDedupTTL    time.Duration
 	SMSRateLimitPerHour int
 	AdminPhones         []string
+	ReorderDigestHour   int // 0-23, hour of day when daily digest is sent
 }
 
 func Load() Config {
@@ -129,6 +130,11 @@ func Load() Config {
 		cfg.LowStockDedupTTL = d
 	} else {
 		cfg.LowStockDedupTTL = 6 * time.Hour
+	}
+	if n, err := strconv.Atoi(getenv("REORDER_DIGEST_HOUR", "9")); err == nil && n >= 0 && n <= 23 {
+		cfg.ReorderDigestHour = n
+	} else {
+		cfg.ReorderDigestHour = 9
 	}
 
 	return cfg

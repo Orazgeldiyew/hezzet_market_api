@@ -222,6 +222,34 @@ func (h *Handler) SalesByProduct(c *gin.Context) {
 	response.OK(c, rows)
 }
 
+// ReorderSuggestions godoc
+// @Summary      Reorder suggestions (dynamic low-stock)
+// @Description  Lists products that should be reordered, sized from sales history.
+// @Description  Uses per-product lead_time_days and safety_stock_milli. Products
+// @Description  without sales history fall back to the static LOW_STOCK_DEFAULT threshold.
+// @Tags         Reports
+// @Produce      json
+// @Security     BearerAuth
+// @Param        warehouse_id  query  int  false  "Filter by warehouse"
+// @Success      200  {object}  response.APIResponse{data=[]ReorderSuggestion}
+// @Failure      400  {object}  response.APIResponse
+// @Failure      500  {object}  response.APIResponse
+// @Router       /api/reports/reorder-suggestions [get]
+func (h *Handler) ReorderSuggestions(c *gin.Context) {
+	warehouseID, err := parseWarehouseID(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	rows, err := h.repo.ReorderSuggestions(c.Request.Context(), warehouseID)
+	if err != nil {
+		c.Error(apperr.Internal(err))
+		return
+	}
+	response.OK(c, rows)
+}
+
 // ExportSales godoc
 // @Summary      Export sales report as Excel
 // @Description  Downloads an .xlsx file with two sheets: sales by period and by product.

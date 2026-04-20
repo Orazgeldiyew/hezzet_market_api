@@ -198,7 +198,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	favorite.RegisterRoutes(api, deps.DB)
 
 	// ── Inventory (stock counting) ──
-	inventory.RegisterRoutes(stockGroup, deps.DB)
+	inventory.RegisterRoutes(stockGroup, deps.DB, finRepo)
 
 	// ── Customer Debts ──
 	debtRepo := customerdebt.RegisterRoutes(api, deps.DB)

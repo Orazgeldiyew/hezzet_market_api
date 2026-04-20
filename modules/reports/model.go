@@ -47,6 +47,22 @@ type SalesProductRow struct {
 	MarginPct    float64 `json:"margin_pct"`
 }
 
+// ReorderSuggestion is one product/warehouse line in the reorder report.
+// DaysUntilStockout is nil when the product has no sales history (can't project).
+type ReorderSuggestion struct {
+	ProductID           int64    `json:"product_id"`
+	Name                string   `json:"name"`
+	WarehouseID         int64    `json:"warehouse_id"`
+	WarehouseName       string   `json:"warehouse_name"`
+	CurrentQtyMilli     int64    `json:"current_qty_milli"`
+	AvgDailyMilli       float64  `json:"avg_daily_milli"`
+	LeadTimeDays        int      `json:"lead_time_days"`
+	SafetyStockMilli    int64    `json:"safety_stock_milli"`
+	ReorderPointMilli   int64    `json:"reorder_point_milli"`
+	SuggestedOrderMilli int64    `json:"suggested_order_milli"`
+	DaysUntilStockout   *float64 `json:"days_until_stockout"`
+}
+
 // StockMovementExportRow is one row in the stock-movements Excel export.
 type StockMovementExportRow struct {
 	CreatedAt    time.Time

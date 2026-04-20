@@ -2,19 +2,22 @@ package inventory
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	finRepo *finance.Repository
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository {
-	return &Repository{db: db}
+func NewRepository(db *pgxpool.Pool, finRepo *finance.Repository) *Repository {
+	return &Repository{db: db, finRepo: finRepo}
 }
 
 func (r *Repository) Create(ctx context.Context, req CreateRequest, userID int64) (InventoryDetail, error) {
@@ -249,15 +252,32 @@ func (r *Repository) Confirm(ctx context.Context, countID, userID int64) error {
 	}
 	rows.Close()
 
-	// Apply adjustments
+	// Apply adjustments, valuing shortages at current avg_cost for P&L tracking.
 	uid := &userID
+	var shortageCents int64
 	for _, a := range adjustments {
-		// Ledger entry
+		// Capture current avg_cost BEFORE the stock change so shortage valuation
+		// reflects the actual cost of the missing goods.
+		var avgCostCents int64
+		err = tx.QueryRow(ctx, `
+			SELECT COALESCE(avg_cost_cents, 0) FROM warehouse_items
+			WHERE warehouse_id = $1 AND product_id = $2
+		`, warehouseID, a.productID).Scan(&avgCostCents)
+		if err != nil && err != pgx.ErrNoRows {
+			return apperr.Internal(err)
+		}
+
+		if a.diffMilli < 0 {
+			// Shortage: |diff_milli| × avg_cost_cents / 1000  (milli → whole units)
+			shortageCents += (-a.diffMilli) * avgCostCents / 1000
+		}
+
+		// Ledger entry — store price_cents so reports can value shortage/surplus per product.
 		_, err = tx.Exec(ctx, `
 			INSERT INTO warehouse_item_details
-				(idempotency_key, warehouse_id, product_id, delta_milli, type, created_by, note)
-			VALUES (gen_random_uuid(), $1, $2, $3, 'adjustment', $4, 'Inventory count')
-		`, warehouseID, a.productID, a.diffMilli, uid)
+				(idempotency_key, warehouse_id, product_id, delta_milli, type, price_cents, created_by, note)
+			VALUES (gen_random_uuid(), $1, $2, $3, 'adjustment', $4, $5, 'Inventory count')
+		`, warehouseID, a.productID, a.diffMilli, avgCostCents, uid)
 		if err != nil {
 			return apperr.Internal(err)
 		}
@@ -271,6 +291,23 @@ func (r *Repository) Confirm(ctx context.Context, countID, userID int64) error {
 				updated_at = now()
 		`, warehouseID, a.productID, a.diffMilli)
 		if err != nil {
+			return apperr.Internal(err)
+		}
+	}
+
+	// Record shrinkage as an expense transaction so it hits the P&L.
+	if shortageCents > 0 && r.finRepo != nil {
+		reason := fmt.Sprintf("Inventory shrinkage (count #%d)", countID)
+		txn := &finance.Transaction{
+			Status:       "paid",
+			AmountCents:  shortageCents,
+			Type:         "expense",
+			RelatedTable: "adjustment",
+			RelatedID:    &countID,
+			Reason:       &reason,
+			CreatedBy:    uid,
+		}
+		if err := r.finRepo.CreateTransaction(ctx, tx, txn); err != nil {
 			return apperr.Internal(err)
 		}
 	}

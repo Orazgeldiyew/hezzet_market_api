@@ -1929,7 +1929,7 @@ All responses use a standard envelope:
   "success": true,
   "status_code": 200,
   "data": { ... },
-  "meta": {
+  "meta": {da
     "timestamp": "2026-02-24T12:00:00Z",
     "pagination": {
       "page": 1,

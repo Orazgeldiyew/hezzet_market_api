@@ -18,18 +18,30 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, queue *Queue, phoneRe
 
 	ph := NewPhoneHandler(phoneRepo)
 
+	settingsRepo := NewSettingsRepository(db)
+	sh := NewSettingsHandler(settingsRepo)
+
 	g := rg.Group("/notifications")
-	g.Use(middleware.RequireRoles()) // admin-only
 
-	// SMS logs
-	g.GET("/sms", middleware.PaginationMiddleware(), h.ListSMSLogs)
-	g.GET("/sms/:job_id", h.GetSMSLog)
-	g.POST("/sms/:job_id/requeue", h.RequeueSMSLog)
+	// admin-only: SMS logs + phone management
+	adminOnly := g.Group("")
+	adminOnly.Use(middleware.RequireRoles())
+	{
+		adminOnly.GET("/sms", middleware.PaginationMiddleware(), h.ListSMSLogs)
+		adminOnly.GET("/sms/:job_id", h.GetSMSLog)
+		adminOnly.POST("/sms/:job_id/requeue", h.RequeueSMSLog)
 
-	// Admin phone management
-	g.GET("/phones", ph.List)
-	g.POST("/phones", ph.Add)
-	g.PUT("/phones/:id", ph.Update)
-	g.DELETE("/phones/:id", ph.Delete)
+		adminOnly.GET("/phones", ph.List)
+		adminOnly.POST("/phones", ph.Add)
+		adminOnly.PUT("/phones/:id", ph.Update)
+		adminOnly.DELETE("/phones/:id", ph.Delete)
+	}
 
+	// admin + manager: runtime-configurable settings
+	settingsGroup := g.Group("")
+	settingsGroup.Use(middleware.RequireRoles("admin", "manager"))
+	{
+		settingsGroup.GET("/settings", sh.Get)
+		settingsGroup.PUT("/settings", sh.Update)
+	}
 }

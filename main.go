@@ -14,9 +14,35 @@ import (
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/config"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/notification"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/reports"
 	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/database"
 	"github.com/Orazgeldiyew/hezzet_market_backend/server"
 )
+
+// reorderDigestFetcher adapts reports.Repository to notification.ReorderFetcher
+// so notification has no direct dependency on reports.
+type reorderDigestFetcher struct {
+	repo *reports.Repository
+}
+
+func (f *reorderDigestFetcher) Fetch(ctx context.Context) ([]notification.ReorderSuggestionBrief, error) {
+	rows, err := f.repo.ReorderSuggestions(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]notification.ReorderSuggestionBrief, len(rows))
+	for i, r := range rows {
+		out[i] = notification.ReorderSuggestionBrief{
+			ProductName:         r.Name,
+			WarehouseName:       r.WarehouseName,
+			CurrentQtyMilli:     r.CurrentQtyMilli,
+			AvgDailyMilli:       r.AvgDailyMilli,
+			SuggestedOrderMilli: r.SuggestedOrderMilli,
+			DaysUntilStockout:   r.DaysUntilStockout,
+		}
+	}
+	return out, nil
+}
 
 // @title           Hezzet Market API
 // @version         1.0
@@ -97,11 +123,19 @@ func main() {
 		notifSvc = notification.NewService(
 			notifQueue, notifLogRepo, cfg.AdminPhones, cfg.SMSFrom,
 			provider.Name(), cfg.LowStockDefault, cfg.LowStockDedupTTL,
-			notifPhoneRepo,
+			notifPhoneRepo, db,
 		)
 
 		notification.StartWorkers(ctx, cfg.SMSWorkers, notifQueue, provider, cfg.SMSFrom, notifLogRepo)
 		log.Printf("SMS workers started: count=%d provider=%s", cfg.SMSWorkers, provider.Name())
+
+		// Daily reorder digest — one SMS per day at the configured hour listing
+		// products that should be ordered. Hour is read from notification_settings
+		// on each tick so admins can change it live.
+		reportsRepo := reports.NewRepository(db, cfg.LowStockDefault)
+		settingsRepo := notification.NewSettingsRepository(db)
+		notifSvc.StartReorderDigestCron(ctx, cfg.ReorderDigestHour, &reorderDigestFetcher{repo: reportsRepo}, settingsRepo)
+		log.Printf("Reorder digest scheduled: default hour=%d (overridable via /api/notifications/settings)", cfg.ReorderDigestHour)
 	}
 
 	// ── Draft cleanup cron (cancel drafts older than 2 hours) ──────────────

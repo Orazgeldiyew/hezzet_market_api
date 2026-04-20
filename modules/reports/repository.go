@@ -85,31 +85,67 @@ func (r *Repository) Dashboard(ctx context.Context) (*DashboardStats, error) {
 		return nil, err
 	}
 
+	// Non-COGS expenses (inventory shrinkage + manual entries). Purchase expenses
+	// are excluded — their cost is already accounted for via sales.cost_cents.
+	var todayExp, weekExp, monthExp int64
+	if err := r.db.QueryRow(ctx, `
+		SELECT
+		  COALESCE(SUM(CASE WHEN created_at >= $1 THEN amount_cents END), 0),
+		  COALESCE(SUM(CASE WHEN created_at >= $2 THEN amount_cents END), 0),
+		  COALESCE(SUM(CASE WHEN created_at >= $3 THEN amount_cents END), 0)
+		FROM transactions
+		WHERE type = 'expense'
+		  AND status != 'canceled'
+		  AND related_table IN ('adjustment', 'manual')
+		  AND created_at >= $3`,
+		todayStart, weekStart, monthStart,
+	).Scan(&todayExp, &weekExp, &monthExp); err != nil {
+		return nil, err
+	}
+
 	stats.Today = PeriodStats{
 		RevenueCents: todayRev,
-		ProfitCents:  todayRev - todayCost,
+		ProfitCents:  todayRev - todayCost - todayExp,
 		Orders:       todayOrders,
 		ChangePct:    changePct(todayRev, yesterdayRev),
 	}
 	stats.Week = PeriodStats{
 		RevenueCents: weekRev,
-		ProfitCents:  weekRev - weekCost,
+		ProfitCents:  weekRev - weekCost - weekExp,
 		Orders:       weekOrders,
 		ChangePct:    changePct(weekRev, lastWeekRev),
 	}
 	stats.Month = PeriodStats{
 		RevenueCents: monthRev,
-		ProfitCents:  monthRev - monthCost,
+		ProfitCents:  monthRev - monthCost - monthExp,
 		Orders:       monthOrders,
 		ChangePct:    changePct(monthRev, lastMonthRev),
 	}
 
-	// 2. Low-stock count
+	// 2. Low-stock count — dynamic reorder point per product
+	//    reorder_point = avg_daily_sales × lead_time_days + safety_stock
+	//    Products without sales history in the last 30 days fall back to the
+	//    static LOW_STOCK_DEFAULT threshold so brand-new items still get flagged.
 	if err := r.db.QueryRow(ctx,
-		`SELECT COUNT(*)
+		`WITH daily_sales AS (
+		     SELECT si.product_id,
+		            SUM(si.qty_milli)::float / 30.0 AS avg_daily_milli
+		     FROM sale_items si
+		     JOIN sales s ON s.id = si.sale_id
+		     WHERE s.created_at >= now() - interval '30 days'
+		       AND s.status = 'confirmed'
+		     GROUP BY si.product_id
+		 )
+		 SELECT COUNT(*)
 		 FROM warehouse_items wi
 		 JOIN products p ON p.id = wi.product_id
-		 WHERE wi.qty_milli < $1 AND p.is_active = true`,
+		 LEFT JOIN daily_sales ds ON ds.product_id = p.id
+		 WHERE p.is_active = true
+		   AND wi.qty_milli < CASE
+		       WHEN ds.avg_daily_milli IS NOT NULL AND ds.avg_daily_milli > 0
+		           THEN (ds.avg_daily_milli * p.lead_time_days + p.safety_stock_milli)::bigint
+		       ELSE $1
+		   END`,
 		r.lowStockThresh,
 	).Scan(&stats.LowStockCount); err != nil {
 		return nil, err
@@ -184,19 +220,40 @@ func (r *Repository) SalesByPeriod(
 	}
 
 	// group_by is validated against the whitelist above — safe to interpolate.
+	// Non-COGS expenses (shrinkage + manual) are joined per-period and subtracted
+	// from profit. Purchase expenses are excluded — their cost already sits in
+	// sales.cost_cents.
 	q := fmt.Sprintf(`
-		SELECT DATE_TRUNC('%s', s.created_at) AS period,
-		       COUNT(*)                        AS orders,
-		       SUM(s.total_cents)              AS revenue,
-		       SUM(s.cost_cents)               AS cost,
-		       SUM(s.total_cents - s.cost_cents) AS profit
-		FROM sales s
-		LEFT JOIN customers c ON c.id = s.customer_id
-		WHERE s.created_at BETWEEN $1 AND $2
-		  AND s.status = 'confirmed'
-		  AND ($3::bigint IS NULL OR s.warehouse_id = $3)
-		  AND ($4::text   IS NULL OR c.type::text = $4)
-		GROUP BY 1
+		WITH sales_agg AS (
+		    SELECT DATE_TRUNC('%[1]s', s.created_at) AS period,
+		           COUNT(*)                          AS orders,
+		           SUM(s.total_cents)                AS revenue,
+		           SUM(s.cost_cents)                 AS cost
+		    FROM sales s
+		    LEFT JOIN customers c ON c.id = s.customer_id
+		    WHERE s.created_at BETWEEN $1 AND $2
+		      AND s.status = 'confirmed'
+		      AND ($3::bigint IS NULL OR s.warehouse_id = $3)
+		      AND ($4::text   IS NULL OR c.type::text = $4)
+		    GROUP BY 1
+		),
+		exp_agg AS (
+		    SELECT DATE_TRUNC('%[1]s', created_at) AS period,
+		           SUM(amount_cents)               AS expense
+		    FROM transactions
+		    WHERE created_at BETWEEN $1 AND $2
+		      AND type = 'expense'
+		      AND status != 'canceled'
+		      AND related_table IN ('adjustment', 'manual')
+		    GROUP BY 1
+		)
+		SELECT COALESCE(s.period, e.period) AS period,
+		       COALESCE(s.orders, 0)        AS orders,
+		       COALESCE(s.revenue, 0)       AS revenue,
+		       COALESCE(s.cost, 0)          AS cost,
+		       COALESCE(s.revenue, 0) - COALESCE(s.cost, 0) - COALESCE(e.expense, 0) AS profit
+		FROM sales_agg s
+		FULL OUTER JOIN exp_agg e ON e.period = s.period
 		ORDER BY 1`, groupBy)
 
 	rows, err := r.db.Query(ctx, q, from, to, warehouseID, custType)
@@ -304,6 +361,93 @@ func (r *Repository) StockMovementsForExport(
 	}
 	if out == nil {
 		out = []StockMovementExportRow{}
+	}
+	return out, rows.Err()
+}
+
+// ReorderSuggestions returns products whose warehouse stock is at or below their
+// dynamic reorder point and should be ordered. Quantity to order is sized to
+// cover 2× lead_time plus safety stock, minus current stock.
+//
+// Products without sales history (avg_daily_milli = 0) fall back to the static
+// LOW_STOCK_DEFAULT threshold so brand-new items are still surfaced.
+func (r *Repository) ReorderSuggestions(
+	ctx context.Context,
+	warehouseID *int64,
+) ([]ReorderSuggestion, error) {
+	rows, err := r.db.Query(ctx, `
+		WITH daily_sales AS (
+		    SELECT si.product_id,
+		           COALESCE(SUM(si.qty_milli)::float / 30.0, 0) AS avg_daily_milli
+		    FROM sale_items si
+		    JOIN sales s ON s.id = si.sale_id
+		    WHERE s.created_at >= now() - interval '30 days'
+		      AND s.status = 'confirmed'
+		    GROUP BY si.product_id
+		)
+		SELECT p.id, p.name,
+		       wi.warehouse_id, w.name,
+		       wi.qty_milli,
+		       COALESCE(ds.avg_daily_milli, 0) AS avg_daily_milli,
+		       p.lead_time_days,
+		       p.safety_stock_milli,
+		       CASE
+		           WHEN COALESCE(ds.avg_daily_milli, 0) > 0
+		               THEN (ds.avg_daily_milli * p.lead_time_days + p.safety_stock_milli)::bigint
+		           ELSE $1
+		       END AS reorder_point_milli,
+		       GREATEST(
+		           CASE
+		               WHEN COALESCE(ds.avg_daily_milli, 0) > 0
+		                   THEN (ds.avg_daily_milli * p.lead_time_days * 2 + p.safety_stock_milli)::bigint - wi.qty_milli
+		               ELSE $1 * 2 - wi.qty_milli
+		           END,
+		           0
+		       ) AS suggested_order_milli
+		FROM warehouse_items wi
+		JOIN products   p ON p.id = wi.product_id
+		JOIN warehouses w ON w.id = wi.warehouse_id
+		LEFT JOIN daily_sales ds ON ds.product_id = p.id
+		WHERE p.is_active = true
+		  AND ($2::bigint IS NULL OR wi.warehouse_id = $2)
+		  AND wi.qty_milli < CASE
+		      WHEN COALESCE(ds.avg_daily_milli, 0) > 0
+		          THEN (ds.avg_daily_milli * p.lead_time_days + p.safety_stock_milli)::bigint
+		      ELSE $1
+		  END
+		ORDER BY
+		    CASE WHEN COALESCE(ds.avg_daily_milli, 0) > 0
+		         THEN wi.qty_milli::float / ds.avg_daily_milli
+		         ELSE 1e9
+		    END ASC,
+		    p.name ASC`,
+		r.lowStockThresh, warehouseID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ReorderSuggestion
+	for rows.Next() {
+		var s ReorderSuggestion
+		if err := rows.Scan(
+			&s.ProductID, &s.Name,
+			&s.WarehouseID, &s.WarehouseName,
+			&s.CurrentQtyMilli, &s.AvgDailyMilli,
+			&s.LeadTimeDays, &s.SafetyStockMilli,
+			&s.ReorderPointMilli, &s.SuggestedOrderMilli,
+		); err != nil {
+			return nil, err
+		}
+		if s.AvgDailyMilli > 0 {
+			days := float64(s.CurrentQtyMilli) / s.AvgDailyMilli
+			s.DaysUntilStockout = &days
+		}
+		out = append(out, s)
+	}
+	if out == nil {
+		out = []ReorderSuggestion{}
 	}
 	return out, rows.Err()
 }

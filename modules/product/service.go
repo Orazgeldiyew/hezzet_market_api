@@ -175,6 +175,12 @@ func (s *Service) Create(ctx context.Context, req CreateRequest, fh *multipart.F
 	if req.IsActive != nil {
 		p.IsActive = *req.IsActive
 	}
+	if req.LeadTimeDays != nil {
+		p.LeadTimeDays = *req.LeadTimeDays
+	}
+	if req.SafetyStockMilli != nil {
+		p.SafetyStockMilli = *req.SafetyStockMilli
+	}
 
 	if err := s.repo.Create(ctx, &p); err != nil {
 		var pgErr *pgconn.PgError

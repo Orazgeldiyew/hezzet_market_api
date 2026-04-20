@@ -34,15 +34,26 @@ func (r *Repository) Create(ctx context.Context, p *Product) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := `
-		INSERT INTO products (name, sku, unit, purchase_price, sale_price, is_active, unit_type, discount_percent)
-		VALUES ($1,$2,$3::unit_enum,$4,$5,$6,$7::unit_type_enum,$8)
-		RETURNING id, unit_scale, created_at, updated_at
+		INSERT INTO products (name, sku, unit, purchase_price, sale_price, is_active, unit_type, discount_percent, lead_time_days, safety_stock_milli)
+		VALUES ($1,$2,$3::unit_enum,$4,$5,$6,$7::unit_type_enum,$8,
+		        COALESCE($9, 3), COALESCE($10, 0))
+		RETURNING id, unit_scale, lead_time_days, safety_stock_milli, created_at, updated_at
 	`
 	// Pass typed enums as plain strings — pgx sends them as text which PostgreSQL
 	// accepts for enum parameters when combined with an explicit cast in the query.
+	// Nullable lead_time_days / safety_stock_milli fall back to column defaults via COALESCE.
+	var leadTimeParam *int
+	if p.LeadTimeDays > 0 {
+		leadTimeParam = &p.LeadTimeDays
+	}
+	var safetyStockParam *int64
+	if p.SafetyStockMilli > 0 {
+		safetyStockParam = &p.SafetyStockMilli
+	}
 	if err := tx.QueryRow(ctx, q,
 		p.Name, p.SKU, string(p.Unit), p.PurchasePrice, p.SalePrice, p.IsActive, string(p.UnitType), p.DiscountPercent,
-	).Scan(&p.ID, &p.UnitScale, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		leadTimeParam, safetyStockParam,
+	).Scan(&p.ID, &p.UnitScale, &p.LeadTimeDays, &p.SafetyStockMilli, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		return err
 	}
 
@@ -60,7 +71,7 @@ func (r *Repository) Create(ctx context.Context, p *Product) error {
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 	q := `
-		SELECT id, name, sku, unit, purchase_price, sale_price, discount_percent, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
+		SELECT id, name, sku, unit, purchase_price, sale_price, discount_percent, lead_time_days, safety_stock_milli, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
 		FROM products WHERE id=$1 AND is_active=true
 	`
 	var p Product
@@ -68,7 +79,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 	var photoPath *string
 	err := r.db.QueryRow(ctx, q, id).Scan(
 		&p.ID, &p.Name, &p.SKU, &unitStr,
-		&p.PurchasePrice, &p.SalePrice, &p.DiscountPercent, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
+		&p.PurchasePrice, &p.SalePrice, &p.DiscountPercent, &p.LeadTimeDays, &p.SafetyStockMilli, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
@@ -95,17 +106,19 @@ func (r *Repository) GetByBarcode(ctx context.Context, barcode string) (Product,
 func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (Product, error) {
 	q := `
 		UPDATE products SET
-			name          = COALESCE($2, name),
-			sku           = COALESCE($3, sku),
-			unit          = COALESCE($4::unit_enum, unit),
-			purchase_price = COALESCE($5, purchase_price),
-			sale_price    = COALESCE($6, sale_price),
-			is_active     = COALESCE($7, is_active),
-			unit_type     = COALESCE($8::unit_type_enum, unit_type),
+			name             = COALESCE($2, name),
+			sku              = COALESCE($3, sku),
+			unit             = COALESCE($4::unit_enum, unit),
+			purchase_price   = COALESCE($5, purchase_price),
+			sale_price       = COALESCE($6, sale_price),
+			is_active        = COALESCE($7, is_active),
+			unit_type        = COALESCE($8::unit_type_enum, unit_type),
 			discount_percent = COALESCE($9, discount_percent),
-			updated_at    = now()
+			lead_time_days     = COALESCE($10, lead_time_days),
+			safety_stock_milli = COALESCE($11, safety_stock_milli),
+			updated_at       = now()
 		WHERE id=$1
-		RETURNING id, name, sku, unit, purchase_price, sale_price, discount_percent, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
+		RETURNING id, name, sku, unit, purchase_price, sale_price, discount_percent, lead_time_days, safety_stock_milli, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
 	`
 	// Convert *UnitType and *Unit to *string so pgx sends NULL when nil,
 	// which COALESCE correctly interprets as "keep existing value".
@@ -118,9 +131,10 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 	err := r.db.QueryRow(ctx, q,
 		id, req.Name, req.SKU, unitParam,
 		req.PurchasePrice, req.SalePrice, req.IsActive, unitTypeParam, req.DiscountPercent,
+		req.LeadTimeDays, req.SafetyStockMilli,
 	).Scan(
 		&p.ID, &p.Name, &p.SKU, &unitStr,
-		&p.PurchasePrice, &p.SalePrice, &p.DiscountPercent, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
+		&p.PurchasePrice, &p.SalePrice, &p.DiscountPercent, &p.LeadTimeDays, &p.SafetyStockMilli, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return p, err
@@ -196,7 +210,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.discount_percent, p.is_active, p.unit_type, p.unit_scale, p.photo_path, p.created_at, p.updated_at
+		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.discount_percent, p.lead_time_days, p.safety_stock_milli, p.is_active, p.unit_type, p.unit_scale, p.photo_path, p.created_at, p.updated_at
 		FROM products p
 		LEFT JOIN product_barcodes pb ON pb.product_id = p.id
 		WHERE p.is_active = true
@@ -222,7 +236,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		var photoPath *string
 		if err := rows.Scan(
 			&p.ID, &p.Name, &p.SKU, &unitStr,
-			&p.PurchasePrice, &p.SalePrice, &p.DiscountPercent, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
+			&p.PurchasePrice, &p.SalePrice, &p.DiscountPercent, &p.LeadTimeDays, &p.SafetyStockMilli, &p.IsActive, &unitTypeStr, &p.UnitScale, &photoPath, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}

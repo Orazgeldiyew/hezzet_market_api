@@ -5,10 +5,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
-	repo := NewRepository(db)
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository) {
+	repo := NewRepository(db, finRepo)
 	h := NewHandler(repo)
 
 	inv := rg.Group("/inventory")

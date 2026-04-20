@@ -37,6 +37,8 @@ type Product struct {
 	PurchasePrice   int64     `json:"purchase_price"`
 	SalePrice       int64     `json:"sale_price"`
 	DiscountPercent int       `json:"discount_percent"` // centralized discount set by admin/manager
+	LeadTimeDays    int       `json:"lead_time_days"`    // supplier delivery time (reorder-point input)
+	SafetyStockMilli int64    `json:"safety_stock_milli"` // extra buffer on top of reorder point
 	IsActive        bool      `json:"is_active"`
 	PhotoURL        *string   `json:"photo_url,omitempty"` // public URL, computed
 	PhotoPath       *string   `json:"-"`                   // raw DB value, used internally
@@ -47,28 +49,32 @@ type Product struct {
 // ─── Requests ────────────────────────────────────────────────────────────────
 
 type CreateRequest struct {
-	Name          string   `json:"name"           binding:"required"`
-	SKU           string   `json:"sku"`
-	Barcodes      []string `json:"barcodes"`
-	UnitType      UnitType `json:"unit_type"      binding:"required,oneof=piece weight volume"`
-	Unit          Unit     `json:"unit"           binding:"required,oneof=piece kg g l ml"`
-	PurchasePrice int64    `json:"purchase_price"`
-	SalePrice     int64    `json:"sale_price"`
-	IsActive      *bool    `json:"is_active"`
-	CategoryIDs   []int64  `json:"category_ids"`
+	Name             string   `json:"name"           binding:"required"`
+	SKU              string   `json:"sku"`
+	Barcodes         []string `json:"barcodes"`
+	UnitType         UnitType `json:"unit_type"      binding:"required,oneof=piece weight volume"`
+	Unit             Unit     `json:"unit"           binding:"required,oneof=piece kg g l ml"`
+	PurchasePrice    int64    `json:"purchase_price"`
+	SalePrice        int64    `json:"sale_price"`
+	LeadTimeDays     *int     `json:"lead_time_days"     binding:"omitempty,min=0,max=365"`
+	SafetyStockMilli *int64   `json:"safety_stock_milli" binding:"omitempty,min=0"`
+	IsActive         *bool    `json:"is_active"`
+	CategoryIDs      []int64  `json:"category_ids"`
 }
 
 type UpdateRequest struct {
-	Name            *string   `json:"name"`
-	SKU             *string   `json:"sku"`
-	Barcodes        *[]string `json:"barcodes"`
-	UnitType        *UnitType `json:"unit_type"  binding:"omitempty,oneof=piece weight volume"`
-	Unit            *Unit     `json:"unit"       binding:"omitempty,oneof=piece kg g l ml"`
-	PurchasePrice   *int64    `json:"purchase_price"`
-	SalePrice       *int64    `json:"sale_price"`
-	DiscountPercent *int      `json:"discount_percent"`
-	IsActive        *bool     `json:"is_active"`
-	CategoryIDs     *[]int64  `json:"category_ids"`
+	Name             *string   `json:"name"`
+	SKU              *string   `json:"sku"`
+	Barcodes         *[]string `json:"barcodes"`
+	UnitType         *UnitType `json:"unit_type"  binding:"omitempty,oneof=piece weight volume"`
+	Unit             *Unit     `json:"unit"       binding:"omitempty,oneof=piece kg g l ml"`
+	PurchasePrice    *int64    `json:"purchase_price"`
+	SalePrice        *int64    `json:"sale_price"`
+	DiscountPercent  *int      `json:"discount_percent"`
+	LeadTimeDays     *int      `json:"lead_time_days"     binding:"omitempty,min=0,max=365"`
+	SafetyStockMilli *int64    `json:"safety_stock_milli" binding:"omitempty,min=0"`
+	IsActive         *bool     `json:"is_active"`
+	CategoryIDs      *[]int64  `json:"category_ids"`
 }
 
 // ─── Responses ───────────────────────────────────────────────────────────────
