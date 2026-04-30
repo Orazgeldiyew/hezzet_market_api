@@ -260,7 +260,7 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, created
 		u.IsActive = *req.IsActive
 	}
 
-	if err := s.repo.CreateUser(ctx, &u); err != nil {
+	if err := s.repo.CreateUserWithRoles(ctx, &u, roles); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return UserWithRoles{}, &apperr.AppError{
@@ -270,10 +270,6 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, created
 				Err:        err,
 			}
 		}
-		return UserWithRoles{}, apperr.Internal(err)
-	}
-
-	if err := s.repo.SetUserRoles(ctx, u.ID, roles); err != nil {
 		if err == pgx.ErrNoRows {
 			return UserWithRoles{}, apperr.Validation("unknown role in roles[]")
 		}

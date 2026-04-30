@@ -21,6 +21,9 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, queue *Queue, phoneRe
 	settingsRepo := NewSettingsRepository(db)
 	sh := NewSettingsHandler(settingsRepo)
 
+	inboxRepo := NewInboxRepository(db)
+	ih := NewInboxHandler(inboxRepo)
+
 	g := rg.Group("/notifications")
 
 	// admin-only: SMS logs + phone management
@@ -37,11 +40,16 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, queue *Queue, phoneRe
 		adminOnly.DELETE("/phones/:id", ph.Delete)
 	}
 
-	// admin + manager: runtime-configurable settings
-	settingsGroup := g.Group("")
-	settingsGroup.Use(middleware.RequireRoles("admin", "manager"))
+	// admin + manager: runtime-configurable settings + in-app inbox
+	staffGroup := g.Group("")
+	staffGroup.Use(middleware.RequireRoles("admin", "manager"))
 	{
-		settingsGroup.GET("/settings", sh.Get)
-		settingsGroup.PUT("/settings", sh.Update)
+		staffGroup.GET("/settings", sh.Get)
+		staffGroup.PUT("/settings", sh.Update)
+
+		staffGroup.GET("/inbox", middleware.PaginationMiddleware(), ih.List)
+		staffGroup.GET("/inbox/unread-count", ih.UnreadCount)
+		staffGroup.POST("/inbox/:id/read", ih.MarkRead)
+		staffGroup.POST("/inbox/read-all", ih.MarkAllRead)
 	}
 }

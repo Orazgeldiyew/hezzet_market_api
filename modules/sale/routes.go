@@ -38,6 +38,11 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repo
 		h.GetReceipt,
 	)
 
+	sales.POST("/:id/print",
+		middleware.RequireRoles("cashier", "operator", "manager"),
+		h.Reprint,
+	)
+
 	sales.POST("/:id/confirm",
 		middleware.RequireRoles("cashier", "operator", "manager"),
 		h.ConfirmSale,

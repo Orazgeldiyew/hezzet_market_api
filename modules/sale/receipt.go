@@ -229,6 +229,7 @@ func ReceiptHandler(db *pgxpool.Pool, baseURL string, receiptRepo *receiptsettin
 		}
 
 		receiptItems := make([]ReceiptItem, len(items))
+		var subtotalCents int64
 		for i, it := range items {
 			receiptItems[i] = ReceiptItem{
 				ProductName:     it.ProductName,
@@ -238,36 +239,48 @@ func ReceiptHandler(db *pgxpool.Pool, baseURL string, receiptRepo *receiptsettin
 				LineTotalCents:  it.LineTotalCents,
 				DiscountPercent: it.DiscountPercent,
 			}
+			subtotalCents += (it.QtyMilli*it.UnitPriceCents + 500) / 1000
+		}
+		totalDiscountCents := subtotalCents - saleRow.TotalCents - saleRow.BonusUsedCents
+		if totalDiscountCents < 0 {
+			totalDiscountCents = 0
+		}
+		totalDiscountPercent := 0
+		if subtotalCents > 0 {
+			totalDiscountPercent = int(totalDiscountCents * 100 / subtotalCents)
 		}
 
 		receiptNumber := saleRow.CreatedAt.Format("20060102") + "-" + fmt.Sprintf("%06d", saleRow.ID)
 
 		data := ReceiptData{
-			ShopName:        settings.ShopName,
-			ShopAddress:     settings.ShopAddress,
-			ShopPhone:       settings.ShopPhone,
-			LogoURL:         logoURL,
-			LogoWidth:       settings.LogoWidth,
-			LogoHeight:      settings.LogoHeight,
-			Footer:          settings.Footer,
-			SaleID:          saleRow.ID,
-			ReceiptNumber:   receiptNumber,
-			Date:            saleRow.CreatedAt.Format("02.01.2006"),
-			Time:            saleRow.CreatedAt.Format("15:04"),
-			Status:          string(saleRow.Status),
-			CashierName:     saleRow.CashierName,
-			WarehouseName:   saleRow.WarehouseName,
-			CustomerName:    saleRow.CustomerName,
-			TotalCents:      saleRow.TotalCents,
-			BonusUsedCents:  saleRow.BonusUsedCents,
-			DiscountPercent: saleRow.DiscountPercent,
-			DiscountCents:   saleRow.DiscountCents,
-			PaymentMethod:   saleRow.PaymentMethod,
-			PaidCents:       saleRow.PaidCents,
-			ChangeCents:     max(saleRow.PaidCents-saleRow.TotalCents, 0),
-			WorkerName:      saleRow.WorkerName,
-			Note:            note,
-			Items:           receiptItems,
+			ShopName:             settings.ShopName,
+			ShopAddress:          settings.ShopAddress,
+			ShopPhone:            settings.ShopPhone,
+			LogoURL:              logoURL,
+			LogoWidth:            settings.LogoWidth,
+			LogoHeight:           settings.LogoHeight,
+			Footer:               settings.Footer,
+			SaleID:               saleRow.ID,
+			ReceiptNumber:        receiptNumber,
+			Date:                 saleRow.CreatedAt.Format("02.01.2006"),
+			Time:                 saleRow.CreatedAt.Format("15:04"),
+			Status:               string(saleRow.Status),
+			CashierName:          saleRow.CashierName,
+			WarehouseName:        saleRow.WarehouseName,
+			CustomerName:         saleRow.CustomerName,
+			TotalCents:           saleRow.TotalCents,
+			BonusUsedCents:       saleRow.BonusUsedCents,
+			DiscountPercent:      saleRow.DiscountPercent,
+			DiscountCents:        saleRow.DiscountCents,
+			SubtotalCents:        subtotalCents,
+			TotalDiscountCents:   totalDiscountCents,
+			TotalDiscountPercent: totalDiscountPercent,
+			PaymentMethod:        saleRow.PaymentMethod,
+			PaidCents:            saleRow.PaidCents,
+			ChangeCents:          max(saleRow.PaidCents-saleRow.TotalCents, 0),
+			WorkerName:           saleRow.WorkerName,
+			Note:                 note,
+			Items:                receiptItems,
 		}
 
 		html, err := RenderReceipt(data, settings.Template)

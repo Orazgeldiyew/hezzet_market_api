@@ -180,20 +180,22 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		offset = 0
 	}
 
-	// total count — trigram similarity for typo-tolerance; EXISTS avoids duplicate rows from barcodes JOIN
+	// total count
 	countSQL := `
-		SELECT COUNT(*) FROM products p
+		SELECT COUNT(DISTINCT p.id) FROM products p
+		LEFT JOIN product_barcodes pb ON pb.product_id = p.id
 		WHERE p.is_active = true
 		  AND ($1 = '' OR
-		       similarity(p.name, $1) > 0.2 OR
+		       p.name ILIKE '%' || $1 || '%' OR
 		       p.sku ILIKE '%' || $1 || '%' OR
-		       EXISTS (SELECT 1 FROM product_barcodes pb WHERE pb.product_id = p.id AND pb.barcode ILIKE '%' || $1 || '%'))
+		       pb.barcode ILIKE '%' || $1 || '%')
 	`
 	var total int
 	if err := r.db.QueryRow(ctx, countSQL, qstr).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
+	// whitelist order column
 	col := "p.created_at"
 	switch orderBy {
 	case "name":
@@ -207,25 +209,18 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		dir = "ASC"
 	}
 
-	// When a query is present, rank by trigram similarity first for best match at top.
-	var orderClause string
-	if qstr != "" {
-		orderClause = fmt.Sprintf("similarity(p.name, $1) DESC, %s %s", col, dir)
-	} else {
-		orderClause = fmt.Sprintf("%s %s", col, dir)
-	}
-
 	sql := fmt.Sprintf(`
-		SELECT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.discount_percent, p.lead_time_days, p.safety_stock_milli, p.is_active, p.unit_type, p.unit_scale, p.photo_path, p.created_at, p.updated_at
+		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.discount_percent, p.lead_time_days, p.safety_stock_milli, p.is_active, p.unit_type, p.unit_scale, p.photo_path, p.created_at, p.updated_at
 		FROM products p
+		LEFT JOIN product_barcodes pb ON pb.product_id = p.id
 		WHERE p.is_active = true
 		  AND ($1 = '' OR
-		       similarity(p.name, $1) > 0.2 OR
+		       p.name ILIKE '%%' || $1 || '%%' OR
 		       p.sku ILIKE '%%' || $1 || '%%' OR
-		       EXISTS (SELECT 1 FROM product_barcodes pb WHERE pb.product_id = p.id AND pb.barcode ILIKE '%%' || $1 || '%%'))
-		ORDER BY %s
+		       pb.barcode ILIKE '%%' || $1 || '%%')
+		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
-	`, orderClause)
+	`, col, dir)
 
 	rows, err := r.db.Query(ctx, sql, qstr, limit, offset)
 	if err != nil {

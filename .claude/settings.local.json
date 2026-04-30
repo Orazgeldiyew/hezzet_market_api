@@ -30,7 +30,8 @@
       "/home/rustem/hezzet_market/src/pages/cashier",
       "/home/rustem/hezzet_market/src/pages",
       "/home/rustem/hezzet_market/src/app",
-      "/home/rustem/hezzet_market/src/widgets/DashboardSidebar/ui"
+      "/home/rustem/hezzet_market/src/widgets/DashboardSidebar/ui",
+      "/home/rustem/hezzet_market/src/widgets/DashboardHeader/ui"
     ]
   }
 }

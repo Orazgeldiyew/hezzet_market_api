@@ -37,6 +37,7 @@ var actionOverrides = map[string]string{
 	"DELETE /api/products/:id/categories/:categoryId":    "CATEGORY_REMOVE",
 	"POST /api/sales/:id/confirm":                        "SALE_CONFIRM",
 	"POST /api/sales/:id/cancel":                         "SALE_CANCEL",
+	"POST /api/sales/:id/transfer":                       "SALE_TRANSFER",
 	"POST /api/purchases/:id/receive":                    "PO_RECEIVE",
 	"POST /api/purchases/:id/cancel":                     "PO_CANCEL",
 	"POST /api/purchases/:id/payments":                   "PO_PAYMENT",

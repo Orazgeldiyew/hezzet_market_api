@@ -46,6 +46,42 @@ func (r *Repository) CreateUser(ctx context.Context, u *User) error {
 	).Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
 }
 
+// CreateUserWithRoles inserts the user and assigns roles atomically.
+// If role assignment fails, the user row is rolled back so username stays free
+// and the caller can retry with the same payload.
+func (r *Repository) CreateUserWithRoles(ctx context.Context, u *User, roleCodes []string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO users (username, password_hash, full_name, phone, email, is_active, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, created_at, updated_at
+	`,
+		u.Username, u.PasswordHash, u.FullName, u.Phone, u.Email, u.IsActive, u.CreatedBy,
+	).Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		return err
+	}
+
+	for _, code := range roleCodes {
+		ct, err := tx.Exec(ctx, `
+			INSERT INTO user_roles (user_id, role_id)
+			SELECT $1, id FROM roles WHERE code = $2
+		`, u.ID, code)
+		if err != nil {
+			return err
+		}
+		if ct.RowsAffected() == 0 {
+			return pgx.ErrNoRows
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
 func (r *Repository) GetByUsername(ctx context.Context, username string) (User, error) {
 	q := fmt.Sprintf(`SELECT %s FROM users WHERE username = $1 AND deleted_at IS NULL`, userCols)
 	var u User

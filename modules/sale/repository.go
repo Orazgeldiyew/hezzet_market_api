@@ -858,11 +858,11 @@ func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleR
 		       w.name,
 		       c.name,
 		       wk.name,
-		       (SELECT pt.name FROM payments p
+		       (SELECT STRING_AGG(DISTINCT pt.name, ', ' ORDER BY pt.name)
+		        FROM payments p
 		        JOIN transactions t ON t.id = p.transaction_id
 		        JOIN payment_types pt ON pt.id = p.payment_type_id
-		        WHERE t.related_table = 'sale' AND t.related_id = s.id
-		        ORDER BY p.id DESC LIMIT 1),
+		        WHERE t.related_table = 'sale' AND t.related_id = s.id),
 		       COALESCE((SELECT SUM(p.amount_cents) FROM payments p
 		        JOIN transactions t ON t.id = p.transaction_id
 		        WHERE t.related_table = 'sale' AND t.related_id = s.id), 0)

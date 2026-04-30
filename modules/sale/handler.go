@@ -435,6 +435,61 @@ func (h *Handler) GetReceipt(c *gin.Context) {
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }
 
+// Reprint godoc
+// @Summary Reprint receipt to thermal printer
+// @Description Re-fires the same auto-print that runs on sale confirm. The cashier
+// @Description can call this as many times as they like — there is no per-sale limit.
+// @Tags Sales
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Sale ID"
+// @Success 200 {object} response.APIResponse
+// @Failure 404 {object} response.APIResponse
+// @Failure 503 {object} response.APIResponse "printer not configured"
+// @Router /api/sales/{id}/print [post]
+func (h *Handler) Reprint(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.Error(apperr.Validation("invalid sale id"))
+		return
+	}
+
+	printerSv := h.svc.repo.PrinterService()
+	if printerSv == nil {
+		c.Error(apperr.Internal(fmt.Errorf("printer not configured")))
+		return
+	}
+
+	// Verify the sale exists and pull the cashier's open-shift register so the
+	// reprint targets the same physical printer the original print used.
+	ctx := c.Request.Context()
+	if _, _, err := h.svc.repo.GetReceiptData(ctx, id); err != nil {
+		if err == pgx.ErrNoRows {
+			c.Error(apperr.NotFound("SALE_NOT_FOUND", "sale not found"))
+			return
+		}
+		c.Error(apperr.Internal(err))
+		return
+	}
+
+	userID := extractUserID(c)
+	var regID *int64
+	var rid int64
+	if err := h.svc.repo.DB().QueryRow(ctx, `
+		SELECT register_id FROM shifts
+		WHERE user_id = $1 AND status = 'open'
+		ORDER BY opened_at DESC LIMIT 1
+	`, userID).Scan(&rid); err == nil {
+		regID = &rid
+	}
+
+	if err := printerSv.PrintSale(ctx, id, regID); err != nil {
+		c.Error(apperr.Internal(err))
+		return
+	}
+	response.OK(c, gin.H{"printed": true})
+}
+
 // ReturnSale godoc
 // @Summary      Return sale items (partial or full)
 // @Description  Returns items from a confirmed sale. If items array is empty, returns the entire sale.
