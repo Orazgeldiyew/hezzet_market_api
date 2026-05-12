@@ -38,9 +38,23 @@ var actionOverrides = map[string]string{
 	"POST /api/sales/:id/confirm":                        "SALE_CONFIRM",
 	"POST /api/sales/:id/cancel":                         "SALE_CANCEL",
 	"POST /api/sales/:id/transfer":                       "SALE_TRANSFER",
+	"POST /api/sales/:id/return":                         "SALE_RETURN",
+	"POST /api/sales/:id/print":                          "SALE_PRINT",
 	"POST /api/purchases/:id/receive":                    "PO_RECEIVE",
 	"POST /api/purchases/:id/cancel":                     "PO_CANCEL",
 	"POST /api/purchases/:id/payments":                   "PO_PAYMENT",
+	"POST /api/shifts/open":                              "SHIFT_OPEN",
+	"POST /api/shifts/:id/close":                         "SHIFT_CLOSE",
+	"POST /api/inventory/:id/confirm":                    "INVENTORY_CONFIRM",
+	"POST /api/inventory/:id/cancel":                     "INVENTORY_CANCEL",
+	"POST /api/customer-debts/:id/pay":                   "CUSTOMER_DEBT_PAY",
+	"POST /api/supplier-debts/:id/pay":                   "SUPPLIER_DEBT_PAY",
+	"POST /api/workers/debts/:debt_id/pay":               "WORKER_DEBT_PAY",
+	"POST /api/supplier-returns/:id/confirm":             "SUPPLIER_RETURN_CONFIRM",
+	"POST /api/supplier-returns/:id/cancel":              "SUPPLIER_RETURN_CANCEL",
+	"POST /api/products/:id/photo":                       "PRODUCT_PHOTO_UPLOAD",
+	"PUT /api/settings/receipt":                          "RECEIPT_SETTINGS_UPDATE",
+	"POST /api/settings/receipt/logo":                    "RECEIPT_LOGO_UPLOAD",
 }
 
 // AuditMiddleware logs every successful write operation (POST/PATCH/PUT/DELETE

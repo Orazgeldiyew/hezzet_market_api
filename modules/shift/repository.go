@@ -2,9 +2,11 @@ package shift
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
@@ -18,16 +20,9 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 }
 
 func (r *Repository) OpenShift(ctx context.Context, userID int64, req OpenRequest) (Shift, error) {
-	// Check if user already has an open shift
-	var existing int
-	_ = r.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM shifts WHERE user_id = $1 AND status = 'open'`,
-		userID,
-	).Scan(&existing)
-	if existing > 0 {
-		return Shift{}, apperr.Conflict("SHIFT_ALREADY_OPEN", "you already have an open shift")
-	}
-
+	// The unique partial index idx_shifts_user_open_unique enforces "at most one
+	// open shift per user" at the database level — catching 23505 here closes
+	// the race window between SELECT-then-INSERT.
 	var s Shift
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO shifts (register_id, user_id, opening_cash)
@@ -38,12 +33,16 @@ func (r *Repository) OpenShift(ctx context.Context, userID int64, req OpenReques
 		&s.SalesCount, &s.SalesTotal, &s.ReturnsTotal, &s.Status,
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return Shift{}, apperr.Conflict("SHIFT_ALREADY_OPEN", "you already have an open shift")
+		}
 		return Shift{}, apperr.Internal(err)
 	}
 	return s, nil
 }
 
-func (r *Repository) CloseShift(ctx context.Context, shiftID, callerID int64, req CloseRequest) (Shift, error) {
+func (r *Repository) CloseShift(ctx context.Context, shiftID, callerID int64, callerRoles []string, req CloseRequest) (Shift, error) {
 	// Calculate sales stats for the shift period
 	var salesCount int
 	var salesTotal, returnsTotal int64
@@ -54,7 +53,7 @@ func (r *Repository) CloseShift(ctx context.Context, shiftID, callerID int64, re
 	var status string
 
 	err := r.db.QueryRow(ctx,
-		`SELECT user_id, opened_at, opening_cash, status FROM shifts WHERE id = $1`,
+		`SELECT user_id, opened_at, opening_cash, status FROM shifts WHERE id = $1 FOR UPDATE`,
 		shiftID,
 	).Scan(&shiftUserID, &openedAt, &openingCash, &status)
 	if err != nil {
@@ -65,6 +64,20 @@ func (r *Repository) CloseShift(ctx context.Context, shiftID, callerID int64, re
 	}
 	if status != "open" {
 		return Shift{}, apperr.Conflict("SHIFT_ALREADY_CLOSED", "shift is already closed")
+	}
+
+	// Only the shift owner or a manager/admin may close. Without this, any
+	// authenticated cashier could close another user's shift and skew their
+	// expected-cash totals.
+	isPrivileged := false
+	for _, role := range callerRoles {
+		if role == "manager" || role == "admin" {
+			isPrivileged = true
+			break
+		}
+	}
+	if callerID != shiftUserID && !isPrivileged {
+		return Shift{}, apperr.Forbidden("only the shift owner or a manager can close this shift")
 	}
 
 	// Count confirmed sales by this user during shift

@@ -69,7 +69,9 @@ func (h *Handler) CloseShift(c *gin.Context) {
 		c.Error(apperr.Validation("invalid request"))
 		return
 	}
-	_, err = h.repo.CloseShift(c.Request.Context(), id, extractUserID(c), req)
+	rolesVal, _ := c.Get("roles")
+	roles, _ := rolesVal.([]string)
+	_, err = h.repo.CloseShift(c.Request.Context(), id, extractUserID(c), roles, req)
 	if err != nil {
 		c.Error(err)
 		return
