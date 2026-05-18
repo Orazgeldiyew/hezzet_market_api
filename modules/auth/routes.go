@@ -26,10 +26,16 @@ func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool, cfg config.Config, auditMid
 
 	g := r.Group("/api/auth")
 	{
-		// Public
-		g.POST("/login", h.Login)
-		g.POST("/refresh", h.RefreshToken)
-		g.POST("/register", h.Register)
+		// Public — wrapped in audit middleware so login/refresh/register attempts
+		// (success and failure) appear in audit_logs. The handlers themselves
+		// stash the attempted username on the context for failure paths.
+		public := g.Group("")
+		public.Use(auditMiddleware...)
+		{
+			public.POST("/login", h.Login)
+			public.POST("/refresh", h.RefreshToken)
+			public.POST("/register", h.Register)
+		}
 
 		// Admin-only user management
 		admin := g.Group("/users")

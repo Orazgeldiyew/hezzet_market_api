@@ -1,0 +1,4 @@
+BEGIN;
+ALTER TABLE audit_logs DROP COLUMN IF EXISTS old_value;
+ALTER TABLE audit_logs DROP COLUMN IF EXISTS new_value;
+COMMIT;

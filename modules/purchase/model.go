@@ -25,6 +25,7 @@ type PurchaseItem struct {
 	ProductName    string    `json:"product_name"`
 	QtyMilli       int64     `json:"qty_milli"`
 	UnitCostCents  int64     `json:"unit_cost_cents"`
+	SalePriceCents int64     `json:"sale_price_cents"` // 0 = leave product.sale_price unchanged on receive
 	LineTotalCents int64     `json:"line_total_cents"`
 	CreatedAt      time.Time `json:"created_at"`
 }
@@ -32,9 +33,12 @@ type PurchaseItem struct {
 // ── Requests ─────────────────────────────────────────────────────────────────
 
 type CreatePOItemRequest struct {
-	ProductID     int64 `json:"product_id" binding:"required,gt=0"`
-	QtyMilli      int64 `json:"qty_milli" binding:"required,gt=0"`
-	UnitCostCents int64 `json:"unit_cost_cents" binding:"required,gte=0"`
+	ProductID      int64 `json:"product_id"      binding:"required,gt=0"`
+	QtyMilli       int64 `json:"qty_milli"       binding:"required,gt=0"`
+	UnitCostCents  int64 `json:"unit_cost_cents" binding:"required,gte=0"`
+	// SalePriceCents is optional. 0 = "don't change product.sale_price on receive";
+	// >0 = propagate to product.sale_price so cashiers see the new price.
+	SalePriceCents int64 `json:"sale_price_cents" binding:"gte=0"`
 }
 
 type CreatePORequest struct {

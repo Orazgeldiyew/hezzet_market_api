@@ -10,4 +10,5 @@ func RegisterRoutes(rg *gin.RouterGroup, repo *Repository) {
 	h := NewHandler(repo)
 
 	rg.GET("/audit-logs", middleware.RequireRoles("manager"), h.List)
+	rg.GET("/audit-logs/stats", middleware.RequireRoles("manager"), h.Stats)
 }

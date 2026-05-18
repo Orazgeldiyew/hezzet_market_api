@@ -122,9 +122,9 @@ func (r *Repository) CreatePO(
 	for _, item := range req.Items {
 		lineTotal := lineTotalCents(item.QtyMilli, item.UnitCostCents)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO purchase_order_items (po_id, product_id, qty_milli, unit_cost_cents, line_total_cents)
-			VALUES ($1, $2, $3, $4, $5)
-		`, po.ID, item.ProductID, item.QtyMilli, item.UnitCostCents, lineTotal)
+			INSERT INTO purchase_order_items (po_id, product_id, qty_milli, unit_cost_cents, sale_price_cents, line_total_cents)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, po.ID, item.ProductID, item.QtyMilli, item.UnitCostCents, item.SalePriceCents, lineTotal)
 		if err != nil {
 			return PurchaseOrder{}, nil, err
 		}
@@ -177,12 +177,13 @@ func (r *Repository) ReceivePO(
 
 	// 2. Fetch items sorted by product_id to avoid deadlocks
 	type poItem struct {
-		productID     int64
-		qtyMilli      int64
-		unitCostCents int64
+		productID      int64
+		qtyMilli       int64
+		unitCostCents  int64
+		salePriceCents int64
 	}
 	itemRows, err := tx.Query(ctx, `
-		SELECT product_id, qty_milli, unit_cost_cents
+		SELECT product_id, qty_milli, unit_cost_cents, sale_price_cents
 		FROM purchase_order_items
 		WHERE po_id = $1
 		ORDER BY product_id
@@ -193,7 +194,7 @@ func (r *Repository) ReceivePO(
 	var items []poItem
 	for itemRows.Next() {
 		var it poItem
-		if err := itemRows.Scan(&it.productID, &it.qtyMilli, &it.unitCostCents); err != nil {
+		if err := itemRows.Scan(&it.productID, &it.qtyMilli, &it.unitCostCents, &it.salePriceCents); err != nil {
 			itemRows.Close()
 			return PurchaseOrder{}, err
 		}
@@ -235,6 +236,30 @@ func (r *Repository) ReceivePO(
 				END,
 				updated_at = now()
 		`, warehouseID, it.productID, it.qtyMilli, it.unitCostCents, inCost)
+		if err != nil {
+			return PurchaseOrder{}, err
+		}
+
+		// Propagate prices to the product master record:
+		//   - purchase_price always reflects the most recent buy cost
+		//   - sale_price updates only when the PO line set it explicitly (>0),
+		//     so PO lines without a sale price leave the catalog price alone.
+		if it.salePriceCents > 0 {
+			_, err = tx.Exec(ctx, `
+				UPDATE products
+				SET purchase_price = $2,
+				    sale_price     = $3,
+				    updated_at     = now()
+				WHERE id = $1
+			`, it.productID, it.unitCostCents, it.salePriceCents)
+		} else {
+			_, err = tx.Exec(ctx, `
+				UPDATE products
+				SET purchase_price = $2,
+				    updated_at     = now()
+				WHERE id = $1
+			`, it.productID, it.unitCostCents)
+		}
 		if err != nil {
 			return PurchaseOrder{}, err
 		}
@@ -413,7 +438,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (PurchaseOrder, []Pu
 
 	rows, err := r.db.Query(ctx, `
 		SELECT poi.id, poi.po_id, poi.product_id,
-		       poi.qty_milli, poi.unit_cost_cents, poi.line_total_cents, poi.created_at,
+		       poi.qty_milli, poi.unit_cost_cents, poi.sale_price_cents, poi.line_total_cents, poi.created_at,
 		       p.name
 		FROM purchase_order_items poi
 		JOIN products p ON p.id = poi.product_id
@@ -430,7 +455,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (PurchaseOrder, []Pu
 		var it PurchaseItem
 		if err := rows.Scan(
 			&it.ID, &it.POID, &it.ProductID,
-			&it.QtyMilli, &it.UnitCostCents, &it.LineTotalCents, &it.CreatedAt,
+			&it.QtyMilli, &it.UnitCostCents, &it.SalePriceCents, &it.LineTotalCents, &it.CreatedAt,
 			&it.ProductName,
 		); err != nil {
 			return po, nil, err

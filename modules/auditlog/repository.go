@@ -3,12 +3,17 @@ package auditlog
 import (
 	"context"
 	"fmt"
+	"log"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository struct {
 	db *pgxpool.Pool
+	// failedWrites is incremented every time an audit insert fails so /api/audit-logs/stats
+	// can surface invisible audit-loss to operators. Reset only on process restart.
+	failedWrites atomic.Int64
 }
 
 func NewRepository(db *pgxpool.Pool) *Repository {
@@ -16,17 +21,45 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 }
 
 const auditCols = `id, user_id, username, action, entity_type, entity_id,
-	method, path, ip_address, request_id, created_at`
+	method, path, ip_address, request_id, old_value, new_value, created_at`
 
-// Create inserts one audit log row. Errors are silently discarded — audit must
-// never break the main request flow. Call this inside a goroutine.
+// Create inserts one audit log row. The write must never break the main request
+// flow, but unlike before it now LOGS failures (to stderr) and bumps a counter
+// so silent audit-loss is detectable. Call this inside a goroutine.
 func (r *Repository) Create(ctx context.Context, a *AuditLog) {
-	r.db.Exec(ctx, `
+	// nil-or-zero RawMessage must go in as SQL NULL, not as the literal "null"
+	// text, so JSONB column stays empty when there's no snapshot to record.
+	var oldVal, newVal any
+	if len(a.OldValue) > 0 {
+		oldVal = []byte(a.OldValue)
+	}
+	if len(a.NewValue) > 0 {
+		newVal = []byte(a.NewValue)
+	}
+
+	_, err := r.db.Exec(ctx, `
 		INSERT INTO audit_logs
-			(user_id, username, action, entity_type, entity_id, method, path, ip_address, request_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			(user_id, username, action, entity_type, entity_id, method, path, ip_address, request_id, old_value, new_value)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`, a.UserID, a.Username, a.Action, a.EntityType, a.EntityID,
-		a.Method, a.Path, a.IPAddress, a.RequestID)
+		a.Method, a.Path, a.IPAddress, a.RequestID, oldVal, newVal)
+	if err != nil {
+		r.failedWrites.Add(1)
+		log.Printf("[audit-log] FAILED to write entry: action=%s user=%d path=%s err=%v",
+			a.Action, a.UserID, a.Path, err)
+	}
+}
+
+// FailedWrites returns the count of audit inserts that failed since the
+// process started. Exposed via /api/audit-logs/stats for monitoring.
+func (r *Repository) FailedWrites() int64 {
+	return r.failedWrites.Load()
+}
+
+// DB exposes the underlying connection pool so the middleware can query
+// per-entity snapshots before/after the handler runs.
+func (r *Repository) DB() *pgxpool.Pool {
+	return r.db
 }
 
 // List returns paginated audit logs filtered by the given criteria.
@@ -96,11 +129,18 @@ func (r *Repository) List(ctx context.Context, f AuditFilter, limit, offset int)
 	var out []AuditLog
 	for rows.Next() {
 		var a AuditLog
+		var oldRaw, newRaw []byte
 		if err := rows.Scan(
 			&a.ID, &a.UserID, &a.Username, &a.Action, &a.EntityType, &a.EntityID,
-			&a.Method, &a.Path, &a.IPAddress, &a.RequestID, &a.CreatedAt,
+			&a.Method, &a.Path, &a.IPAddress, &a.RequestID, &oldRaw, &newRaw, &a.CreatedAt,
 		); err != nil {
 			return nil, 0, err
+		}
+		if len(oldRaw) > 0 {
+			a.OldValue = oldRaw
+		}
+		if len(newRaw) > 0 {
+			a.NewValue = newRaw
 		}
 		out = append(out, a)
 	}

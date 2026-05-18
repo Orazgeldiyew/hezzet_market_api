@@ -9,6 +9,10 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
+// The Repository carries the *pgxpool.Pool we need for snapshotting. Pulling
+// it out of the repo keeps the middleware signature stable and avoids weaving
+// another dependency through the call sites.
+
 // actionOverrides maps "METHOD /full/gin/route/pattern" → action name.
 // Paths not found here fall back to method-based defaults:
 //
@@ -57,54 +61,135 @@ var actionOverrides = map[string]string{
 	"POST /api/settings/receipt/logo":                    "RECEIPT_LOGO_UPLOAD",
 }
 
-// AuditMiddleware logs every successful write operation (POST/PATCH/PUT/DELETE
-// with a 2xx response) to the audit_logs table. The write is non-blocking.
-// Public routes that have no user_id in context are silently skipped.
+// publicAuditPaths maps "METHOD /full/gin/route/pattern" of public-auth endpoints
+// (login, refresh, register) to (successAction, failedAction). These are logged
+// even when no user_id is in context — the handler is expected to set
+// "audit_username" so failed attempts still carry the attempted username.
+var publicAuditPaths = map[string][2]string{
+	"POST /api/auth/login":    {"LOGIN", "LOGIN_FAILED"},
+	"POST /api/auth/refresh":  {"TOKEN_REFRESH", "TOKEN_REFRESH_FAILED"},
+	"POST /api/auth/register": {"REGISTER", "REGISTER_FAILED"},
+}
+
+// AuditMiddleware records write operations to audit_logs. It logs:
+//   - Successful authenticated writes (2xx with user_id in context)
+//   - Failed authenticated writes (4xx/5xx with user_id) — action gets a _FAILED suffix
+//   - Public auth attempts (login/refresh/register) — both success and failure,
+//     using attempted username from "audit_username" context key
+//
+// For routes registered in snapshotRegistry, it also captures BEFORE/AFTER
+// snapshots of the entity so reviewers can see exactly what changed.
+//
+// Other public routes (no user_id, no audit_username) are still silently skipped.
+// All writes go through a goroutine so audit never blocks the request.
 func AuditMiddleware(repo *Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Take the "before" snapshot before the handler runs. We need it now
+		// because the handler will mutate the row; afterwards the old state
+		// is unrecoverable.
+		method := c.Request.Method
+		fullPath := c.FullPath()
+		snapper := snapshotFor(method, fullPath)
+		entityID := c.Param("id")
+
+		var oldSnap Snapshot
+		if snapper != nil {
+			// Use a fresh context — request context may already be cancelled
+			// once we read it later in the goroutine. Errors are swallowed:
+			// missing snapshot is better than blocking the request.
+			if snap, err := snapper(c.Request.Context(), repo.DB(), entityID); err == nil {
+				oldSnap = snap
+			}
+		}
+
 		c.Next()
 
 		// Only write methods
-		method := c.Request.Method
 		if method != "POST" && method != "PATCH" && method != "PUT" && method != "DELETE" {
 			return
 		}
 
-		// Only successful responses
 		status := c.Writer.Status()
-		if status < 200 || status >= 300 {
-			return
-		}
+		isSuccess := status >= 200 && status < 300
 
-		// Skip if no authenticated user (public routes)
-		uidVal, exists := c.Get("user_id")
-		if !exists {
-			return
-		}
+		uidVal, _ := c.Get("user_id")
 		uid, _ := uidVal.(int64)
-		if uid == 0 {
-			return
-		}
 
 		usernameVal, _ := c.Get("username")
 		username, _ := usernameVal.(string)
 
+		// Fallback for public auth attempts: the handler stashes the attempted
+		// username on the context before calling the service so failed logins
+		// still capture WHO tried.
+		if username == "" {
+			if v, ok := c.Get("audit_username"); ok {
+				username, _ = v.(string)
+			}
+		}
+
+		// Decide whether to log this request at all.
+		routeKey := c.Request.Method + " " + c.FullPath()
+		publicAuth, isPublicAuth := publicAuditPaths[routeKey]
+		switch {
+		case isPublicAuth:
+			// Always log login/refresh/register attempts.
+		case uid > 0:
+			// Authenticated route — log success and failure both.
+		default:
+			// Unauthenticated request to a non-auth route — skip silently.
+			return
+		}
+
 		action := resolveAction(c)
+		if isPublicAuth {
+			if isSuccess {
+				action = publicAuth[0]
+			} else {
+				action = publicAuth[1]
+			}
+		} else if !isSuccess {
+			// Distinguish failed attempts from successful ones for the same route.
+			action = action + "_FAILED"
+		}
+
 		entityType := resolveEntityType(c.FullPath())
-		entityID := entityIDFromParams(c)
+		entityIDPtr := entityIDFromParams(c)
 		ip := c.ClientIP()
 		reqID := middleware.GetRequestID(c)
+
+		// "After" snapshot: same lookup, but the row may now be updated or gone.
+		// Only do it on success — on failure the state didn't change, no diff.
+		// For CREATE the URL has no :id, so the handler may set
+		// "audit_entity_id" on the context to expose the newly-created ID.
+		afterID := entityID
+		if v, ok := c.Get("audit_entity_id"); ok {
+			if s, ok := v.(string); ok && s != "" {
+				afterID = s
+				if entityIDPtr == nil {
+					entityIDPtr = &afterID
+				}
+			}
+		}
+
+		var newSnap Snapshot
+		if isSuccess && snapper != nil {
+			if snap, err := snapper(c.Request.Context(), repo.DB(), afterID); err == nil {
+				newSnap = snap
+			}
+		}
 
 		entry := &AuditLog{
 			UserID:     uid,
 			Username:   username,
 			Action:     action,
 			EntityType: entityType,
-			EntityID:   entityID,
+			EntityID:   entityIDPtr,
 			Method:     method,
 			Path:       c.Request.URL.Path,
 			IPAddress:  &ip,
 			RequestID:  &reqID,
+			OldValue:   snapshotJSON(oldSnap),
+			NewValue:   snapshotJSON(newSnap),
 		}
 
 		go repo.Create(context.Background(), entry)

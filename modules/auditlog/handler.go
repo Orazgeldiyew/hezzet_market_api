@@ -73,3 +73,17 @@ func (h *Handler) List(c *gin.Context) {
 
 	response.List(c, items, page.Page, page.Limit, page.Offset, total)
 }
+
+// Stats godoc
+// @Summary      Audit-log health stats
+// @Description  Returns counters useful for spotting silent audit loss.
+// @Tags         AuditLog
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  response.APIResponse
+// @Router       /api/audit-logs/stats [get]
+func (h *Handler) Stats(c *gin.Context) {
+	response.OK(c, gin.H{
+		"failed_writes": h.repo.FailedWrites(),
+	})
+}

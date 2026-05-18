@@ -60,11 +60,15 @@ func (h *Handler) Register(c *gin.Context) {
 		c.Error(err)
 		return
 	}
+	c.Set("audit_username", req.Username)
+
 	out, err := h.svc.Register(c.Request.Context(), req)
 	if err != nil {
 		c.Error(err)
 		return
 	}
+	c.Set("user_id", out.ID)
+	c.Set("username", out.Username)
 	response.Created(c, out)
 }
 
@@ -85,11 +89,18 @@ func (h *Handler) Login(c *gin.Context) {
 		c.Error(err)
 		return
 	}
+	// Capture the attempted username so audit middleware can log it
+	// even when authentication fails.
+	c.Set("audit_username", req.Username)
+
 	out, err := h.svc.Login(c.Request.Context(), req)
 	if err != nil {
 		c.Error(err)
 		return
 	}
+	// Surface the resolved user to the audit middleware on success.
+	c.Set("user_id", out.User.ID)
+	c.Set("username", out.User.Username)
 	response.OK(c, out)
 }
 
@@ -115,6 +126,9 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 		c.Error(err)
 		return
 	}
+	// The service doesn't return the resolved user — for audit purposes the
+	// IP, request_id, and TOKEN_REFRESH action are enough to correlate
+	// suspicious refresh patterns even with user_id=0.
 	response.OK(c, out)
 }
 
