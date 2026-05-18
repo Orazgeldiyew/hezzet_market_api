@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -125,29 +126,39 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (InventoryDetail, er
 }
 
 func (r *Repository) List(ctx context.Context, warehouseID *int64, limit, offset int) ([]InventoryCount, int, error) {
+	// Build args dynamically so we don't pass a nil warehouseID into a query
+	// that has no $1 placeholder — pgx rejects that as "extra arguments".
 	where := "WHERE 1=1"
+	countArgs := []any{}
+	listArgs := []any{}
 	if warehouseID != nil {
 		where += " AND ic.warehouse_id = $1"
+		countArgs = append(countArgs, *warehouseID)
+		listArgs = append(listArgs, *warehouseID)
 	}
+	listArgs = append(listArgs, limit, offset)
+
+	// LIMIT/OFFSET placeholders shift by one if a warehouse filter is present.
+	limitIdx := len(listArgs) - 1
+	offsetIdx := len(listArgs)
+	listSQL := `
+		SELECT ic.id, ic.warehouse_id, w.name, ic.status, ic.note,
+		       ic.created_by, ic.confirmed_by, ic.created_at, ic.confirmed_at
+		FROM inventory_counts ic
+		JOIN warehouses w ON w.id = ic.warehouse_id
+		` + where + `
+		ORDER BY ic.created_at DESC
+		LIMIT $` + strconv.Itoa(limitIdx) + ` OFFSET $` + strconv.Itoa(offsetIdx)
 
 	var total int
 	err := r.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM inventory_counts ic `+where,
-		warehouseID,
+		`SELECT COUNT(*) FROM inventory_counts ic `+where, countArgs...,
 	).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	rows, err := r.db.Query(ctx, `
-		SELECT ic.id, ic.warehouse_id, w.name, ic.status, ic.note,
-		       ic.created_by, ic.confirmed_by, ic.created_at, ic.confirmed_at
-		FROM inventory_counts ic
-		JOIN warehouses w ON w.id = ic.warehouse_id
-		`+where+`
-		ORDER BY ic.created_at DESC
-		LIMIT $2 OFFSET $3
-	`, warehouseID, limit, offset)
+	rows, err := r.db.Query(ctx, listSQL, listArgs...)
 	if err != nil {
 		return nil, 0, err
 	}

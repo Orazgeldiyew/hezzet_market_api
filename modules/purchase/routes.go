@@ -5,11 +5,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/auditlog"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository) {
-	repo := NewRepository(db)
+// RegisterRoutes wires purchase endpoints. auditRepo is used by ReceivePO to
+// emit per-product PRICE_CHANGE_VIA_PO audit entries when receive propagates
+// new prices to the products table.
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repository, auditRepo *auditlog.Repository) {
+	repo := NewRepository(db, auditRepo)
 	svc := NewService(repo, finRepo)
 	h := NewHandler(svc)
 

@@ -3,6 +3,7 @@ package shift
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -188,25 +189,36 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Shift, error) {
 }
 
 func (r *Repository) List(ctx context.Context, userID *int64, registerID *int64, status *string, limit, offset int) ([]Shift, int, error) {
+	// Build placeholders dynamically so we never pass unused args (pgx rejects
+	// "extra args"). The original code hard-coded $1/$2/$3 even when filters
+	// were nil — that's the source of the 500 on unfiltered queries.
 	where := `WHERE 1=1`
+	args := []any{}
+	add := func(clause string, v any) {
+		args = append(args, v)
+		where += ` AND ` + clause + ` $` + strconv.Itoa(len(args))
+	}
 	if userID != nil {
-		where += ` AND sh.user_id = $1`
+		add("sh.user_id =", *userID)
 	}
 	if registerID != nil {
-		where += ` AND sh.register_id = $2`
+		add("sh.register_id =", *registerID)
 	}
 	if status != nil {
-		where += ` AND sh.status = $3`
+		add("sh.status =", *status)
 	}
 
 	var total int
-	err := r.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM shifts sh `+where,
-		userID, registerID, status,
-	).Scan(&total)
-	if err != nil {
+	if err := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM shifts sh `+where, args...,
+	).Scan(&total); err != nil {
 		return nil, 0, err
 	}
+
+	listArgs := append([]any{}, args...)
+	listArgs = append(listArgs, limit, offset)
+	limitIdx := strconv.Itoa(len(args) + 1)
+	offsetIdx := strconv.Itoa(len(args) + 2)
 
 	rows, err := r.db.Query(ctx, `
 		SELECT sh.id, sh.register_id, cr.name, sh.user_id, u.username,
@@ -219,8 +231,8 @@ func (r *Repository) List(ctx context.Context, userID *int64, registerID *int64,
 		JOIN users u ON u.id = sh.user_id
 		`+where+`
 		ORDER BY sh.opened_at DESC
-		LIMIT $4 OFFSET $5
-	`, userID, registerID, status, limit, offset)
+		LIMIT $`+limitIdx+` OFFSET $`+offsetIdx,
+		listArgs...)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -156,13 +156,13 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	// ── Products & Categories ──
 	productsGroup := mod("products")
-	category.RegisterRoutes(productsGroup, deps.DB)
-	product.RegisterRoutes(productsGroup, deps.DB, deps.Cfg.UploadsDir, deps.Cfg.PublicBaseURL)
+	category.RegisterRoutes(productsGroup, deps.DB, permRepo)
+	product.RegisterRoutes(productsGroup, deps.DB, deps.Cfg.UploadsDir, deps.Cfg.PublicBaseURL, permRepo)
 
 	// ── Stock & Warehouses & Suppliers ──
 	stockGroup := mod("stock")
-	supplier.RegisterRoutes(stockGroup, deps.DB)
-	warehouse.RegisterRoutes(stockGroup, deps.DB)
+	supplier.RegisterRoutes(stockGroup, deps.DB, permRepo)
+	warehouse.RegisterRoutes(stockGroup, deps.DB, permRepo)
 	stock.RegisterRoutes(stockGroup, deps.DB, deps.NotifSvc)
 
 	// ── Customers ──
@@ -184,7 +184,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	saleRepo := sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo, customerRepo, permRepo)
 
 	// ── Purchases ──
-	purchase.RegisterRoutes(mod("purchases"), deps.DB, finRepo)
+	purchase.RegisterRoutes(mod("purchases"), deps.DB, finRepo, auditRepo)
 
 	// ── Reports & Audit ──
 	reportsGroup := mod("reports")
@@ -198,7 +198,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	favorite.RegisterRoutes(api, deps.DB)
 
 	// ── Inventory (stock counting) ──
-	inventory.RegisterRoutes(stockGroup, deps.DB, finRepo)
+	inventory.RegisterRoutes(stockGroup, deps.DB, finRepo, permRepo)
 
 	// ── Customer Debts ──
 	debtRepo := customerdebt.RegisterRoutes(api, deps.DB)

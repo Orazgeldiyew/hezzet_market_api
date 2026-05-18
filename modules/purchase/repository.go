@@ -2,6 +2,7 @@ package purchase
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -11,15 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/auditlog"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db        *pgxpool.Pool
+	auditRepo *auditlog.Repository
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
+func NewRepository(db *pgxpool.Pool, auditRepo *auditlog.Repository) *Repository {
+	return &Repository{db: db, auditRepo: auditRepo}
+}
 
 
 
@@ -244,7 +249,21 @@ func (r *Repository) ReceivePO(
 		//   - purchase_price always reflects the most recent buy cost
 		//   - sale_price updates only when the PO line set it explicitly (>0),
 		//     so PO lines without a sale price leave the catalog price alone.
+		//
+		// Read old prices first so we can write an audit_logs entry showing
+		// the before/after diff — the audit middleware doesn't see these
+		// internal UPDATEs, only the receive HTTP call itself.
+		var oldPurchase, oldSale int64
+		var productName string
+		if err = tx.QueryRow(ctx, `
+			SELECT purchase_price, sale_price, name FROM products WHERE id = $1
+		`, it.productID).Scan(&oldPurchase, &oldSale, &productName); err != nil {
+			return PurchaseOrder{}, err
+		}
+
+		newSale := oldSale
 		if it.salePriceCents > 0 {
+			newSale = it.salePriceCents
 			_, err = tx.Exec(ctx, `
 				UPDATE products
 				SET purchase_price = $2,
@@ -263,6 +282,12 @@ func (r *Repository) ReceivePO(
 		if err != nil {
 			return PurchaseOrder{}, err
 		}
+
+		// Emit a per-product audit entry when anything actually changed.
+		// Skipped when prices match — avoids audit-log noise on re-receives
+		// of an unchanged PO.
+		r.emitPriceChangeAudit(ctx, it.productID, productName, poID, userID,
+			oldPurchase, it.unitCostCents, oldSale, newSale)
 	}
 
 	// 4. Update PO status to received
@@ -592,4 +617,55 @@ func (r *Repository) DebtSummary(ctx context.Context) ([]SupplierDebtRow, error)
 		out = []SupplierDebtRow{}
 	}
 	return out, rows.Err()
+}
+
+// emitPriceChangeAudit writes a per-product audit_logs entry when ReceivePO
+// changes purchase_price or sale_price on the products table. The middleware
+// only sees the outer HTTP call (PO_RECEIVE) and would miss these internal
+// UPDATEs, so we synthesize the entry here.
+//
+// Fire-and-forget: errors are swallowed by the auditlog repository itself
+// (it logs to stderr and bumps the failed-writes counter).
+func (r *Repository) emitPriceChangeAudit(
+	ctx context.Context,
+	productID int64, productName string,
+	poID, userID int64,
+	oldPurchase, newPurchase, oldSale, newSale int64,
+) {
+	if r.auditRepo == nil {
+		return
+	}
+	if oldPurchase == newPurchase && oldSale == newSale {
+		return // nothing actually changed
+	}
+
+	oldVal := map[string]any{
+		"purchase_price": oldPurchase,
+		"sale_price":     oldSale,
+	}
+	newVal := map[string]any{
+		"purchase_price": newPurchase,
+		"sale_price":     newSale,
+	}
+	// Stash product name in the "before" snapshot so the frontend diff view
+	// shows what was changed without an extra lookup.
+	oldVal["product_name"] = productName
+	newVal["product_name"] = productName
+
+	oldRaw, _ := json.Marshal(oldVal)
+	newRaw, _ := json.Marshal(newVal)
+
+	entityID := strconv.FormatInt(productID, 10)
+	path := "/api/purchases/" + strconv.FormatInt(poID, 10) + "/receive"
+
+	r.auditRepo.Create(ctx, &auditlog.AuditLog{
+		UserID:     userID,
+		Action:     "PRODUCT_PRICE_CHANGE_VIA_PO",
+		EntityType: "product",
+		EntityID:   &entityID,
+		Method:     "POST",
+		Path:       path,
+		OldValue:   oldRaw,
+		NewValue:   newRaw,
+	})
 }

@@ -7,15 +7,20 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir, publicBaseURL string) {
+// RegisterRoutes wires product endpoints behind per-action permissions so
+// admins can configure who can edit prices, delete catalog rows, etc.
+// permChecker is the same shared checker used by sales/purchases — it reads
+// the role_permissions table and supports the standard admin bypass.
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir, publicBaseURL string, permChecker middleware.PermissionChecker) {
 	repo := NewRepository(db, publicBaseURL)
 	stock := NewStockRepository(db)
 	svc := NewService(repo, stock, uploadsDir)
 	h := NewHandler(svc)
 
-	// Read: operator, cashier, manager (admin bypass)
+	// Reads gated on products:view (set on the parent group already; explicit
+	// here for clarity and so sub-routes inherit the same check).
 	read := rg.Group("/products")
-	read.Use(middleware.RequireRoles("operator", "cashier", "manager"))
+	read.Use(middleware.RequirePermission(permChecker, "products", "view"))
 	{
 		read.GET("", h.List)
 		read.GET("/by-barcode/:code", h.GetByBarcode)
@@ -24,22 +29,21 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir, publicBas
 		read.GET("/:id/categories", h.GetCategories)
 	}
 
-	// Write: operator (admin bypass)
+	// Per-action writes — each route requires the action that matches its
+	// intent so a role can be granted, say, "update" without "delete".
 	write := rg.Group("/products")
-	write.Use(middleware.RequireRoles("operator"))
 	{
-		write.POST("", h.Create)
-		write.PATCH("/:id", h.Update)
-		write.DELETE("/:id", h.Delete)
-		write.PUT("/:id/categories", h.SetCategories)
-		write.DELETE("/:id/categories/:categoryId", h.RemoveCategory)
-		write.POST("/:id/photo", h.UploadPhoto)
+		write.POST("", middleware.RequirePermission(permChecker, "products", "create"), h.Create)
+		write.PATCH("/:id", middleware.RequirePermission(permChecker, "products", "update"), h.Update)
+		write.DELETE("/:id", middleware.RequirePermission(permChecker, "products", "delete"), h.Delete)
+		write.PUT("/:id/categories", middleware.RequirePermission(permChecker, "products", "update"), h.SetCategories)
+		write.DELETE("/:id/categories/:categoryId", middleware.RequirePermission(permChecker, "products", "update"), h.RemoveCategory)
+		write.POST("/:id/photo", middleware.RequirePermission(permChecker, "products", "update"), h.UploadPhoto)
 	}
 
-	// Price history: manager/admin only
-	priceHistory := rg.Group("/products")
-	priceHistory.Use(middleware.RequireRoles("manager"))
-	{
-		priceHistory.GET("/:id/price-history", h.GetPriceHistory)
-	}
+	// Price history is a sensitive view (shows who changed what), so it uses
+	// its own "history" action — defaults to false for most roles.
+	rg.GET("/products/:id/price-history",
+		middleware.RequirePermission(permChecker, "products", "history"),
+		h.GetPriceHistory)
 }

@@ -108,6 +108,9 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 }
 
 func (r *Repository) Update(ctx context.Context, id int, req UpdateRequest) (Supplier, error) {
+	// RETURNING list must match the Scan destinations exactly. The previous
+	// version omitted user_id from RETURNING but tried to scan it, causing a
+	// 500 on every PATCH.
 	q := `
 		UPDATE suppliers SET
 			name = COALESCE($1, name),
@@ -116,7 +119,7 @@ func (r *Repository) Update(ctx context.Context, id int, req UpdateRequest) (Sup
 			address = COALESCE($4, address),
 			is_active = COALESCE($5, is_active)
 		WHERE id=$6
-		RETURNING id, name, phone, email, address, is_active, created_at
+		RETURNING id, user_id, name, phone, email, address, is_active, created_at
 	`
 	var s Supplier
 	err := r.db.QueryRow(ctx, q,

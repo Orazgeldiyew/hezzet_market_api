@@ -7,19 +7,19 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, permChecker middleware.PermissionChecker) {
 	repo := NewRepository(db)
 	svc := NewService(repo)
 	h := NewHandler(svc)
 
-	// All supplier endpoints: operator (admin bypass)
+	// Per-action permissions. Previously the whole module was operator-only,
+	// which silently blocked manager even from reading the supplier list.
 	g := rg.Group("/suppliers")
-	g.Use(middleware.RequireRoles("operator"))
 	{
-		g.POST("", h.Create)
-		g.GET("", middleware.PaginationMiddleware(), h.List)
-		g.GET("/:id", h.Get)
-		g.PATCH("/:id", h.Update)
-		g.DELETE("/:id", h.Delete)
+		g.GET("", middleware.RequirePermission(permChecker, "suppliers", "view"), middleware.PaginationMiddleware(), h.List)
+		g.GET("/:id", middleware.RequirePermission(permChecker, "suppliers", "view"), h.Get)
+		g.POST("", middleware.RequirePermission(permChecker, "suppliers", "create"), h.Create)
+		g.PATCH("/:id", middleware.RequirePermission(permChecker, "suppliers", "update"), h.Update)
+		g.DELETE("/:id", middleware.RequirePermission(permChecker, "suppliers", "delete"), h.Delete)
 	}
 }
