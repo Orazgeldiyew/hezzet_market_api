@@ -109,8 +109,13 @@ func AuditMiddleware(repo *Repository) gin.HandlerFunc {
 			return
 		}
 
+		// ErrorMiddleware runs AFTER us in the middleware chain, so by the time
+		// audit fires the response body and status code may not be written yet.
+		// Trust c.Errors (handler-reported failures) over c.Writer.Status() —
+		// otherwise a handler that calls c.Error(...) and returns shows up with
+		// status=200 here and misleads the audit log.
 		status := c.Writer.Status()
-		isSuccess := status >= 200 && status < 300
+		isSuccess := status >= 200 && status < 300 && len(c.Errors) == 0
 
 		uidVal, _ := c.Get("user_id")
 		uid, _ := uidVal.(int64)
