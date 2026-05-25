@@ -10340,6 +10340,12 @@ const docTemplate = `{
                 "worker_id"
             ],
             "properties": {
+                "debt_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "period": {
                     "type": "string"
                 },

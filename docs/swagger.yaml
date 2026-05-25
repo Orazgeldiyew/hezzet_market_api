@@ -619,6 +619,10 @@ definitions:
     type: object
   payroll.CalculateRequest:
     properties:
+      debt_ids:
+        items:
+          type: integer
+        type: array
       period:
         type: string
       worker_id:
