@@ -39,6 +39,10 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir, publicBas
 		write.PUT("/:id/categories", middleware.RequirePermission(permChecker, "products", "update"), h.SetCategories)
 		write.DELETE("/:id/categories/:categoryId", middleware.RequirePermission(permChecker, "products", "update"), h.RemoveCategory)
 		write.POST("/:id/photo", middleware.RequirePermission(permChecker, "products", "update"), h.UploadPhoto)
+		// Bulk Excel import — gated on the dedicated "import" action so a role
+		// can be granted update-individual rights without giving them the
+		// power to overwrite the whole catalog from a spreadsheet.
+		write.POST("/import", middleware.RequirePermission(permChecker, "products", "import"), ImportHandler(db))
 	}
 
 	// Price history is a sensitive view (shows who changed what), so it uses

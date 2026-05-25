@@ -66,4 +66,5 @@ type MatrixEntry struct {
 	Return   bool   `json:"return"`
 	Discount bool   `json:"discount"`
 	History  bool   `json:"history"`
+	Import   bool   `json:"import"`
 }

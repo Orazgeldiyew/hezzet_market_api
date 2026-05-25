@@ -111,6 +111,71 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx pgx.Tx, t *Transa
 	)
 }
 
+// FindByIdempotencyKey returns the existing transaction created with the given
+// key, or (nil, nil) if no match. Used by manual-transaction flow to deduplicate
+// double-clicks and network retries.
+func (r *Repository) FindByIdempotencyKey(ctx context.Context, key string) (*Transaction, error) {
+	if key == "" {
+		return nil, nil
+	}
+	var t Transaction
+	err := r.db.QueryRow(ctx,
+		`SELECT `+transactionCols+` FROM transactions WHERE idempotency_key = $1`, key,
+	).Scan(
+		&t.ID, &t.PaymentTypeID, &t.Reason, &t.Status, &t.AmountCents, &t.Type,
+		&t.TablePaymentID, &t.WarehouseItemDetailID, &t.RelatedTable, &t.RelatedID,
+		&t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
+// CreateManualTransactionWithKey is the idempotent variant of CreateTransaction
+// used for manual income/expense entries. If a row with the same idempotency_key
+// already exists, the existing row is returned and no new row is inserted.
+func (r *Repository) CreateManualTransactionWithKey(ctx context.Context, tx pgx.Tx, t *Transaction, key string) (alreadyExisted bool, err error) {
+	if key == "" {
+		// Backward compatibility: fall through to a plain insert.
+		return false, r.CreateTransaction(ctx, tx, t)
+	}
+	err = tx.QueryRow(ctx, `
+		INSERT INTO transactions
+			(payment_type_id, reason, status, amount_cents, type,
+			 table_payment_id, warehouse_item_detail_id, related_table, related_id, created_by, idempotency_key)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+		RETURNING `+transactionCols,
+		t.PaymentTypeID, t.Reason, t.Status, t.AmountCents, t.Type,
+		t.TablePaymentID, t.WarehouseItemDetailID, t.RelatedTable, t.RelatedID, t.CreatedBy, key,
+	).Scan(
+		&t.ID, &t.PaymentTypeID, &t.Reason, &t.Status, &t.AmountCents, &t.Type,
+		&t.TablePaymentID, &t.WarehouseItemDetailID, &t.RelatedTable, &t.RelatedID,
+		&t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
+	)
+	if err == nil {
+		return false, nil
+	}
+	if err != pgx.ErrNoRows {
+		return false, err
+	}
+	// ON CONFLICT skipped the insert — load the original row outside the tx
+	// (we can't run a second SELECT in the same tx after a failed RETURNING).
+	existing, ferr := r.FindByIdempotencyKey(ctx, key)
+	if ferr != nil {
+		return false, ferr
+	}
+	if existing == nil {
+		return false, fmt.Errorf("idempotency_key not found after conflict")
+	}
+	*t = *existing
+	return true, nil
+}
+
 func (r *Repository) CreatePayment(ctx context.Context, tx pgx.Tx, p *Payment) error {
 	return tx.QueryRow(ctx, `
 		INSERT INTO payments (transaction_id, payment_type_id, amount_cents, note, created_by)

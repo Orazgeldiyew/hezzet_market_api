@@ -101,6 +101,23 @@ func (h *Handler) ListSales(c *gin.Context) {
 			createdBy = &n
 		}
 	}
+
+	// Role-based filter: a cashier can only ever see their own sales, even if
+	// they pass a different created_by in the query. Manager/operator/admin
+	// retain full visibility for reporting purposes.
+	rolesVal, _ := c.Get("roles")
+	callerRoles, _ := rolesVal.([]string)
+	isPrivileged := false
+	for _, r := range callerRoles {
+		if r == "manager" || r == "operator" || r == "admin" {
+			isPrivileged = true
+			break
+		}
+	}
+	if !isPrivileged {
+		uid := extractUserID(c)
+		createdBy = &uid
+	}
 	if v := c.Query("status"); v != "" {
 		status = &v
 	}
@@ -225,7 +242,12 @@ func (h *Handler) GetSale(c *gin.Context) {
 		return
 	}
 
-	out, err := h.svc.GetSale(c.Request.Context(), id)
+	uid := extractUserID(c)
+	rolesVal, _ := c.Get("roles")
+	roles, _ := rolesVal.([]string)
+	privileged := middleware.IsPrivileged(roles)
+
+	out, err := h.svc.GetSale(c.Request.Context(), id, uid, privileged)
 	if err != nil {
 		c.Error(err)
 		return

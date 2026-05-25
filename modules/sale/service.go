@@ -77,8 +77,10 @@ func (s *Service) ConfirmSale(ctx context.Context, saleID int64, req ConfirmSale
 		return SaleDetail{}, apperr.Internal(err)
 	}
 
-	// Fetch full detail (items + txn ID)
-	detail, err := s.GetSale(ctx, saleID)
+	// Fetch full detail (items + txn ID). The internal call is privileged —
+	// we already authorized this user to confirm the sale, returning the
+	// detail to them is consistent.
+	detail, err := s.GetSale(ctx, saleID, userID, true)
 	if err != nil {
 		return detail, err
 	}
@@ -140,13 +142,22 @@ func (s *Service) TransferDraft(ctx context.Context, saleID, currentUserID, newC
 	return nil
 }
 
-func (s *Service) GetSale(ctx context.Context, id int64) (SaleDetail, error) {
+// GetSale loads a sale with ownership enforcement: a non-privileged caller
+// (cashier) can only fetch sales they themselves created. Privileged callers
+// (admin/manager/operator) see everything for reporting.
+func (s *Service) GetSale(ctx context.Context, id, callerID int64, privileged bool) (SaleDetail, error) {
 	sale, items, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return SaleDetail{}, apperr.NotFound("SALE_NOT_FOUND", "sale not found")
 		}
 		return SaleDetail{}, apperr.Internal(err)
+	}
+
+	if !privileged && sale.CreatedBy != nil && *sale.CreatedBy != callerID {
+		// Return a generic NotFound instead of Forbidden so a cashier can't
+		// confirm that an arbitrary ID exists by getting back a different code.
+		return SaleDetail{}, apperr.NotFound("SALE_NOT_FOUND", "sale not found")
 	}
 
 	txnID, err := s.repo.GetTransactionIDBySaleID(ctx, id)

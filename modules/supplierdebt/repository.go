@@ -25,7 +25,7 @@ func (r *Repository) CreateDebt(ctx context.Context, supplierID int64, purchaseI
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO supplier_debts (supplier_id, purchase_id, amount_cents, remaining_cents, note, created_by)
 		VALUES ($1, $2, $3, $3, $4, $5)
-		RETURNING id, supplier_id, purchase_id, amount_cents, remaining_cents, status, note, created_by, created_at, updated_at
+		RETURNING id, supplier_id, purchase_id, amount_cents, remaining_cents, status, COALESCE(note,''), created_by, created_at, updated_at
 	`, supplierID, purchaseID, amountCents, n, createdBy).Scan(
 		&d.ID, &d.SupplierID, &d.PurchaseID, &d.AmountCents, &d.RemainingCents,
 		&d.Status, &d.Note, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
@@ -37,7 +37,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (SupplierDebt, error
 	var d SupplierDebt
 	err := r.db.QueryRow(ctx, `
 		SELECT sd.id, sd.supplier_id, s.name, sd.purchase_id, sd.amount_cents, sd.remaining_cents,
-		       sd.status, sd.note, sd.created_by, COALESCE(u.full_name, ''), sd.created_at, sd.updated_at
+		       sd.status, COALESCE(sd.note,''), sd.created_by, COALESCE(u.full_name, ''), sd.created_at, sd.updated_at
 		FROM supplier_debts sd
 		JOIN suppliers s ON s.id = sd.supplier_id
 		LEFT JOIN users u ON u.id = sd.created_by
@@ -66,7 +66,7 @@ func (r *Repository) ListBySupplier(ctx context.Context, supplierID int64, onlyO
 
 	rows, err := r.db.Query(ctx, `
 		SELECT sd.id, sd.supplier_id, s.name, sd.purchase_id, sd.amount_cents, sd.remaining_cents,
-		       sd.status, sd.note, sd.created_by, COALESCE(u.full_name, ''), sd.created_at, sd.updated_at
+		       sd.status, COALESCE(sd.note,''), sd.created_by, COALESCE(u.full_name, ''), sd.created_at, sd.updated_at
 		FROM supplier_debts sd
 		JOIN suppliers s ON s.id = sd.supplier_id
 		LEFT JOIN users u ON u.id = sd.created_by
@@ -91,7 +91,7 @@ func (r *Repository) ListAll(ctx context.Context, limit, offset int) ([]Supplier
 
 	rows, err := r.db.Query(ctx, `
 		SELECT sd.id, sd.supplier_id, s.name, sd.purchase_id, sd.amount_cents, sd.remaining_cents,
-		       sd.status, sd.note, sd.created_by, COALESCE(u.full_name, ''), sd.created_at, sd.updated_at
+		       sd.status, COALESCE(sd.note,''), sd.created_by, COALESCE(u.full_name, ''), sd.created_at, sd.updated_at
 		FROM supplier_debts sd
 		JOIN suppliers s ON s.id = sd.supplier_id
 		LEFT JOIN users u ON u.id = sd.created_by
@@ -137,7 +137,7 @@ func (r *Repository) Pay(ctx context.Context, debtID int64, req PayRequest, user
 	err = tx.QueryRow(ctx, `
 		INSERT INTO supplier_debt_payments (debt_id, amount_cents, payment_type_id, note, created_by)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, debt_id, amount_cents, payment_type_id, note, created_by, created_at
+		RETURNING id, debt_id, amount_cents, payment_type_id, COALESCE(note,''), created_by, created_at
 	`, debtID, req.AmountCents, req.PaymentTypeID, note, userID).Scan(
 		&payment.ID, &payment.DebtID, &payment.AmountCents, &payment.PaymentTypeID,
 		&payment.Note, &payment.CreatedBy, &payment.CreatedAt,
@@ -156,7 +156,7 @@ func (r *Repository) Pay(ctx context.Context, debtID int64, req PayRequest, user
 	err = tx.QueryRow(ctx, `
 		UPDATE supplier_debts SET remaining_cents = $2, status = $3, updated_at = now()
 		WHERE id = $1
-		RETURNING id, supplier_id, purchase_id, amount_cents, remaining_cents, status, note, created_by, created_at, updated_at
+		RETURNING id, supplier_id, purchase_id, amount_cents, remaining_cents, status, COALESCE(note,''), created_by, created_at, updated_at
 	`, debtID, newRemaining, newStatus).Scan(
 		&debt.ID, &debt.SupplierID, &debt.PurchaseID, &debt.AmountCents, &debt.RemainingCents,
 		&debt.Status, &debt.Note, &debt.CreatedBy, &debt.CreatedAt, &debt.UpdatedAt,
@@ -173,7 +173,7 @@ func (r *Repository) Pay(ctx context.Context, debtID int64, req PayRequest, user
 
 func (r *Repository) GetPayments(ctx context.Context, debtID int64) ([]DebtPayment, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT dp.id, dp.debt_id, dp.amount_cents, dp.payment_type_id, dp.note,
+		SELECT dp.id, dp.debt_id, dp.amount_cents, dp.payment_type_id, COALESCE(dp.note,''),
 		       dp.created_by, COALESCE(u.full_name, ''), dp.created_at
 		FROM supplier_debt_payments dp
 		LEFT JOIN users u ON u.id = dp.created_by

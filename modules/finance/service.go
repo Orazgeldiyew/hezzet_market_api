@@ -96,6 +96,18 @@ func (s *Service) CreateManual(ctx context.Context, req CreateManualRequest, use
 		}
 	}
 
+	// Fast path: if the frontend supplied an idempotency_key and the same
+	// request already succeeded, return that transaction without trying again.
+	// Saves a wasted INSERT-then-rollback for the common double-click case.
+	if req.IdempotencyKey != "" {
+		if existing, err := s.repo.FindByIdempotencyKey(ctx, req.IdempotencyKey); err != nil {
+			return TransactionDetail{}, apperr.Internal(err)
+		} else if existing != nil {
+			payments, _ := s.repo.GetPayments(ctx,existing.ID)
+			return TransactionDetail{Transaction: *existing, Payments: payments}, nil
+		}
+	}
+
 	tx, err := s.repo.BeginTx(ctx)
 	if err != nil {
 		return TransactionDetail{}, apperr.Internal(err)
@@ -112,8 +124,16 @@ func (s *Service) CreateManual(ctx context.Context, req CreateManualRequest, use
 		CreatedBy:    uid,
 	}
 
-	if err := s.repo.CreateTransaction(ctx, tx, &txn); err != nil {
+	existed, err := s.repo.CreateManualTransactionWithKey(ctx, tx, &txn, req.IdempotencyKey)
+	if err != nil {
 		return TransactionDetail{}, apperr.Internal(err)
+	}
+	if existed {
+		// Another concurrent request won the race; reuse its transaction and
+		// skip the rest (initial payment was created by that request too).
+		payments, _ := s.repo.GetPayments(ctx,txn.ID)
+		_ = tx.Rollback(ctx)
+		return TransactionDetail{Transaction: txn, Payments: payments}, nil
 	}
 
 	var payments []Payment

@@ -47,6 +47,11 @@ type CreateManualRequest struct {
 	PaymentTypeID *int64  `json:"payment_type_id"`
 	PaymentAmount *int64  `json:"payment_amount"`
 	PaymentNote   *string `json:"payment_note"`
+	// IdempotencyKey is a client-supplied UUID generated when the form opens.
+	// If the same key is submitted twice (double-click, network retry), the
+	// backend returns the first transaction instead of creating a duplicate.
+	// Optional for backward compatibility, but the frontend should always send it.
+	IdempotencyKey string `json:"idempotency_key" binding:"omitempty,max=64"`
 }
 
 type AddPaymentRequest struct {

@@ -320,7 +320,8 @@ func (r *Repository) MatrixForRoles(ctx context.Context, roleCodes []string) ([]
 			   COALESCE(bool_or(rp.action = 'transfer' AND rp.granted), false) AS can_transfer,
 			   COALESCE(bool_or(rp.action = 'return'   AND rp.granted), false) AS can_return,
 			   COALESCE(bool_or(rp.action = 'discount' AND rp.granted), false) AS can_discount,
-			   COALESCE(bool_or(rp.action = 'history'  AND rp.granted), false) AS can_history
+			   COALESCE(bool_or(rp.action = 'history'  AND rp.granted), false) AS can_history,
+			   COALESCE(bool_or(rp.action = 'import'   AND rp.granted), false) AS can_import
 		FROM role_permissions rp
 		JOIN roles ro ON ro.id = rp.role_id
 		WHERE ro.code = ANY($1)
@@ -335,7 +336,7 @@ func (r *Repository) MatrixForRoles(ctx context.Context, roleCodes []string) ([]
 	var out []MatrixEntry
 	for rows.Next() {
 		var m MatrixEntry
-		if err := rows.Scan(&m.Module, &m.View, &m.Create, &m.Update, &m.Delete, &m.Transfer, &m.Return, &m.Discount, &m.History); err != nil {
+		if err := rows.Scan(&m.Module, &m.View, &m.Create, &m.Update, &m.Delete, &m.Transfer, &m.Return, &m.Discount, &m.History, &m.Import); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -357,7 +358,8 @@ func (r *Repository) Matrix(ctx context.Context) ([]MatrixEntry, error) {
 			   COALESCE(bool_or(rp.action = 'transfer' AND rp.granted), false) AS can_transfer,
 			   COALESCE(bool_or(rp.action = 'return'   AND rp.granted), false) AS can_return,
 			   COALESCE(bool_or(rp.action = 'discount' AND rp.granted), false) AS can_discount,
-			   COALESCE(bool_or(rp.action = 'history'  AND rp.granted), false) AS can_history
+			   COALESCE(bool_or(rp.action = 'history'  AND rp.granted), false) AS can_history,
+			   COALESCE(bool_or(rp.action = 'import'   AND rp.granted), false) AS can_import
 		FROM role_permissions rp
 		JOIN roles ro ON ro.id = rp.role_id
 		GROUP BY ro.id, ro.code, ro.name, rp.module
@@ -371,7 +373,7 @@ func (r *Repository) Matrix(ctx context.Context) ([]MatrixEntry, error) {
 	var out []MatrixEntry
 	for rows.Next() {
 		var m MatrixEntry
-		if err := rows.Scan(&m.RoleID, &m.RoleCode, &m.RoleName, &m.Module, &m.View, &m.Create, &m.Update, &m.Delete, &m.Transfer, &m.Return, &m.Discount, &m.History); err != nil {
+		if err := rows.Scan(&m.RoleID, &m.RoleCode, &m.RoleName, &m.Module, &m.View, &m.Create, &m.Update, &m.Delete, &m.Transfer, &m.Return, &m.Discount, &m.History, &m.Import); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

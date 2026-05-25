@@ -78,6 +78,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/audit-logs/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns counters useful for spotting silent audit loss.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AuditLog"
+                ],
+                "summary": "Audit-log health stats",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/auth/login": {
             "post": {
                 "description": "Authenticate with username and password",
@@ -2245,6 +2270,110 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/notifications/settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the runtime-configurable notification settings (digest hour, etc.).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Get notification settings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/notification.Settings"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Partial update of notification settings. admin/manager only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Update notification settings",
+                "parameters": [
+                    {
+                        "description": "fields to change",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/notification.UpdateSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/notification.Settings"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
                         }
@@ -4550,6 +4679,66 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/reports/reorder-suggestions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists products that should be reordered, sized from sales history.\nUses per-product lead_time_days and safety_stock_milli. Products\nwithout sales history fall back to the static LOW_STOCK_DEFAULT threshold.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Reorder suggestions (dynamic low-stock)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Filter by warehouse",
+                        "name": "warehouse_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/reports.ReorderSuggestion"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/reports/sales": {
             "get": {
                 "security": [
@@ -5509,6 +5698,52 @@ const docTemplate = `{
                 "responses": {}
             }
         },
+        "/api/sales/{id}/print": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Re-fires the same auto-print that runs on sale confirm. The cashier\ncan call this as many times as they like — there is no per-sale limit.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sales"
+                ],
+                "summary": "Reprint receipt to thermal printer",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Sale ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "printer not configured",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/sales/{id}/receipt": {
             "get": {
                 "security": [
@@ -5732,6 +5967,56 @@ const docTemplate = `{
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/settings/receipt/verify-delete-code": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cashier-accessible endpoint: returns whether the supplied code matches\nthe configured delete_code. Server-side compare avoids leaking the code itself.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ReceiptSettings"
+                ],
+                "summary": "Verify the delete-item code",
+                "parameters": [
+                    {
+                        "description": "Code attempt",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "code": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
                         }
                     },
                     "400": {
@@ -9807,6 +10092,11 @@ const docTemplate = `{
                 "amount_cents": {
                     "type": "integer"
                 },
+                "idempotency_key": {
+                    "description": "IdempotencyKey is a client-supplied UUID generated when the form opens.\nIf the same key is submitted twice (double-click, network retry), the\nbackend returns the first transaction instead of creating a duplicate.\nOptional for backward compatibility, but the frontend should always send it.",
+                    "type": "string",
+                    "maxLength": 64
+                },
                 "payment_amount": {
                     "type": "integer"
                 },
@@ -10008,6 +10298,17 @@ const docTemplate = `{
                 }
             }
         },
+        "notification.Settings": {
+            "type": "object",
+            "properties": {
+                "reorder_digest_enabled": {
+                    "type": "boolean"
+                },
+                "reorder_digest_hour": {
+                    "type": "integer"
+                }
+            }
+        },
         "notification.UpdatePhoneRequest": {
             "type": "object",
             "properties": {
@@ -10016,6 +10317,19 @@ const docTemplate = `{
                 },
                 "label": {
                     "type": "string"
+                }
+            }
+        },
+        "notification.UpdateSettingsRequest": {
+            "type": "object",
+            "properties": {
+                "reorder_digest_enabled": {
+                    "type": "boolean"
+                },
+                "reorder_digest_hour": {
+                    "type": "integer",
+                    "maximum": 23,
+                    "minimum": 0
                 }
             }
         },
@@ -10151,6 +10465,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "history": {
+                    "type": "boolean"
+                },
+                "import": {
                     "type": "boolean"
                 },
                 "module": {
@@ -10408,6 +10725,10 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "lead_time_days": {
+                    "description": "supplier delivery time (reorder-point input)",
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -10416,6 +10737,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "purchase_price": {
+                    "type": "integer"
+                },
+                "safety_stock_milli": {
+                    "description": "extra buffer on top of reorder point",
                     "type": "integer"
                 },
                 "sale_price": {
@@ -10524,11 +10849,20 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "lead_time_days": {
+                    "type": "integer",
+                    "maximum": 365,
+                    "minimum": 0
+                },
                 "name": {
                     "type": "string"
                 },
                 "purchase_price": {
                     "type": "integer"
+                },
+                "safety_stock_milli": {
+                    "type": "integer",
+                    "minimum": 0
                 },
                 "sale_price": {
                     "type": "integer"
@@ -10596,6 +10930,11 @@ const docTemplate = `{
                 "qty_milli": {
                     "type": "integer"
                 },
+                "sale_price_cents": {
+                    "description": "SalePriceCents is optional. 0 = \"don't change product.sale_price on receive\";\n\u003e0 = propagate to product.sale_price so cashiers see the new price.",
+                    "type": "integer",
+                    "minimum": 0
+                },
                 "unit_cost_cents": {
                     "type": "integer",
                     "minimum": 0
@@ -10637,7 +10976,24 @@ const docTemplate = `{
                 "delete_code": {
                     "type": "string"
                 },
+                "font_size_header": {
+                    "description": "Thermal-receipt font sizes in pixels (used by printer/html_render.go\nas @media-print overrides). Range 10–80 enforced at the DB layer.",
+                    "type": "integer"
+                },
+                "font_size_items": {
+                    "type": "integer"
+                },
+                "font_size_meta": {
+                    "type": "integer"
+                },
+                "font_size_total": {
+                    "type": "integer"
+                },
                 "footer": {
+                    "type": "string"
+                },
+                "legal_name": {
+                    "description": "Legal entity details for B2B documents (purchase invoices).",
                     "type": "string"
                 },
                 "logo_height": {
@@ -10656,6 +11012,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "shop_phone": {
+                    "type": "string"
+                },
+                "tax_id": {
                     "type": "string"
                 },
                 "template": {
@@ -10672,8 +11031,32 @@ const docTemplate = `{
                 "delete_code": {
                     "type": "string"
                 },
+                "font_size_header": {
+                    "type": "integer",
+                    "maximum": 80,
+                    "minimum": 10
+                },
+                "font_size_items": {
+                    "type": "integer",
+                    "maximum": 80,
+                    "minimum": 10
+                },
+                "font_size_meta": {
+                    "type": "integer",
+                    "maximum": 80,
+                    "minimum": 10
+                },
+                "font_size_total": {
+                    "type": "integer",
+                    "maximum": 80,
+                    "minimum": 10
+                },
                 "footer": {
                     "type": "string"
+                },
+                "legal_name": {
+                    "type": "string",
+                    "maxLength": 255
                 },
                 "logo_height": {
                     "type": "string"
@@ -10692,6 +11075,10 @@ const docTemplate = `{
                 },
                 "shop_phone": {
                     "type": "string"
+                },
+                "tax_id": {
+                    "type": "string",
+                    "maxLength": 64
                 },
                 "template": {
                     "type": "string"
@@ -10755,6 +11142,44 @@ const docTemplate = `{
                 },
                 "revenue_cents": {
                     "type": "integer"
+                }
+            }
+        },
+        "reports.ReorderSuggestion": {
+            "type": "object",
+            "properties": {
+                "avg_daily_milli": {
+                    "type": "number"
+                },
+                "current_qty_milli": {
+                    "type": "integer"
+                },
+                "days_until_stockout": {
+                    "type": "number"
+                },
+                "lead_time_days": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "product_id": {
+                    "type": "integer"
+                },
+                "reorder_point_milli": {
+                    "type": "integer"
+                },
+                "safety_stock_milli": {
+                    "type": "integer"
+                },
+                "suggested_order_milli": {
+                    "type": "integer"
+                },
+                "warehouse_id": {
+                    "type": "integer"
+                },
+                "warehouse_name": {
+                    "type": "string"
                 }
             }
         },
@@ -11667,6 +12092,10 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 255
                 },
+                "legal_name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 255,
@@ -11675,6 +12104,10 @@ const docTemplate = `{
                 "phone": {
                     "type": "string",
                     "maxLength": 50
+                },
+                "tax_id": {
+                    "type": "string",
+                    "maxLength": 64
                 },
                 "user_id": {
                     "type": "integer"
@@ -11699,10 +12132,16 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "legal_name": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
                 "phone": {
+                    "type": "string"
+                },
+                "tax_id": {
                     "type": "string"
                 },
                 "user_id": {
@@ -11723,6 +12162,10 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "legal_name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 255,
@@ -11731,6 +12174,10 @@ const docTemplate = `{
                 "phone": {
                     "type": "string",
                     "maxLength": 50
+                },
+                "tax_id": {
+                    "type": "string",
+                    "maxLength": 64
                 }
             }
         },
@@ -12183,6 +12630,8 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Market backend (products, stock, income, sales)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
+	LeftDelim:        "{{",
+	RightDelim:       "}}",
 }
 
 func init() {

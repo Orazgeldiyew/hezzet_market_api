@@ -122,9 +122,19 @@ func (r *Repository) CreateSale(
 	}
 
 	for i, item := range req.Items {
-		if _, ok := priceMap[item.ProductID]; !ok {
+		sp, ok := priceMap[item.ProductID]
+		if !ok {
 			return Sale{}, nil, apperr.Validation(
 				fmt.Sprintf("product %d not found or inactive (item index %d)", item.ProductID, i),
+			)
+		}
+		// Block selling at zero price — bulk-imported rows start with
+		// purchase_price=0, sale_price=0 and need a human to set them in
+		// /products/edit before they can hit the till. Catches the "kassir
+		// rings up a free item" footgun.
+		if sp == 0 {
+			return Sale{}, nil, apperr.Validation(
+				fmt.Sprintf("product %d has no sale price set — please set it in /products before selling (item index %d)", item.ProductID, i),
 			)
 		}
 	}

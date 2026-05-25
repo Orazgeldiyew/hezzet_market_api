@@ -451,6 +451,14 @@ definitions:
     properties:
       amount_cents:
         type: integer
+      idempotency_key:
+        description: |-
+          IdempotencyKey is a client-supplied UUID generated when the form opens.
+          If the same key is submitted twice (double-click, network retry), the
+          backend returns the first transaction instead of creating a duplicate.
+          Optional for backward compatibility, but the frontend should always send it.
+        maxLength: 64
+        type: string
       payment_amount:
         type: integer
       payment_note:
@@ -586,12 +594,28 @@ definitions:
       phone:
         type: string
     type: object
+  notification.Settings:
+    properties:
+      reorder_digest_enabled:
+        type: boolean
+      reorder_digest_hour:
+        type: integer
+    type: object
   notification.UpdatePhoneRequest:
     properties:
       enabled:
         type: boolean
       label:
         type: string
+    type: object
+  notification.UpdateSettingsRequest:
+    properties:
+      reorder_digest_enabled:
+        type: boolean
+      reorder_digest_hour:
+        maximum: 23
+        minimum: 0
+        type: integer
     type: object
   payroll.CalculateRequest:
     properties:
@@ -682,6 +706,8 @@ definitions:
       discount:
         type: boolean
       history:
+        type: boolean
+      import:
         type: boolean
       module:
         type: string
@@ -851,12 +877,18 @@ definitions:
         type: integer
       is_active:
         type: boolean
+      lead_time_days:
+        description: supplier delivery time (reorder-point input)
+        type: integer
       name:
         type: string
       photo_url:
         description: public URL, computed
         type: string
       purchase_price:
+        type: integer
+      safety_stock_milli:
+        description: extra buffer on top of reorder point
         type: integer
       sale_price:
         type: integer
@@ -931,9 +963,16 @@ definitions:
         type: integer
       is_active:
         type: boolean
+      lead_time_days:
+        maximum: 365
+        minimum: 0
+        type: integer
       name:
         type: string
       purchase_price:
+        type: integer
+      safety_stock_milli:
+        minimum: 0
         type: integer
       sale_price:
         type: integer
@@ -974,6 +1013,12 @@ definitions:
         type: integer
       qty_milli:
         type: integer
+      sale_price_cents:
+        description: |-
+          SalePriceCents is optional. 0 = "don't change product.sale_price on receive";
+          >0 = propagate to product.sale_price so cashiers see the new price.
+        minimum: 0
+        type: integer
       unit_cost_cents:
         minimum: 0
         type: integer
@@ -1006,7 +1051,21 @@ definitions:
         type: integer
       delete_code:
         type: string
+      font_size_header:
+        description: |-
+          Thermal-receipt font sizes in pixels (used by printer/html_render.go
+          as @media-print overrides). Range 10–80 enforced at the DB layer.
+        type: integer
+      font_size_items:
+        type: integer
+      font_size_meta:
+        type: integer
+      font_size_total:
+        type: integer
       footer:
+        type: string
+      legal_name:
+        description: Legal entity details for B2B documents (purchase invoices).
         type: string
       logo_height:
         type: string
@@ -1019,6 +1078,8 @@ definitions:
       shop_name:
         type: string
       shop_phone:
+        type: string
+      tax_id:
         type: string
       template:
         type: string
@@ -1029,7 +1090,26 @@ definitions:
         type: integer
       delete_code:
         type: string
+      font_size_header:
+        maximum: 80
+        minimum: 10
+        type: integer
+      font_size_items:
+        maximum: 80
+        minimum: 10
+        type: integer
+      font_size_meta:
+        maximum: 80
+        minimum: 10
+        type: integer
+      font_size_total:
+        maximum: 80
+        minimum: 10
+        type: integer
       footer:
+        type: string
+      legal_name:
+        maxLength: 255
         type: string
       logo_height:
         type: string
@@ -1042,6 +1122,9 @@ definitions:
       shop_name:
         type: string
       shop_phone:
+        type: string
+      tax_id:
+        maxLength: 64
         type: string
       template:
         type: string
@@ -1081,6 +1164,31 @@ definitions:
         type: integer
       revenue_cents:
         type: integer
+    type: object
+  reports.ReorderSuggestion:
+    properties:
+      avg_daily_milli:
+        type: number
+      current_qty_milli:
+        type: integer
+      days_until_stockout:
+        type: number
+      lead_time_days:
+        type: integer
+      name:
+        type: string
+      product_id:
+        type: integer
+      reorder_point_milli:
+        type: integer
+      safety_stock_milli:
+        type: integer
+      suggested_order_milli:
+        type: integer
+      warehouse_id:
+        type: integer
+      warehouse_name:
+        type: string
     type: object
   reports.SalesPeriodRow:
     properties:
@@ -1694,12 +1802,18 @@ definitions:
       email:
         maxLength: 255
         type: string
+      legal_name:
+        maxLength: 255
+        type: string
       name:
         maxLength: 255
         minLength: 1
         type: string
       phone:
         maxLength: 50
+        type: string
+      tax_id:
+        maxLength: 64
         type: string
       user_id:
         type: integer
@@ -1718,9 +1832,13 @@ definitions:
         type: integer
       is_active:
         type: boolean
+      legal_name:
+        type: string
       name:
         type: string
       phone:
+        type: string
+      tax_id:
         type: string
       user_id:
         type: integer
@@ -1734,12 +1852,18 @@ definitions:
         type: string
       is_active:
         type: boolean
+      legal_name:
+        maxLength: 255
+        type: string
       name:
         maxLength: 255
         minLength: 1
         type: string
       phone:
         maxLength: 50
+        type: string
+      tax_id:
+        maxLength: 64
         type: string
     type: object
   supplierreturn.CreateItemRequest:
@@ -2077,6 +2201,21 @@ paths:
       security:
       - BearerAuth: []
       summary: List audit logs
+      tags:
+      - AuditLog
+  /api/audit-logs/stats:
+    get:
+      description: Returns counters useful for spotting silent audit loss.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Audit-log health stats
       tags:
       - AuditLog
   /api/auth/login:
@@ -3390,6 +3529,67 @@ paths:
       security:
       - BearerAuth: []
       summary: Update notification phone
+      tags:
+      - Notifications
+  /api/notifications/settings:
+    get:
+      description: Returns the runtime-configurable notification settings (digest
+        hour, etc.).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/notification.Settings'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get notification settings
+      tags:
+      - Notifications
+    put:
+      consumes:
+      - application/json
+      description: Partial update of notification settings. admin/manager only.
+      parameters:
+      - description: fields to change
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/notification.UpdateSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/notification.Settings'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update notification settings
       tags:
       - Notifications
   /api/notifications/sms:
@@ -4799,6 +4999,44 @@ paths:
       summary: Dashboard statistics
       tags:
       - Reports
+  /api/reports/reorder-suggestions:
+    get:
+      description: |-
+        Lists products that should be reordered, sized from sales history.
+        Uses per-product lead_time_days and safety_stock_milli. Products
+        without sales history fall back to the static LOW_STOCK_DEFAULT threshold.
+      parameters:
+      - description: Filter by warehouse
+        in: query
+        name: warehouse_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/reports.ReorderSuggestion'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Reorder suggestions (dynamic low-stock)
+      tags:
+      - Reports
   /api/reports/sales:
     get:
       description: Aggregated sales grouped by day, week, or month.
@@ -5382,6 +5620,37 @@ paths:
   /api/sales/{id}/items/{item_id}/decrease:
     patch:
       responses: {}
+  /api/sales/{id}/print:
+    post:
+      description: |-
+        Re-fires the same auto-print that runs on sale confirm. The cashier
+        can call this as many times as they like — there is no per-sale limit.
+      parameters:
+      - description: Sale ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "503":
+          description: printer not configured
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Reprint receipt to thermal printer
+      tags:
+      - Sales
   /api/sales/{id}/receipt:
     get:
       description: Returns an HTML page formatted for an 80mm thermal printer. Uses
@@ -5529,6 +5798,39 @@ paths:
       security:
       - BearerAuth: []
       summary: Upload receipt logo
+      tags:
+      - ReceiptSettings
+  /api/settings/receipt/verify-delete-code:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Cashier-accessible endpoint: returns whether the supplied code matches
+        the configured delete_code. Server-side compare avoids leaking the code itself.
+      parameters:
+      - description: Code attempt
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            code:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Verify the delete-item code
       tags:
       - ReceiptSettings
   /api/shifts:
