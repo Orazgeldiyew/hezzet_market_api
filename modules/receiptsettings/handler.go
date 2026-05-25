@@ -25,6 +25,34 @@ func NewHandler(repo *Repository, uploadsDir, baseURL string) *Handler {
 	return &Handler{repo: repo, uploadsDir: uploadsDir, baseURL: baseURL}
 }
 
+// VerifyDeleteCode godoc
+// @Summary      Verify the delete-item code
+// @Description  Cashier-accessible endpoint: returns whether the supplied code matches
+// @Description  the configured delete_code. Server-side compare avoids leaking the code itself.
+// @Tags         ReceiptSettings
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body body object{code=string} true "Code attempt"
+// @Success      200  {object}  response.APIResponse
+// @Failure      400  {object}  response.APIResponse
+// @Router       /api/settings/receipt/verify-delete-code [post]
+func (h *Handler) VerifyDeleteCode(c *gin.Context) {
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(apperr.Validation("code is required"))
+		return
+	}
+	stored, err := h.repo.GetDeleteCode(c.Request.Context())
+	if err != nil {
+		c.Error(apperr.Internal(err))
+		return
+	}
+	response.OK(c, gin.H{"valid": req.Code == stored})
+}
+
 // GetSettings godoc
 // @Summary      Get receipt settings
 // @Description  Returns the current receipt print settings (store name, footer, template, etc.)

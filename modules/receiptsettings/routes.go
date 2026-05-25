@@ -25,11 +25,24 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, cfg config.Config) *R
 	h := NewHandler(repo, uploadsDir, cfg.PublicBaseURL)
 
 	g := rg.Group("/settings/receipt")
-	g.Use(middleware.RequireRoles("manager")) // admin + manager
 
-	g.GET("", h.GetSettings)
-	g.PUT("", h.UpdateSettings)
-	g.POST("/logo", h.UploadLogo)
+	// verify-delete-code is open to any authenticated staff — the cashier
+	// needs it to confirm cart-item deletions. The server compares the code
+	// internally so the actual code never leaves the backend.
+	g.POST("/verify-delete-code",
+		middleware.RequireRoles("cashier", "operator", "manager"),
+		h.VerifyDeleteCode,
+	)
+
+	// Everything else (GET full settings including the code itself, PUT, logo
+	// upload) stays manager + admin only.
+	mgr := g.Group("")
+	mgr.Use(middleware.RequireRoles("manager"))
+	{
+		mgr.GET("", h.GetSettings)
+		mgr.PUT("", h.UpdateSettings)
+		mgr.POST("/logo", h.UploadLogo)
+	}
 
 	return repo
 }

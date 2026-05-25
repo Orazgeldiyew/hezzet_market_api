@@ -20,25 +20,27 @@ func IsNotFound(err error) bool {
 	return err == pgx.ErrNoRows
 }
 
+// supplierCols is the shared column list — keep RETURNING/SELECT/Scan in sync.
+const supplierCols = `id, user_id, name, COALESCE(legal_name,''), COALESCE(tax_id,''), phone, email, address, is_active, created_at`
+
+func scanSupplier(row pgx.Row, s *Supplier) error {
+	return row.Scan(&s.ID, &s.UserID, &s.Name, &s.LegalName, &s.TaxID, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt)
+}
+
 func (r *Repository) Create(ctx context.Context, s *Supplier) error {
 	q := `
-		INSERT INTO suppliers (name, phone, email, address, is_active, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, user_id, is_active, created_at
-	`
-	return r.db.QueryRow(ctx, q, s.Name, s.Phone, s.Email, s.Address, s.IsActive, s.UserID).
-		Scan(&s.ID, &s.UserID, &s.IsActive, &s.CreatedAt)
+		INSERT INTO suppliers (name, legal_name, tax_id, phone, email, address, is_active, user_id)
+		VALUES ($1, NULLIF($2,''), NULLIF($3,''), $4, $5, $6, $7, $8)
+		RETURNING ` + supplierCols
+	return scanSupplier(r.db.QueryRow(ctx, q,
+		s.Name, s.LegalName, s.TaxID, s.Phone, s.Email, s.Address, s.IsActive, s.UserID,
+	), s)
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int) (Supplier, error) {
 	var s Supplier
-	q := `
-		SELECT id, user_id, name, phone, email, address, is_active, created_at
-		FROM suppliers
-		WHERE id=$1
-	`
-	err := r.db.QueryRow(ctx, q, id).
-		Scan(&s.ID, &s.UserID, &s.Name, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt)
+	q := `SELECT ` + supplierCols + ` FROM suppliers WHERE id=$1`
+	err := scanSupplier(r.db.QueryRow(ctx, q, id), &s)
 	return s, err
 }
 
@@ -79,8 +81,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT id, user_id, name, phone, email, address, is_active, created_at
-		FROM suppliers
+		SELECT %s FROM suppliers
 		WHERE is_active = true
 		  AND ($1 = '' OR
 		       name ILIKE '%%' || $1 || '%%' OR
@@ -88,7 +89,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		       email ILIKE '%%' || $1 || '%%')
 		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
-	`, col, dir)
+	`, supplierCols, col, dir)
 
 	rows, err := r.db.Query(ctx, sql, q, limit, offset)
 	if err != nil {
@@ -99,7 +100,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	var out []Supplier
 	for rows.Next() {
 		var s Supplier
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt); err != nil {
+		if err := scanSupplier(rows, &s); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, s)
@@ -108,29 +109,21 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 }
 
 func (r *Repository) Update(ctx context.Context, id int, req UpdateRequest) (Supplier, error) {
-	// RETURNING list must match the Scan destinations exactly. The previous
-	// version omitted user_id from RETURNING but tried to scan it, causing a
-	// 500 on every PATCH.
 	q := `
 		UPDATE suppliers SET
-			name = COALESCE($1, name),
-			phone = COALESCE($2, phone),
-			email = COALESCE($3, email),
-			address = COALESCE($4, address),
-			is_active = COALESCE($5, is_active)
-		WHERE id=$6
-		RETURNING id, user_id, name, phone, email, address, is_active, created_at
-	`
+			name       = COALESCE($1, name),
+			legal_name = COALESCE($2, legal_name),
+			tax_id     = COALESCE($3, tax_id),
+			phone      = COALESCE($4, phone),
+			email      = COALESCE($5, email),
+			address    = COALESCE($6, address),
+			is_active  = COALESCE($7, is_active)
+		WHERE id=$8
+		RETURNING ` + supplierCols
 	var s Supplier
-	err := r.db.QueryRow(ctx, q,
-		req.Name,
-		req.Phone,
-		req.Email,
-		req.Address,
-		req.IsActive,
-		id,
-	).Scan(&s.ID, &s.UserID, &s.Name, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt)
-
+	err := scanSupplier(r.db.QueryRow(ctx, q,
+		req.Name, req.LegalName, req.TaxID, req.Phone, req.Email, req.Address, req.IsActive, id,
+	), &s)
 	return s, err
 }
 

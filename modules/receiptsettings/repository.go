@@ -19,29 +19,39 @@ func NewRepository(db *pgxpool.Pool, defaults Defaults) *Repository {
 
 // Get reads the singleton row and merges NULLs with env defaults.
 func (r *Repository) Get(ctx context.Context) (ReceiptSettings, error) {
-	var shopName, shopAddr, shopPhone, logoPath, logoWidth, logoHeight, footer, tmpl, deleteCode *string
-	var bonusPercent int
+	var shopName, shopAddr, shopPhone, logoPath, logoWidth, logoHeight, footer, tmpl, deleteCode, legalName, taxID *string
+	var bonusPercent, fsHeader, fsItems, fsMeta, fsTotal int
 
 	err := r.db.QueryRow(ctx, `
-		SELECT shop_name, shop_address, shop_phone, logo_path, logo_width, logo_height, footer, template, delete_code, bonus_percent
+		SELECT shop_name, shop_address, shop_phone, logo_path, logo_width, logo_height, footer, template, delete_code, bonus_percent,
+		       font_size_header, font_size_items, font_size_meta, font_size_total,
+		       legal_name, tax_id
 		FROM receipt_settings
 		WHERE id = 1
-	`).Scan(&shopName, &shopAddr, &shopPhone, &logoPath, &logoWidth, &logoHeight, &footer, &tmpl, &deleteCode, &bonusPercent)
+	`).Scan(&shopName, &shopAddr, &shopPhone, &logoPath, &logoWidth, &logoHeight, &footer, &tmpl, &deleteCode, &bonusPercent,
+		&fsHeader, &fsItems, &fsMeta, &fsTotal,
+		&legalName, &taxID)
 	if err != nil {
 		return ReceiptSettings{}, err
 	}
 
 	return ReceiptSettings{
-		ShopName:     coalesce(shopName, r.defaults.ShopName),
-		ShopAddress:  coalesce(shopAddr, r.defaults.ShopAddress),
-		ShopPhone:    coalesce(shopPhone, r.defaults.ShopPhone),
-		LogoPath:     deref(logoPath),
-		LogoWidth:    coalesce(logoWidth, "50mm"),
-		LogoHeight:   coalesce(logoHeight, "20mm"),
-		Footer:       coalesce(footer, r.defaults.Footer),
-		Template:     deref(tmpl),
-		DeleteCode:   coalesce(deleteCode, "0000"),
-		BonusPercent: bonusPercent,
+		ShopName:       coalesce(shopName, r.defaults.ShopName),
+		ShopAddress:    coalesce(shopAddr, r.defaults.ShopAddress),
+		ShopPhone:      coalesce(shopPhone, r.defaults.ShopPhone),
+		LogoPath:       deref(logoPath),
+		LogoWidth:      coalesce(logoWidth, "50mm"),
+		LogoHeight:     coalesce(logoHeight, "20mm"),
+		Footer:         coalesce(footer, r.defaults.Footer),
+		Template:       deref(tmpl),
+		DeleteCode:     coalesce(deleteCode, "0000"),
+		BonusPercent:   bonusPercent,
+		FontSizeHeader: fsHeader,
+		FontSizeItems:  fsItems,
+		FontSizeMeta:   fsMeta,
+		FontSizeTotal:  fsTotal,
+		LegalName:      deref(legalName),
+		TaxID:          deref(taxID),
 	}, nil
 }
 
@@ -73,12 +83,22 @@ func (r *Repository) Update(ctx context.Context, req UpdateRequest) error {
 	add("footer", req.Footer)
 	add("template", req.Template)
 	add("delete_code", req.DeleteCode)
+	add("legal_name", req.LegalName)
+	add("tax_id", req.TaxID)
 
-	if req.BonusPercent != nil {
-		sets = append(sets, fmt.Sprintf("bonus_percent = $%d", idx))
-		args = append(args, *req.BonusPercent)
+	addInt := func(col string, val *int) {
+		if val == nil {
+			return
+		}
+		sets = append(sets, fmt.Sprintf("%s = $%d", col, idx))
+		args = append(args, *val)
 		idx++
 	}
+	addInt("bonus_percent", req.BonusPercent)
+	addInt("font_size_header", req.FontSizeHeader)
+	addInt("font_size_items", req.FontSizeItems)
+	addInt("font_size_meta", req.FontSizeMeta)
+	addInt("font_size_total", req.FontSizeTotal)
 
 	if len(sets) == 0 {
 		return nil

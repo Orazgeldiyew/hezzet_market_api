@@ -105,13 +105,16 @@ func (s *Service) buildSaleReceipt(ctx context.Context, saleID int64) ([]byte, e
 	// ── Shop / receipt settings (all fields for HTML template) ──
 	var shopName, shopAddress, shopPhone, footer, logoPath, customTemplate string
 	var logoWidth, logoHeight *string
+	var fsHeader, fsItems, fsMeta, fsTotal int
 	_ = s.db.QueryRow(ctx, `
 		SELECT COALESCE(shop_name, 'Hezzet Market'), COALESCE(shop_address, ''), COALESCE(shop_phone, ''),
 		       COALESCE(footer, 'Satyn alanyňyz üçin sag boluň!'),
 		       COALESCE(logo_path, ''), COALESCE(template, ''),
-		       logo_width, logo_height
+		       logo_width, logo_height,
+		       font_size_header, font_size_items, font_size_meta, font_size_total
 		FROM receipt_settings LIMIT 1
-	`).Scan(&shopName, &shopAddress, &shopPhone, &footer, &logoPath, &customTemplate, &logoWidth, &logoHeight)
+	`).Scan(&shopName, &shopAddress, &shopPhone, &footer, &logoPath, &customTemplate, &logoWidth, &logoHeight,
+		&fsHeader, &fsItems, &fsMeta, &fsTotal)
 
 	// Sale header
 	var cashierName, warehouseName, customerName, workerName, paymentMethod, note *string
@@ -228,7 +231,12 @@ func (s *Service) buildSaleReceipt(ctx context.Context, saleID int64) ([]byte, e
 	}
 
 	log.Printf("[buildSaleReceipt] rendering HTML→image for saleID=%d (html size=%d, logo=%q)", saleID, len(html), absLogoPath)
-	return BuildFullReceipt(absLogoPath, html, maxWidth80mm)
+	return BuildFullReceipt(absLogoPath, html, maxWidth80mm, FontSizes{
+		Header: fsHeader,
+		Items:  fsItems,
+		Meta:   fsMeta,
+		Total:  fsTotal,
+	})
 }
 
 func derefStr(p *string) string {

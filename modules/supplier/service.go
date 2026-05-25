@@ -16,12 +16,14 @@ func NewService(repo *Repository) *Service {
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Supplier, error) {
 	sup := Supplier{
-		UserID:   req.UserID,
-		Name:     req.Name,
-		Phone:    req.Phone,
-		Email:    req.Email,
-		Address:  req.Address,
-		IsActive: true,
+		UserID:    req.UserID,
+		Name:      req.Name,
+		LegalName: req.LegalName,
+		TaxID:     req.TaxID,
+		Phone:     req.Phone,
+		Email:     req.Email,
+		Address:   req.Address,
+		IsActive:  true,
 	}
 
 	if err := s.repo.Create(ctx, &sup); err != nil {

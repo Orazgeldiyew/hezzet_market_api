@@ -184,7 +184,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	saleRepo := sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo, customerRepo, permRepo)
 
 	// ── Purchases ──
-	purchase.RegisterRoutes(mod("purchases"), deps.DB, finRepo, auditRepo)
+	purchase.RegisterRoutes(mod("purchases"), deps.DB, finRepo, auditRepo, receiptRepo, permRepo)
 
 	// ── Reports & Audit ──
 	reportsGroup := mod("reports")
