@@ -163,24 +163,24 @@ func NewRouter(deps Deps) *gin.Engine {
 	stockGroup := mod("stock")
 	supplier.RegisterRoutes(stockGroup, deps.DB, permRepo)
 	warehouse.RegisterRoutes(stockGroup, deps.DB, permRepo)
-	stock.RegisterRoutes(stockGroup, deps.DB, deps.NotifSvc)
+	stock.RegisterRoutes(stockGroup, deps.DB, deps.NotifSvc, permRepo)
 
 	// ── Customers ──
 	customerRepo := customer.NewRepository(deps.DB)
-	customer.RegisterRoutes(mod("customers"), deps.DB)
+	customer.RegisterRoutes(mod("customers"), deps.DB, permRepo)
 
 	// ── Workers & Payroll ──
 	workersGroup := mod("workers")
-	workers.RegisterRoutes(workersGroup, deps.DB)
+	workers.RegisterRoutes(workersGroup, deps.DB, permRepo)
 	finRepo := finance.NewRepository(deps.DB)
-	workerfinance.RegisterRoutes(workersGroup, deps.DB, finRepo)
-	payroll.RegisterRoutes(workersGroup, deps.DB, finRepo)
+	workerfinance.RegisterRoutes(workersGroup, deps.DB, finRepo, permRepo)
+	payroll.RegisterRoutes(workersGroup, deps.DB, finRepo, permRepo)
 
 	// ── Finance ──
-	finance.RegisterRoutes(mod("finance"), deps.DB)
+	finance.RegisterRoutes(mod("finance"), deps.DB, permRepo)
 
 	// ── Sales ──
-	receiptRepo := receiptsettings.RegisterRoutes(api, deps.DB, deps.Cfg)
+	receiptRepo := receiptsettings.RegisterRoutes(api, deps.DB, deps.Cfg, permRepo)
 	saleRepo := sale.RegisterRoutes(mod("sales"), deps.DB, finRepo, deps.Cfg.PublicBaseURL, receiptRepo, customerRepo, permRepo)
 
 	// ── Purchases ──
@@ -188,11 +188,11 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	// ── Reports & Audit ──
 	reportsGroup := mod("reports")
-	auditlog.RegisterRoutes(reportsGroup, auditRepo)
-	reports.RegisterRoutes(reportsGroup, deps.DB, deps.Cfg.LowStockDefault)
+	auditlog.RegisterRoutes(reportsGroup, auditRepo, permRepo)
+	reports.RegisterRoutes(reportsGroup, deps.DB, deps.Cfg.LowStockDefault, permRepo)
 
 	// ── Worker Cards (credit card management) ──
-	workercard.RegisterRoutes(api, deps.DB)
+	workercard.RegisterRoutes(api, deps.DB, permRepo)
 
 	// ── Favorites (per-user, any authenticated user) ──
 	favorite.RegisterRoutes(api, deps.DB)
@@ -201,29 +201,29 @@ func NewRouter(deps Deps) *gin.Engine {
 	inventory.RegisterRoutes(stockGroup, deps.DB, finRepo, permRepo)
 
 	// ── Customer Debts ──
-	debtRepo := customerdebt.RegisterRoutes(api, deps.DB)
+	debtRepo := customerdebt.RegisterRoutes(api, deps.DB, permRepo)
 	saleRepo.SetDebtRepo(debtRepo)
 
 	// ── Discount Rules (threshold discounts) ──
-	discountRuleRepo := discountrule.RegisterRoutes(api, deps.DB)
+	discountRuleRepo := discountrule.RegisterRoutes(api, deps.DB, permRepo)
 	saleRepo.SetDiscountRuleRepo(discountRuleRepo)
 
 	// ── Supplier Debts ──
-	supplierdebt.RegisterRoutes(api, deps.DB)
+	supplierdebt.RegisterRoutes(api, deps.DB, permRepo)
 
 	// ── Supplier Returns ──
 	supplierreturn.RegisterRoutes(mod("purchases"), deps.DB, permRepo)
 
 	// ── Printers (admin only) ──
-	printerSvc := printer.RegisterRoutes(api, deps.DB, deps.Cfg.UploadsDir)
+	printerSvc := printer.RegisterRoutes(api, deps.DB, deps.Cfg.UploadsDir, permRepo)
 	// Wire auto-print into sales: after ConfirmSale → print receipt to register's printer.
 	saleRepo.SetPrinterService(printerSvc)
 
 	// ── Shifts (cash register management) ──
-	shift.RegisterRoutes(api, deps.DB)
+	shift.RegisterRoutes(api, deps.DB, permRepo)
 
 	// ── Notifications (admin-only, no module permission needed) ──
-	notification.RegisterRoutes(api, deps.DB, deps.NotifQueue, deps.NotifPhoneRepo)
+	notification.RegisterRoutes(api, deps.DB, deps.NotifQueue, deps.NotifPhoneRepo, permRepo)
 
 	// ── Public receipt route: /receipt/:id?token=JWT ──
 	r.GET("/receipt/:id",

@@ -7,28 +7,60 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
+// RegisterRoutes wires customer routes behind per-action permissions so admins
+// can grant/revoke "kassir создает клиента", "manager меняет бонусы" etc. via
+// the /roles UI without redeploying. Default seed matches the previous role-
+// based gates; admins still bypass via middleware.
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, permChecker middleware.PermissionChecker) {
 	repo := NewRepository(db)
 	svc := NewService(repo)
 	h := NewHandler(svc)
 
 	customers := rg.Group("/customers")
 
-	// Read: cashier/operator/manager (admin bypass)
-	customers.GET("", middleware.RequireRoles("cashier", "operator", "manager"), middleware.PaginationMiddleware(), h.List)
-	customers.GET("/by-card/:code", middleware.RequireRoles("cashier", "operator", "manager"), h.GetByCard)
-	customers.GET("/:id", middleware.RequireRoles("cashier", "operator", "manager"), h.Get)
+	// Read (any staff with customers:view)
+	customers.GET("",
+		middleware.RequirePermission(permChecker, "customers", "view"),
+		middleware.PaginationMiddleware(),
+		h.List,
+	)
+	customers.GET("/by-card/:code",
+		middleware.RequirePermission(permChecker, "customers", "view"),
+		h.GetByCard,
+	)
+	customers.GET("/:id",
+		middleware.RequirePermission(permChecker, "customers", "view"),
+		h.Get,
+	)
 
-	// Create + spent: cashier/manager (admin bypass)
-	customers.POST("", middleware.RequireRoles("cashier", "manager"), h.Create)
-	customers.POST("/:id/spent", middleware.RequireRoles("cashier", "manager"), h.AddSpent)
+	// Create — same as view-creator pattern in other modules.
+	customers.POST("",
+		middleware.RequirePermission(permChecker, "customers", "create"),
+		h.Create,
+	)
 
-	// Contact update: cashier/operator/manager (admin bypass)
-	customers.PATCH("/:id/contact", middleware.RequireRoles("cashier", "operator", "manager"), h.UpdateContact)
+	// AddSpent is a routine bonus-points operation: treat it as an update.
+	customers.POST("/:id/spent",
+		middleware.RequirePermission(permChecker, "customers", "update"),
+		h.AddSpent,
+	)
 
-	// Business update: manager/admin (admin bypass already works)
-	customers.PATCH("/:id/admin", middleware.RequireRoles("manager"), h.UpdateAdmin)
+	// Contact update (phone/address etc.) — same update permission.
+	customers.PATCH("/:id/contact",
+		middleware.RequirePermission(permChecker, "customers", "update"),
+		h.UpdateContact,
+	)
 
-	// Delete: admin only
-	customers.DELETE("/:id", middleware.RequireRoles(), h.Delete)
+	// Admin-level update changes financial fields (bonus_cents, etc.) — guard
+	// behind history action so it can be gated separately from routine updates.
+	customers.PATCH("/:id/admin",
+		middleware.RequirePermission(permChecker, "customers", "history"),
+		h.UpdateAdmin,
+	)
+
+	// Delete stays delete (admins bypass).
+	customers.DELETE("/:id",
+		middleware.RequirePermission(permChecker, "customers", "delete"),
+		h.Delete,
+	)
 }

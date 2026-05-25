@@ -7,19 +7,22 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
+// RegisterRoutes wires supplier-debt routes. Treats debts as an extension of
+// the supplier record: read/pay use suppliers:view / suppliers:update. Create
+// is gated on suppliers:create (a manual debt entry is essentially registering
+// a new financial obligation to a supplier).
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, permChecker middleware.PermissionChecker) {
 	repo := NewRepository(db)
 	h := NewHandler(repo)
 
 	g := rg.Group("/supplier-debts")
-	g.Use(middleware.RequireRoles("manager"))
 	g.Use(middleware.PaginationMiddleware())
 	{
-		g.POST("", h.Create)
-		g.GET("", h.ListAll)
-		g.GET("/suppliers", h.DebtorsSummary)
-		g.GET("/supplier/:supplier_id", h.ListBySupplier)
-		g.GET("/:id", h.GetByID)
-		g.POST("/:id/pay", h.Pay)
+		g.POST("", middleware.RequirePermission(permChecker, "suppliers", "create"), h.Create)
+		g.GET("", middleware.RequirePermission(permChecker, "suppliers", "view"), h.ListAll)
+		g.GET("/suppliers", middleware.RequirePermission(permChecker, "suppliers", "view"), h.DebtorsSummary)
+		g.GET("/supplier/:supplier_id", middleware.RequirePermission(permChecker, "suppliers", "view"), h.ListBySupplier)
+		g.GET("/:id", middleware.RequirePermission(permChecker, "suppliers", "view"), h.GetByID)
+		g.POST("/:id/pay", middleware.RequirePermission(permChecker, "suppliers", "update"), h.Pay)
 	}
 }

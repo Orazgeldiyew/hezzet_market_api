@@ -21,8 +21,9 @@ type PayrollRun struct {
 // ---------- Requests ----------
 
 type CalculateRequest struct {
-	WorkerID int64  `json:"worker_id" binding:"required,gt=0"`
-	Period   string `json:"period" binding:"required"`
+	WorkerID int64   `json:"worker_id" binding:"required,gt=0"`
+	Period   string  `json:"period" binding:"required"`
+	DebtIDs  []int64 `json:"debt_ids"`
 }
 
 type PayRequest struct {

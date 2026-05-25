@@ -8,26 +8,57 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, financeRepo *finance.Repository) {
+// RegisterRoutes wires worker-finance endpoints under the `workers` permission
+// module. Money-related actions (fines, debts, compensation) reuse the same
+// granularity: workers:view = read, workers:update = create/edit/pay.
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, financeRepo *finance.Repository, permChecker middleware.PermissionChecker) {
 	repo := NewRepository(db)
 	svc := NewService(repo, financeRepo)
 	h := NewHandler(svc)
 
 	workers := rg.Group("/workers")
-	workers.Use(middleware.RequireRoles("manager"))
 
 	// Compensation
-	workers.POST("/compensation", h.SetCompensation)
-	workers.GET("/:id/compensation", h.GetCompensation)
+	workers.POST("/compensation",
+		middleware.RequirePermission(permChecker, "workers", "update"),
+		h.SetCompensation,
+	)
+	workers.GET("/:id/compensation",
+		middleware.RequirePermission(permChecker, "workers", "view"),
+		h.GetCompensation,
+	)
 
 	// Fines
-	workers.POST("/:id/fines", h.CreateFine)
-	workers.GET("/:id/fines", middleware.PaginationMiddleware(), h.ListFines)
+	workers.POST("/:id/fines",
+		middleware.RequirePermission(permChecker, "workers", "update"),
+		h.CreateFine,
+	)
+	workers.GET("/:id/fines",
+		middleware.RequirePermission(permChecker, "workers", "view"),
+		middleware.PaginationMiddleware(),
+		h.ListFines,
+	)
 
 	// Debts
-	workers.GET("/debts/debtors", h.AllDebtors)
-	workers.POST("/:id/debts", h.CreateDebt)
-	workers.GET("/:id/debts", middleware.PaginationMiddleware(), h.ListDebts)
-	workers.GET("/debts/:debt_id", h.GetDebt)
-	workers.POST("/debts/:debt_id/pay", h.PayDebt)
+	workers.GET("/debts/debtors",
+		middleware.RequirePermission(permChecker, "workers", "view"),
+		h.AllDebtors,
+	)
+	workers.POST("/:id/debts",
+		middleware.RequirePermission(permChecker, "workers", "update"),
+		h.CreateDebt,
+	)
+	workers.GET("/:id/debts",
+		middleware.RequirePermission(permChecker, "workers", "view"),
+		middleware.PaginationMiddleware(),
+		h.ListDebts,
+	)
+	workers.GET("/debts/:debt_id",
+		middleware.RequirePermission(permChecker, "workers", "view"),
+		h.GetDebt,
+	)
+	workers.POST("/debts/:debt_id/pay",
+		middleware.RequirePermission(permChecker, "workers", "update"),
+		h.PayDebt,
+	)
 }

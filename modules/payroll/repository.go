@@ -32,8 +32,8 @@ func (r *Repository) BeginTx(ctx context.Context) (pgx.Tx, error) {
 	return r.db.Begin(ctx)
 }
 
-func (r *Repository) Create(ctx context.Context, p *PayrollRun) error {
-	return r.db.QueryRow(ctx, `
+func (r *Repository) CreateTx(ctx context.Context, tx pgx.Tx, p *PayrollRun) error {
+	return tx.QueryRow(ctx, `
 		INSERT INTO payroll_runs (worker_id, period, base_salary_cents, fines_cents, debts_cents, net_salary_cents)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING `+payrollCols,
@@ -42,6 +42,30 @@ func (r *Repository) Create(ctx context.Context, p *PayrollRun) error {
 		&p.ID, &p.WorkerID, &p.Period, &p.BaseSalaryCents, &p.FinesCents, &p.DebtsCents,
 		&p.NetSalaryCents, &p.Status, &p.TransactionID, &p.CreatedAt, &p.UpdatedAt,
 	)
+}
+
+// InsertRunDebts records which debts (and how much of each) were included in
+// the run. Called inside Calculate's tx; Pay later uses these rows to settle
+// only the snapshotted debts.
+func (r *Repository) InsertRunDebts(ctx context.Context, tx pgx.Tx, runID int64, debtAmounts map[int64]int64) error {
+	if len(debtAmounts) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for debtID, amount := range debtAmounts {
+		batch.Queue(
+			`INSERT INTO payroll_run_debts (payroll_run_id, debt_id, amount_cents) VALUES ($1, $2, $3)`,
+			runID, debtID, amount,
+		)
+	}
+	br := tx.SendBatch(ctx, batch)
+	defer br.Close()
+	for range debtAmounts {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (PayrollRun, error) {

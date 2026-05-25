@@ -2,6 +2,7 @@ package workerfinance
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
@@ -45,15 +46,57 @@ func (s *Service) GetCompensation(ctx context.Context, workerID int64) (WorkerCo
 
 func (s *Service) CreateFine(ctx context.Context, workerID int64, req CreateFineRequest, userID int64) (WorkerFine, error) {
 	uid := &userID
+
+	cashPTID, err := s.financeRepo.GetPaymentTypeIDByCode(ctx, "cash")
+	if err != nil {
+		return WorkerFine{}, apperr.Internal(err)
+	}
+
+	tx, err := s.repo.BeginTx(ctx)
+	if err != nil {
+		return WorkerFine{}, apperr.Internal(err)
+	}
+	defer tx.Rollback(ctx)
+
 	f := WorkerFine{
 		WorkerID:    workerID,
 		AmountCents: req.AmountCents,
 		Reason:      req.Reason,
 		CreatedBy:   uid,
 	}
-	if err := s.repo.CreateFine(ctx, &f); err != nil {
+	if err := s.repo.CreateFineTx(ctx, tx, &f); err != nil {
 		return WorkerFine{}, apperr.Internal(err)
 	}
+
+	reason := fmt.Sprintf("Штраф работника #%d: %s", workerID, req.Reason)
+	finTxn := finance.Transaction{
+		Type:          "income",
+		AmountCents:   req.AmountCents,
+		RelatedTable:  "worker_fines",
+		RelatedID:     &f.ID,
+		Status:        "paid",
+		Reason:        &reason,
+		CreatedBy:     uid,
+		PaymentTypeID: &cashPTID,
+	}
+	if err := s.financeRepo.CreateTransaction(ctx, tx, &finTxn); err != nil {
+		return WorkerFine{}, apperr.Internal(err)
+	}
+
+	finPay := finance.Payment{
+		TransactionID: finTxn.ID,
+		PaymentTypeID: cashPTID,
+		AmountCents:   req.AmountCents,
+		CreatedBy:     uid,
+	}
+	if err := s.financeRepo.CreatePayment(ctx, tx, &finPay); err != nil {
+		return WorkerFine{}, apperr.Internal(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return WorkerFine{}, apperr.Internal(err)
+	}
+
 	return f, nil
 }
 

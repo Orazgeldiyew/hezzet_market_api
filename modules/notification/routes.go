@@ -12,7 +12,15 @@ import (
 // INTERNAL_ERROR on requeue attempts in that case.
 // phoneRepo must be created in main.go (via NewPhoneRepository) before service
 // creation, then passed here so the same instance is shared.
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, queue *Queue, phoneRepo *PhoneRepository) {
+// RegisterRoutes wires notification endpoints. Two tiers of access:
+//
+//   - SMS audit (logs, phone book) — system administration, kept on admin-only
+//     via the empty RequireRoles() (admin bypass). These aren't business
+//     permissions and don't appear in the /roles matrix.
+//   - Runtime settings + in-app inbox — manager-level, gated on reports:view
+//     so the admin can grant manager-equivalents access without giving them
+//     SMS audit too.
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, queue *Queue, phoneRepo *PhoneRepository, permChecker middleware.PermissionChecker) {
 	logRepo := NewLogRepository(db)
 	h := NewHandler(logRepo, queue)
 
@@ -26,7 +34,7 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, queue *Queue, phoneRe
 
 	g := rg.Group("/notifications")
 
-	// admin-only: SMS logs + phone management
+	// System-admin tier (admin only).
 	adminOnly := g.Group("")
 	adminOnly.Use(middleware.RequireRoles())
 	{
@@ -40,9 +48,9 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, queue *Queue, phoneRe
 		adminOnly.DELETE("/phones/:id", ph.Delete)
 	}
 
-	// admin + manager: runtime-configurable settings + in-app inbox
+	// Managerial tier — settings + bell inbox.
 	staffGroup := g.Group("")
-	staffGroup.Use(middleware.RequireRoles("admin", "manager"))
+	staffGroup.Use(middleware.RequirePermission(permChecker, "reports", "view"))
 	{
 		staffGroup.GET("/settings", sh.Get)
 		staffGroup.PUT("/settings", sh.Update)

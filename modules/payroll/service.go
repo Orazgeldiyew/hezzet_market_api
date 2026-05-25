@@ -30,7 +30,6 @@ func (s *Service) Calculate(ctx context.Context, req CalculateRequest, userID in
 		return PayrollRun{}, apperr.Validation("period must be YYYY-MM format")
 	}
 
-	// Get compensation
 	comp, err := s.wfRepo.GetCompensation(ctx, req.WorkerID)
 	if err != nil {
 		if isNotFound(err) {
@@ -39,19 +38,32 @@ func (s *Service) Calculate(ctx context.Context, req CalculateRequest, userID in
 		return PayrollRun{}, apperr.Internal(err)
 	}
 
-	// Sum open fines
 	finesCents, err := s.wfRepo.SumOpenFines(ctx, req.WorkerID)
 	if err != nil {
 		return PayrollRun{}, apperr.Internal(err)
 	}
 
-	// Sum open debts
-	debtsCents, err := s.wfRepo.SumOpenDebts(ctx, req.WorkerID)
+	tx, err := s.repo.BeginTx(ctx)
 	if err != nil {
 		return PayrollRun{}, apperr.Internal(err)
 	}
+	defer tx.Rollback(ctx)
 
-	// Calculate net salary
+	// Lock & validate the picked debts. The manager selects which open debts
+	// to settle from this paycheck; only those are included in the snapshot
+	// (payroll_run_debts) and later closed by Pay.
+	selectedDebts, err := s.wfRepo.ListDebtsByIDsForUpdate(ctx, tx, req.WorkerID, req.DebtIDs)
+	if err != nil {
+		return PayrollRun{}, apperr.Validation(err.Error())
+	}
+
+	var debtsCents int64
+	debtAmounts := make(map[int64]int64, len(selectedDebts))
+	for _, d := range selectedDebts {
+		debtsCents += d.RemainingCents
+		debtAmounts[d.ID] = d.RemainingCents
+	}
+
 	netSalary := comp.BaseSalaryCents - finesCents - debtsCents
 	if netSalary < 0 {
 		netSalary = 0
@@ -66,7 +78,15 @@ func (s *Service) Calculate(ctx context.Context, req CalculateRequest, userID in
 		NetSalaryCents:  netSalary,
 	}
 
-	if err := s.repo.Create(ctx, &run); err != nil {
+	if err := s.repo.CreateTx(ctx, tx, &run); err != nil {
+		return PayrollRun{}, apperr.Internal(err)
+	}
+
+	if err := s.repo.InsertRunDebts(ctx, tx, run.ID, debtAmounts); err != nil {
+		return PayrollRun{}, apperr.Internal(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return PayrollRun{}, apperr.Internal(err)
 	}
 
@@ -148,8 +168,9 @@ func (s *Service) Pay(ctx context.Context, payrollID int64, paymentTypeCode stri
 		return PayrollRun{}, apperr.Internal(err)
 	}
 
-	// Settle debts
-	if err := s.wfRepo.SettleDebts(ctx, tx, run.WorkerID); err != nil {
+	// Settle only the debts snapshotted at Calculate time. Debts created
+	// between Calculate and Pay are NOT touched (Bug #3 fix).
+	if err := s.wfRepo.SettleDebtsForRun(ctx, tx, run.ID); err != nil {
 		return PayrollRun{}, apperr.Internal(err)
 	}
 

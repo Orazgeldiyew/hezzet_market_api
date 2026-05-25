@@ -77,6 +77,15 @@ func (r *Repository) CreateFine(ctx context.Context, f *WorkerFine) error {
 	).Scan(&f.ID, &f.WorkerID, &f.AmountCents, &f.Reason, &f.Status, &f.OccurredAt, &f.CreatedBy, &f.CreatedAt, &f.UpdatedAt)
 }
 
+func (r *Repository) CreateFineTx(ctx context.Context, tx pgx.Tx, f *WorkerFine) error {
+	return tx.QueryRow(ctx, `
+		INSERT INTO worker_fines (worker_id, amount_cents, reason, created_by)
+		VALUES ($1, $2, $3, $4)
+		RETURNING `+fineCols,
+		f.WorkerID, f.AmountCents, f.Reason, f.CreatedBy,
+	).Scan(&f.ID, &f.WorkerID, &f.AmountCents, &f.Reason, &f.Status, &f.OccurredAt, &f.CreatedBy, &f.CreatedAt, &f.UpdatedAt)
+}
+
 func (r *Repository) ListFines(ctx context.Context, workerID int64, limit, offset int) ([]WorkerFine, int, error) {
 	var total int
 	if err := r.db.QueryRow(ctx,
@@ -165,21 +174,56 @@ func (r *Repository) ListDebts(ctx context.Context, workerID int64, limit, offse
 	return out, total, rows.Err()
 }
 
-// SumOpenDebts returns the total remaining_cents of open debts for a worker.
-func (r *Repository) SumOpenDebts(ctx context.Context, workerID int64) (int64, error) {
-	var sum int64
-	err := r.db.QueryRow(ctx,
-		`SELECT COALESCE(SUM(remaining_cents), 0) FROM worker_debts WHERE worker_id = $1 AND status = 'open'`,
-		workerID,
-	).Scan(&sum)
-	return sum, err
+// ListDebtsByIDsForUpdate locks and returns open debts that belong to the
+// worker. Returns an error if any ID is missing, belongs to another worker,
+// or is not in 'open' status. Used by payroll.Calculate to snapshot exactly
+// the debts the manager picked.
+func (r *Repository) ListDebtsByIDsForUpdate(ctx context.Context, tx pgx.Tx, workerID int64, ids []int64) ([]WorkerDebt, error) {
+	if len(ids) == 0 {
+		return []WorkerDebt{}, nil
+	}
+	rows, err := tx.Query(ctx, fmt.Sprintf(
+		`SELECT %s FROM worker_debts
+		 WHERE id = ANY($1) AND worker_id = $2 AND status = 'open'
+		 ORDER BY created_at FOR UPDATE`, debtCols),
+		ids, workerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []WorkerDebt
+	for rows.Next() {
+		d, err := scanDebt(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(out) != len(ids) {
+		return nil, fmt.Errorf("some debt_ids are invalid, not open, or do not belong to worker %d", workerID)
+	}
+	return out, nil
 }
 
-// SettleDebts marks all open debts as settled for the worker within a tx.
-func (r *Repository) SettleDebts(ctx context.Context, tx pgx.Tx, workerID int64) error {
-	_, err := tx.Exec(ctx,
-		`UPDATE worker_debts SET remaining_cents = 0, status = 'settled' WHERE worker_id = $1 AND status = 'open'`,
-		workerID,
+// SettleDebtsForRun closes only the debts recorded in payroll_run_debts for
+// the given run. Subtracts the snapshotted amount from remaining_cents and
+// marks the debt 'settled' when it reaches zero. Debts created after the run
+// was calculated are untouched.
+func (r *Repository) SettleDebtsForRun(ctx context.Context, tx pgx.Tx, runID int64) error {
+	_, err := tx.Exec(ctx, `
+		UPDATE worker_debts wd
+		SET remaining_cents = wd.remaining_cents - prd.amount_cents,
+		    status = CASE WHEN wd.remaining_cents - prd.amount_cents <= 0
+		                  THEN 'settled' ELSE 'open' END,
+		    updated_at = now()
+		FROM payroll_run_debts prd
+		WHERE prd.payroll_run_id = $1 AND prd.debt_id = wd.id`,
+		runID,
 	)
 	return err
 }

@@ -7,47 +7,44 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
+// RegisterRoutes wires finance endpoints behind the `finance` permission
+// module. Payment types are needed by the cashier UI (to render the payment
+// type list at checkout) — they're a lightweight reference, gated on view.
+// Transaction list/detail are sensitive financial reports → finance:view
+// (default off for cashier). Manual transactions write money in/out, so
+// create + update for create/payment, delete for cancel.
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, permChecker middleware.PermissionChecker) {
 	repo := NewRepository(db)
 	svc := NewService(repo)
 	h := NewHandler(svc)
 
-	// Payment types — read for cashier and above
+	// Payment types — kept on a wider gate (sales:view) since cashier needs
+	// them at the till; finance:view would lock them out of confirming sales.
 	rg.GET("/payment-types",
-		middleware.RequireRoles("cashier", "operator", "manager", "admin"),
+		middleware.RequirePermission(permChecker, "sales", "view"),
 		h.ListPaymentTypes,
 	)
 
-	// Transactions
 	txns := rg.Group("/transactions")
 
-	// List — manager and admin
 	txns.GET("",
-		middleware.RequireRoles("manager", "admin"),
+		middleware.RequirePermission(permChecker, "finance", "view"),
 		h.ListTransactions,
 	)
-
-	// Get detail — manager and admin
 	txns.GET("/:id",
-		middleware.RequireRoles("manager", "admin"),
+		middleware.RequirePermission(permChecker, "finance", "view"),
 		h.GetTransaction,
 	)
-
-	// Create manual transaction — operator/manager/admin
 	txns.POST("/manual",
-		middleware.RequireRoles("operator", "manager", "admin"),
+		middleware.RequirePermission(permChecker, "finance", "create"),
 		h.CreateManual,
 	)
-
-	// Add payment — operator/manager/admin
 	txns.POST("/:id/payments",
-		middleware.RequireRoles("operator", "manager", "admin"),
+		middleware.RequirePermission(permChecker, "finance", "update"),
 		h.AddPayment,
 	)
-
-	// Cancel — manager and admin
 	txns.POST("/:id/cancel",
-		middleware.RequireRoles("manager", "admin"),
+		middleware.RequirePermission(permChecker, "finance", "delete"),
 		h.CancelTransaction,
 	)
 }

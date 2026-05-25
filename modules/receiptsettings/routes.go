@@ -8,7 +8,11 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, cfg config.Config) *Repository {
+// RegisterRoutes wires receipt-settings endpoints under the `reports`
+// permission module (settings = managerial config). verify-delete-code is
+// the one exception: it's a cashier-side check at the till, so it uses
+// sales:view (every cashier already has it).
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, cfg config.Config, permChecker middleware.PermissionChecker) *Repository {
 	defaults := Defaults{
 		ShopName:    cfg.ReceiptShopName,
 		ShopAddress: cfg.ReceiptShopAddress,
@@ -26,18 +30,16 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, cfg config.Config) *R
 
 	g := rg.Group("/settings/receipt")
 
-	// verify-delete-code is open to any authenticated staff — the cashier
-	// needs it to confirm cart-item deletions. The server compares the code
-	// internally so the actual code never leaves the backend.
+	// Server compares the code internally so the stored value never leaves
+	// the backend — safe to expose to cashier-level staff at the till.
 	g.POST("/verify-delete-code",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "view"),
 		h.VerifyDeleteCode,
 	)
 
-	// Everything else (GET full settings including the code itself, PUT, logo
-	// upload) stays manager + admin only.
+	// Full settings (incl. delete_code itself) — manager/admin level.
 	mgr := g.Group("")
-	mgr.Use(middleware.RequireRoles("manager"))
+	mgr.Use(middleware.RequirePermission(permChecker, "reports", "view"))
 	{
 		mgr.GET("", h.GetSettings)
 		mgr.PUT("", h.UpdateSettings)

@@ -7,16 +7,19 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir string) *Service {
+// RegisterRoutes wires printer-management endpoints under the `reports`
+// permission module (printers are a manager-level configuration item, same
+// audience as receipt settings). Admin bypass still works for true admins.
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir string, permChecker middleware.PermissionChecker) *Service {
 	repo := NewRepository(db)
 	svc := NewService(repo, db, uploadsDir)
 	h := NewHandler(svc)
 
 	g := rg.Group("/printers")
-	g.Use(middleware.RequireRoles("admin"))
+	g.Use(middleware.RequirePermission(permChecker, "reports", "view"))
 
-	g.POST("", h.Create)
 	g.GET("", h.List)
+	g.POST("", h.Create)
 	g.PATCH("/:id", h.Update)
 	g.DELETE("/:id", h.Delete)
 	g.POST("/:id/test", h.TestPrint)

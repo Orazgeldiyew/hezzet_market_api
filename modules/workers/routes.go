@@ -45,37 +45,35 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) {
+// RegisterRoutes wires worker CRUD endpoints under the `workers` permission
+// module so admins can grant operator the right to add/edit workers via
+// /roles without code changes.
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, permChecker middleware.PermissionChecker) {
 	repo := NewRepository(db)
 	svc := NewService(repo)
 	h := NewHandler(svc)
 
 	workers := rg.Group("/workers")
 
-	// Read: manager/operator (admin bypass)
 	workers.GET("",
-		middleware.RequireRoles("manager", "operator"),
+		middleware.RequirePermission(permChecker, "workers", "view"),
 		middleware.PaginationMiddleware(),
 		h.List,
 	)
 	workers.GET("/:id",
-		middleware.RequireRoles("manager", "operator"),
+		middleware.RequirePermission(permChecker, "workers", "view"),
 		h.Get,
 	)
-
-	// Write: manager (admin bypass)
 	workers.POST("",
-		middleware.RequireRoles("manager"),
+		middleware.RequirePermission(permChecker, "workers", "create"),
 		h.Create,
 	)
 	workers.PATCH("/:id",
-		middleware.RequireRoles("manager"),
+		middleware.RequirePermission(permChecker, "workers", "update"),
 		h.Update,
 	)
-
-	// Delete: admin only
 	workers.DELETE("/:id",
-		middleware.RequireRoles(), // empty => admin only (admin bypass still works)
+		middleware.RequirePermission(permChecker, "workers", "delete"),
 		h.Delete,
 	)
 }

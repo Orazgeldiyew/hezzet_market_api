@@ -7,20 +7,23 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool) *Repository {
+// RegisterRoutes wires customer-debt routes. Reads use the customers:view
+// permission (debts are conceptually part of the customer record), payments
+// use customers:update so a role can have view-only access to debts without
+// being able to record cash receipts.
+func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, permChecker middleware.PermissionChecker) *Repository {
 	repo := NewRepository(db)
 	h := NewHandler(repo)
 
 	g := rg.Group("/customer-debts")
-	g.Use(middleware.RequireRoles("cashier", "operator", "manager"))
 	g.Use(middleware.PaginationMiddleware())
 	{
-		g.GET("", h.ListAll)                             // all open debts
-		g.GET("/debtors", h.DebtorsSummary)              // summary by customer
-		g.GET("/customer/:customer_id", h.ListByCustomer) // debts of one customer
-		g.GET("/customer/:customer_id/total", h.GetCustomerTotal)
-		g.GET("/:id", h.GetByID)                         // single debt + payments
-		g.POST("/:id/pay", h.Pay)                        // make payment
+		g.GET("", middleware.RequirePermission(permChecker, "customers", "view"), h.ListAll)
+		g.GET("/debtors", middleware.RequirePermission(permChecker, "customers", "view"), h.DebtorsSummary)
+		g.GET("/customer/:customer_id", middleware.RequirePermission(permChecker, "customers", "view"), h.ListByCustomer)
+		g.GET("/customer/:customer_id/total", middleware.RequirePermission(permChecker, "customers", "view"), h.GetCustomerTotal)
+		g.GET("/:id", middleware.RequirePermission(permChecker, "customers", "view"), h.GetByID)
+		g.POST("/:id/pay", middleware.RequirePermission(permChecker, "customers", "update"), h.Pay)
 	}
 
 	return repo
