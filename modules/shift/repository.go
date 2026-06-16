@@ -138,7 +138,7 @@ func (r *Repository) GetCurrent(ctx context.Context, userID int64) (Shift, error
 		       sh.opened_at, sh.status
 		FROM shifts sh
 		JOIN cash_registers cr ON cr.id = sh.register_id
-		JOIN users u ON u.id = sh.user_id
+		JOIN employees u ON u.id = sh.user_id
 		WHERE sh.user_id = $1 AND sh.status = 'open'
 		ORDER BY sh.opened_at DESC LIMIT 1
 	`, userID).Scan(
@@ -164,7 +164,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Shift, error) {
 		       sh.status, sh.note, sh.closed_by
 		FROM shifts sh
 		JOIN cash_registers cr ON cr.id = sh.register_id
-		JOIN users u ON u.id = sh.user_id
+		JOIN employees u ON u.id = sh.user_id
 		WHERE sh.id = $1
 	`, id).Scan(
 		&s.ID, &s.RegisterID, &s.RegisterName, &s.UserID, &s.CashierName,
@@ -228,7 +228,7 @@ func (r *Repository) List(ctx context.Context, userID *int64, registerID *int64,
 		       sh.status, sh.note, sh.closed_by
 		FROM shifts sh
 		JOIN cash_registers cr ON cr.id = sh.register_id
-		JOIN users u ON u.id = sh.user_id
+		JOIN employees u ON u.id = sh.user_id
 		`+where+`
 		ORDER BY sh.opened_at DESC
 		LIMIT $`+limitIdx+` OFFSET $`+offsetIdx,

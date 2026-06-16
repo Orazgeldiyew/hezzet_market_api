@@ -132,7 +132,7 @@ func snapshotUser(ctx context.Context, db *pgxpool.Pool, entityID string) (Snaps
 	// without telling us anything useful about admin intent.
 	return queryJSONRow(ctx, db, `
 		SELECT to_jsonb(u) - 'password_hash' - 'token_version' - 'created_at' - 'updated_at'
-		FROM users u
+		FROM employees u
 		WHERE u.id = $1::bigint AND u.deleted_at IS NULL
 	`, entityID)
 }

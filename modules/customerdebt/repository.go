@@ -31,10 +31,10 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (CustomerDebt, error
 	var d CustomerDebt
 	err := r.db.QueryRow(ctx, `
 		SELECT cd.id, cd.customer_id, c.name, cd.sale_id, cd.amount_cents, cd.remaining_cents,
-		       cd.status, cd.note, cd.created_by, COALESCE(u.full_name, ''), cd.created_at, cd.updated_at
+		       cd.status, cd.note, cd.created_by, COALESCE(u.name, ''), cd.created_at, cd.updated_at
 		FROM customer_debts cd
 		JOIN customers c ON c.id = cd.customer_id
-		LEFT JOIN users u ON u.id = cd.created_by
+		LEFT JOIN employees u ON u.id = cd.created_by
 		WHERE cd.id = $1
 	`, id).Scan(
 		&d.ID, &d.CustomerID, &d.CustomerName, &d.SaleID, &d.AmountCents, &d.RemainingCents,
@@ -61,10 +61,10 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID int64, onlyO
 
 	rows, err := r.db.Query(ctx, `
 		SELECT cd.id, cd.customer_id, c.name, cd.sale_id, cd.amount_cents, cd.remaining_cents,
-		       cd.status, cd.note, cd.created_by, COALESCE(u.full_name, ''), cd.created_at, cd.updated_at
+		       cd.status, cd.note, cd.created_by, COALESCE(u.name, ''), cd.created_at, cd.updated_at
 		FROM customer_debts cd
 		JOIN customers c ON c.id = cd.customer_id
-		LEFT JOIN users u ON u.id = cd.created_by
+		LEFT JOIN employees u ON u.id = cd.created_by
 		WHERE cd.customer_id = $1 `+statusFilter+`
 		ORDER BY cd.created_at DESC
 		LIMIT $2 OFFSET $3
@@ -101,10 +101,10 @@ func (r *Repository) ListAll(ctx context.Context, limit, offset int) ([]Customer
 
 	rows, err := r.db.Query(ctx, `
 		SELECT cd.id, cd.customer_id, c.name, cd.sale_id, cd.amount_cents, cd.remaining_cents,
-		       cd.status, cd.note, cd.created_by, COALESCE(u.full_name, ''), cd.created_at, cd.updated_at
+		       cd.status, cd.note, cd.created_by, COALESCE(u.name, ''), cd.created_at, cd.updated_at
 		FROM customer_debts cd
 		JOIN customers c ON c.id = cd.customer_id
-		LEFT JOIN users u ON u.id = cd.created_by
+		LEFT JOIN employees u ON u.id = cd.created_by
 		WHERE cd.status = 'open'
 		ORDER BY cd.created_at DESC
 		LIMIT $1 OFFSET $2
@@ -203,9 +203,9 @@ func (r *Repository) Pay(ctx context.Context, debtID int64, req PayRequest, user
 func (r *Repository) GetPayments(ctx context.Context, debtID int64) ([]DebtPayment, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT dp.id, dp.debt_id, dp.amount_cents, dp.payment_type_id, dp.note,
-		       dp.created_by, COALESCE(u.full_name, ''), dp.created_at
+		       dp.created_by, COALESCE(u.name, ''), dp.created_at
 		FROM customer_debt_payments dp
-		LEFT JOIN users u ON u.id = dp.created_by
+		LEFT JOIN employees u ON u.id = dp.created_by
 		WHERE dp.debt_id = $1
 		ORDER BY dp.created_at
 	`, debtID)

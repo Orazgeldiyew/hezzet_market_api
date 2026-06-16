@@ -408,12 +408,12 @@ func (r *Repository) List(
 		SELECT sr.id, sr.supplier_id, sr.warehouse_id, sr.status, sr.total_cents, sr.items_count,
 		       sr.note, sr.created_by, sr.created_at, sr.confirmed_at, sr.confirmed_by,
 		       s.name, w.name,
-		       COALESCE(uc.full_name, ''), COALESCE(ucf.full_name, '')
+		       COALESCE(uc.name, ''), COALESCE(ucf.name, '')
 		FROM supplier_returns sr
 		LEFT JOIN suppliers s  ON s.id  = sr.supplier_id
 		LEFT JOIN warehouses w ON w.id  = sr.warehouse_id
-		LEFT JOIN users uc     ON uc.id = sr.created_by
-		LEFT JOIN users ucf    ON ucf.id = sr.confirmed_by
+		LEFT JOIN employees uc     ON uc.id = sr.created_by
+		LEFT JOIN employees ucf    ON ucf.id = sr.confirmed_by
 		`+where+`
 		ORDER BY sr.created_at DESC, sr.id DESC
 		LIMIT $6 OFFSET $7

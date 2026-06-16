@@ -901,10 +901,10 @@ func (r *Repository) GetReceiptData(ctx context.Context, id int64) (ReceiptSaleR
 		        JOIN transactions t ON t.id = p.transaction_id
 		        WHERE t.related_table = 'sale' AND t.related_id = s.id), 0)
 		FROM sales s
-		LEFT JOIN users u ON u.id = s.created_by
+		LEFT JOIN employees u ON u.id = s.created_by
 		LEFT JOIN warehouses w ON w.id = s.warehouse_id
 		LEFT JOIN customers c ON c.id = s.customer_id
-		LEFT JOIN workers wk ON wk.id = s.worker_id AND wk.deleted_at IS NULL
+		LEFT JOIN employees wk ON wk.id = s.worker_id AND wk.deleted_at IS NULL
 		WHERE s.id = $1
 	`, id).Scan(
 		&row.ID, &row.WarehouseID, &row.CustomerID, &row.WorkerID, &row.TotalCents,

@@ -255,13 +255,13 @@ func loadInvoiceData(ctx context.Context, db *pgxpool.Pool, receiptRepo *receipt
 		SELECT po.created_at, po.status, po.total_cents, po.note,
 		       s.name, COALESCE(s.legal_name,''), COALESCE(s.tax_id,''), s.phone, s.email, s.address,
 		       w.name,
-		       creator.full_name,
-		       receiver.full_name
+		       creator.name,
+		       receiver.name
 		FROM purchase_orders po
 		LEFT JOIN suppliers s        ON s.id = po.supplier_id
 		LEFT JOIN warehouses w       ON w.id = po.warehouse_id
-		LEFT JOIN users creator      ON creator.id = po.created_by
-		LEFT JOIN users receiver     ON receiver.id = po.received_by
+		LEFT JOIN employees creator      ON creator.id = po.created_by
+		LEFT JOIN employees receiver     ON receiver.id = po.received_by
 		WHERE po.id = $1
 	`, poID).Scan(&createdAt, &status, &totalCents, &note,
 		&supName, &supLegal, &supTaxID, &supPhone, &supEmail, &supAddr,

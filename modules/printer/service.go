@@ -130,7 +130,7 @@ func (s *Service) buildSaleReceipt(ctx context.Context, saleID int64) ([]byte, e
 
 	if err := s.db.QueryRow(ctx, `
 		SELECT s.id, s.created_at, s.total_cents, s.discount_cents, s.discount_percent, s.bonus_used_cents,
-		       u.full_name, w.name, c.name, wk.name, s.note,
+		       u.name, w.name, c.name, wk.name, s.note,
 		       (SELECT pt.name FROM payments p
 		        JOIN transactions t ON t.id = p.transaction_id
 		        JOIN payment_types pt ON pt.id = p.payment_type_id
@@ -140,10 +140,10 @@ func (s *Service) buildSaleReceipt(ctx context.Context, saleID int64) ([]byte, e
 		        JOIN transactions t ON t.id = p.transaction_id
 		        WHERE t.related_table = 'sale' AND t.related_id = s.id), 0)
 		FROM sales s
-		LEFT JOIN users u ON u.id = s.created_by
+		LEFT JOIN employees u ON u.id = s.created_by
 		LEFT JOIN warehouses w ON w.id = s.warehouse_id
 		LEFT JOIN customers c ON c.id = s.customer_id
-		LEFT JOIN workers wk ON wk.id = s.worker_id AND wk.deleted_at IS NULL
+		LEFT JOIN employees wk ON wk.id = s.worker_id AND wk.deleted_at IS NULL
 		WHERE s.id = $1
 	`, saleID).Scan(&saleIDInt, &createdAt, &totalCents, &discountCents, &discountPercent, &bonusUsedCents,
 		&cashierName, &warehouseName, &customerName, &workerName, &note, &paymentMethod, &paidCents); err != nil {

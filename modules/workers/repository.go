@@ -9,6 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// The workers module is a scoped view onto the unified `employees` table: it
+// only returns rows where is_worker=true. Authentication-only rows (admins,
+// managers with no payroll role) are filtered out so the workers screen stays
+// focused on market staff.
+
 type Repository struct {
 	db *pgxpool.Pool
 }
@@ -19,26 +24,26 @@ func isNotFound(err error) bool { return err == pgx.ErrNoRows }
 
 func (r *Repository) Create(ctx context.Context, w *Worker) error {
 	q := `
-		INSERT INTO workers (name, position, department, phone, email, address, salary, hire_date, notes, is_active, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		RETURNING id, user_id, is_active, created_at, updated_at
+		INSERT INTO employees (name, position, department, phone, email, address, salary, hire_date, notes, is_active, is_worker)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+		RETURNING id, is_active, created_at, updated_at
 	`
 	return r.db.QueryRow(ctx, q,
 		w.Name, w.Position, w.Department, w.Phone, w.Email,
-		w.Address, w.Salary, w.HireDate, w.Notes, w.IsActive, w.UserID,
-	).Scan(&w.ID, &w.UserID, &w.IsActive, &w.CreatedAt, &w.UpdatedAt)
+		w.Address, w.Salary, w.HireDate, w.Notes, w.IsActive,
+	).Scan(&w.ID, &w.IsActive, &w.CreatedAt, &w.UpdatedAt)
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Worker, error) {
 	var w Worker
 	q := `
-		SELECT id, user_id, name, position, department, phone, email, address,
+		SELECT id, name, position, department, phone, email, address,
 		       salary, hire_date, is_active, notes, created_at, updated_at, deleted_at
-		FROM workers
-		WHERE id = $1 AND deleted_at IS NULL
+		FROM employees
+		WHERE id = $1 AND is_worker = true AND deleted_at IS NULL
 	`
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&w.ID, &w.UserID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
+		&w.ID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
 		&w.Salary, &w.HireDate, &w.IsActive, &w.Notes, &w.CreatedAt, &w.UpdatedAt, &w.DeletedAt,
 	)
 	return w, err
@@ -53,8 +58,8 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	countSQL := `
-		SELECT COUNT(*) FROM workers
-		WHERE deleted_at IS NULL
+		SELECT COUNT(*) FROM employees
+		WHERE is_worker = true AND deleted_at IS NULL
 		  AND ($2 = false OR is_active = true)
 		  AND ($1 = '' OR
 		       name ILIKE '%' || $1 || '%' OR
@@ -80,10 +85,10 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	q := fmt.Sprintf(`
-		SELECT id, user_id, name, position, department, phone, email, address,
+		SELECT id, name, position, department, phone, email, address,
 		       salary, hire_date, is_active, notes, created_at, updated_at, deleted_at
-		FROM workers
-		WHERE deleted_at IS NULL
+		FROM employees
+		WHERE is_worker = true AND deleted_at IS NULL
 		  AND ($2 = false OR is_active = true)
 		  AND ($1 = '' OR
 		       name ILIKE '%%' || $1 || '%%' OR
@@ -103,7 +108,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	for rows.Next() {
 		var w Worker
 		if err := rows.Scan(
-			&w.ID, &w.UserID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
+			&w.ID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
 			&w.Salary, &w.HireDate, &w.IsActive, &w.Notes, &w.CreatedAt, &w.UpdatedAt, &w.DeletedAt,
 		); err != nil {
 			return nil, 0, err
@@ -128,7 +133,7 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (W
 	}
 
 	q := `
-		UPDATE workers SET
+		UPDATE employees SET
 			name       = COALESCE($1, name),
 			position   = COALESCE($2, position),
 			department = COALESCE($3, department),
@@ -140,8 +145,8 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (W
 			is_active  = COALESCE($9, is_active),
 			notes      = COALESCE($10, notes),
 			updated_at = now()
-		WHERE id = $11 AND deleted_at IS NULL
-		RETURNING id, user_id, name, position, department, phone, email, address,
+		WHERE id = $11 AND is_worker = true AND deleted_at IS NULL
+		RETURNING id, name, position, department, phone, email, address,
 		          salary, hire_date, is_active, notes, created_at, updated_at, deleted_at
 	`
 	var w Worker
@@ -149,18 +154,20 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (W
 		req.Name, req.Position, req.Department, req.Phone, req.Email,
 		req.Address, req.Salary, hireDate, req.IsActive, req.Notes, id,
 	).Scan(
-		&w.ID, &w.UserID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
+		&w.ID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
 		&w.Salary, &w.HireDate, &w.IsActive, &w.Notes, &w.CreatedAt, &w.UpdatedAt, &w.DeletedAt,
 	)
 	return w, err
 }
 
-// SoftDelete sets deleted_at=now() and is_active=false
+// SoftDelete sets deleted_at=now() and is_active=false. Restricted to rows
+// where is_worker=true so we can't accidentally soft-delete an admin login
+// from the workers screen.
 func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
 	ct, err := r.db.Exec(ctx, `
-		UPDATE workers
+		UPDATE employees
 		SET deleted_at = now(), is_active = false, updated_at = now()
-		WHERE id = $1 AND deleted_at IS NULL
+		WHERE id = $1 AND is_worker = true AND deleted_at IS NULL
 	`, id)
 	if err != nil {
 		return err

@@ -1913,6 +1913,17 @@ definitions:
     required:
     - name
     type: object
+  warehouse.UpdateRequest:
+    properties:
+      address:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+    type: object
   warehouse.Warehouse:
     properties:
       address:
@@ -7129,6 +7140,46 @@ paths:
       tags:
       - Warehouses
   /api/warehouses/{id}:
+    delete:
+      description: Soft-deletes a warehouse. Blocked when it still holds stock or
+        has active reservations.
+      parameters:
+      - description: Warehouse ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "409":
+          description: Conflict
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Delete warehouse (soft)
+      tags:
+      - Warehouses
     get:
       description: Returns a single warehouse by ID (not deleted).
       parameters:
@@ -7198,6 +7249,68 @@ paths:
       security:
       - BearerAuth: []
       summary: Get warehouse by ID
+      tags:
+      - Warehouses
+    patch:
+      consumes:
+      - application/json
+      description: Updates the editable fields of a warehouse (name, address, is_active).
+        Manager+.
+      parameters:
+      - description: Warehouse ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/warehouse.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/warehouse.Warehouse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+        "409":
+          description: Conflict
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/response.APIError'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Update warehouse
       tags:
       - Warehouses
   /api/worker-cards:

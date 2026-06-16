@@ -240,7 +240,7 @@ func (r *Repository) AllDebtors(ctx context.Context) ([]WorkerDebtSummary, error
 		       SUM(wd.remaining_cents) AS total_debt,
 		       COUNT(*) AS open_debts
 		FROM worker_debts wd
-		JOIN workers w ON w.id = wd.worker_id
+		JOIN employees w ON w.id = wd.worker_id
 		WHERE wd.status = 'open'
 		GROUP BY wd.worker_id, w.name
 		ORDER BY total_debt DESC

@@ -322,9 +322,9 @@ func (r *Repository) GetPriceHistory(ctx context.Context, productID int64, limit
 
 	rows, err := r.db.Query(ctx, `
 		SELECT ph.id, ph.product_id, ph.field, ph.old_value, ph.new_value,
-		       ph.changed_by, COALESCE(u.full_name, ''), ph.changed_at
+		       ph.changed_by, COALESCE(u.name, ''), ph.changed_at
 		FROM price_history ph
-		LEFT JOIN users u ON u.id = ph.changed_by
+		LEFT JOIN employees u ON u.id = ph.changed_by
 		WHERE ph.product_id = $1
 		ORDER BY ph.changed_at DESC
 		LIMIT $2 OFFSET $3

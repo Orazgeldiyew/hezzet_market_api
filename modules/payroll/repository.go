@@ -98,7 +98,7 @@ func (r *Repository) ListForExport(ctx context.Context, period string) ([]Payrol
 		       pr.base_salary_cents, pr.fines_cents, pr.debts_cents,
 		       pr.net_salary_cents, pr.status
 		FROM payroll_runs pr
-		JOIN workers w ON w.id = pr.worker_id
+		JOIN employees w ON w.id = pr.worker_id
 		WHERE pr.period = $1
 		ORDER BY w.name
 	`, period)

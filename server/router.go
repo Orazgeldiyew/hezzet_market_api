@@ -42,6 +42,7 @@ import (
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/warehouse"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workercard"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workerfinance"
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/employees"
 	"github.com/Orazgeldiyew/hezzet_market_backend/modules/workers"
 	"github.com/Orazgeldiyew/hezzet_market_backend/pkg/response"
 )
@@ -175,6 +176,11 @@ func NewRouter(deps Deps) *gin.Engine {
 	finRepo := finance.NewRepository(deps.DB)
 	workerfinance.RegisterRoutes(workersGroup, deps.DB, finRepo, permRepo)
 	payroll.RegisterRoutes(workersGroup, deps.DB, finRepo, permRepo)
+
+	// ── Unified employees (replaces split workers + users). The old
+	// /workers and /auth/users routes are kept for backward compat while
+	// the frontend transitions.
+	employees.RegisterRoutes(api, deps.DB, permRepo)
 
 	// ── Finance ──
 	finance.RegisterRoutes(mod("finance"), deps.DB, permRepo)

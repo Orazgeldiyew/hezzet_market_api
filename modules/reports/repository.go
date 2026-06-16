@@ -336,7 +336,7 @@ func (r *Repository) StockMovementsForExport(
 		FROM warehouse_item_details wid
 		JOIN warehouses w ON w.id = wid.warehouse_id
 		JOIN products   p ON p.id = wid.product_id
-		LEFT JOIN users u ON u.id = wid.created_by
+		LEFT JOIN employees u ON u.id = wid.created_by
 		WHERE wid.created_at BETWEEN $1 AND $2
 		  AND ($3::bigint IS NULL OR wid.warehouse_id = $3)
 		ORDER BY wid.created_at DESC

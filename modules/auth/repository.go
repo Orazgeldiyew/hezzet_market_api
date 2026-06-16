@@ -28,7 +28,7 @@ func userScanDest(u *User) []any {
 	}
 }
 
-const userCols = `id, username, password_hash, full_name, phone, email,
+const userCols = `id, username, password_hash, name, phone, email,
        is_active, blocked_at, blocked_reason, password_changed_at,
        token_version, last_login_at, created_by, updated_by,
        created_at, updated_at, deleted_at`
@@ -37,8 +37,8 @@ const userCols = `id, username, password_hash, full_name, phone, email,
 
 func (r *Repository) CreateUser(ctx context.Context, u *User) error {
 	q := `
-		INSERT INTO users (username, password_hash, full_name, phone, email, is_active, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO employees (username, password_hash, name, phone, email, is_active, created_by, has_account)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, true)
 		RETURNING id, created_at, updated_at
 	`
 	return r.db.QueryRow(ctx, q,
@@ -57,8 +57,8 @@ func (r *Repository) CreateUserWithRoles(ctx context.Context, u *User, roleCodes
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO users (username, password_hash, full_name, phone, email, is_active, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO employees (username, password_hash, name, phone, email, is_active, created_by, has_account)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, true)
 		RETURNING id, created_at, updated_at
 	`,
 		u.Username, u.PasswordHash, u.FullName, u.Phone, u.Email, u.IsActive, u.CreatedBy,
@@ -83,14 +83,14 @@ func (r *Repository) CreateUserWithRoles(ctx context.Context, u *User, roleCodes
 }
 
 func (r *Repository) GetByUsername(ctx context.Context, username string) (User, error) {
-	q := fmt.Sprintf(`SELECT %s FROM users WHERE username = $1 AND deleted_at IS NULL`, userCols)
+	q := fmt.Sprintf(`SELECT %s FROM employees WHERE username = $1 AND deleted_at IS NULL`, userCols)
 	var u User
 	err := r.db.QueryRow(ctx, q, username).Scan(userScanDest(&u)...)
 	return u, err
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
-	q := fmt.Sprintf(`SELECT %s FROM users WHERE id = $1 AND deleted_at IS NULL`, userCols)
+	q := fmt.Sprintf(`SELECT %s FROM employees WHERE id = $1 AND deleted_at IS NULL`, userCols)
 	var u User
 	err := r.db.QueryRow(ctx, q, id).Scan(userScanDest(&u)...)
 	return u, err
@@ -98,9 +98,9 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 
 func (r *Repository) Update(ctx context.Context, id int64, req UpdateUserRequest, updatedBy *int64) (User, error) {
 	q := fmt.Sprintf(`
-		UPDATE users SET
+		UPDATE employees SET
 			username   = COALESCE($1, username),
-			full_name  = COALESCE($2, full_name),
+			name = COALESCE($2, name),
 			phone      = COALESCE($3, phone),
 			email      = COALESCE($4, email),
 			is_active  = COALESCE($5, is_active),
@@ -119,7 +119,7 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateUserRequest
 
 func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
 	ct, err := r.db.Exec(ctx,
-		`UPDATE users SET deleted_at = now(), is_active = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
+		`UPDATE employees SET deleted_at = now(), is_active = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (r *Repository) SoftDelete(ctx context.Context, id int64) error {
 
 func (r *Repository) UpdatePasswordAndBumpVersion(ctx context.Context, id int64, hash string, updatedBy int64) error {
 	ct, err := r.db.Exec(ctx, `
-		UPDATE users SET
+		UPDATE employees SET
 			password_hash       = $1,
 			password_changed_at = now(),
 			token_version       = token_version + 1,
@@ -150,7 +150,7 @@ func (r *Repository) UpdatePasswordAndBumpVersion(ctx context.Context, id int64,
 
 func (r *Repository) UpdateLastLogin(ctx context.Context, id int64) error {
 	_, err := r.db.Exec(ctx,
-		`UPDATE users SET last_login_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
+		`UPDATE employees SET last_login_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
 	return err
 }
 
@@ -159,7 +159,7 @@ func (r *Repository) UpdateLastLogin(ctx context.Context, id int64) error {
 func (r *Repository) BumpTokenVersion(ctx context.Context, userID int64) (int, error) {
 	var newVersion int
 	err := r.db.QueryRow(ctx, `
-		UPDATE users
+		UPDATE employees
 		SET token_version = token_version + 1, updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING token_version
@@ -171,7 +171,7 @@ func (r *Repository) BumpTokenVersion(ctx context.Context, userID int64) (int, e
 
 func (r *Repository) BlockUser(ctx context.Context, id int64, reason string, updatedBy int64) (User, error) {
 	q := fmt.Sprintf(`
-		UPDATE users SET
+		UPDATE employees SET
 			blocked_at     = now(),
 			blocked_reason = $1,
 			token_version  = token_version + 1,
@@ -189,7 +189,7 @@ func (r *Repository) BlockUser(ctx context.Context, id int64, reason string, upd
 func (r *Repository) UnblockUser(ctx context.Context, id int64, updatedBy int64) (User, error) {
 	// SECURITY: unblock changes security-state; bump token_version to invalidate tokens
 	q := fmt.Sprintf(`
-		UPDATE users SET
+		UPDATE employees SET
 			blocked_at     = NULL,
 			blocked_reason = NULL,
 			token_version  = token_version + 1,
@@ -215,7 +215,7 @@ func (r *Repository) GetTokenVersion(ctx context.Context, userID int64) (int, er
 
 	err := r.db.QueryRow(ctx, `
 		SELECT token_version, is_active, blocked_at
-		FROM users
+		FROM employees
 		WHERE id = $1 AND deleted_at IS NULL
 	`, userID).Scan(&version, &isActive, &blockedAt)
 	if err != nil {
@@ -241,8 +241,9 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	countQ := `
-		SELECT COUNT(*) FROM users
-		WHERE deleted_at IS NULL 		  AND ($1 = '' OR username ILIKE '%' || $1 || '%' OR full_name ILIKE '%' || $1 || '%')
+		SELECT COUNT(*) FROM employees
+		WHERE deleted_at IS NULL AND has_account = true
+		  AND ($1 = '' OR username ILIKE '%' || $1 || '%' OR name ILIKE '%' || $1 || '%')
 	`
 	var total int
 	if err := r.db.QueryRow(ctx, countQ, search).Scan(&total); err != nil {
@@ -264,8 +265,9 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 
 	q := fmt.Sprintf(`
 		SELECT %s
-		FROM users
-		WHERE deleted_at IS NULL 		  AND ($1 = '' OR username ILIKE '%%' || $1 || '%%' OR full_name ILIKE '%%' || $1 || '%%')
+		FROM employees
+		WHERE deleted_at IS NULL AND has_account = true
+		  AND ($1 = '' OR username ILIKE '%%' || $1 || '%%' OR name ILIKE '%%' || $1 || '%%')
 		ORDER BY %s %s
 		LIMIT $2 OFFSET $3
 	`, userCols, col, dir)
@@ -382,7 +384,7 @@ func (r *Repository) SetUserRoles(ctx context.Context, userID int64, roleCodes [
 
 	// Bump token_version so the user must re-login to pick up new roles in JWT
 	if _, err = tx.Exec(ctx, `
-		UPDATE users SET token_version = token_version + 1, updated_at = now()
+		UPDATE employees SET token_version = token_version + 1, updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
 	`, userID); err != nil {
 		return err

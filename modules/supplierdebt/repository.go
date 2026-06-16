@@ -37,10 +37,10 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (SupplierDebt, error
 	var d SupplierDebt
 	err := r.db.QueryRow(ctx, `
 		SELECT sd.id, sd.supplier_id, s.name, sd.purchase_id, sd.amount_cents, sd.remaining_cents,
-		       sd.status, COALESCE(sd.note,''), sd.created_by, COALESCE(u.full_name, ''), sd.created_at, sd.updated_at
+		       sd.status, COALESCE(sd.note,''), sd.created_by, COALESCE(u.name, ''), sd.created_at, sd.updated_at
 		FROM supplier_debts sd
 		JOIN suppliers s ON s.id = sd.supplier_id
-		LEFT JOIN users u ON u.id = sd.created_by
+		LEFT JOIN employees u ON u.id = sd.created_by
 		WHERE sd.id = $1
 	`, id).Scan(
 		&d.ID, &d.SupplierID, &d.SupplierName, &d.PurchaseID, &d.AmountCents, &d.RemainingCents,
@@ -66,10 +66,10 @@ func (r *Repository) ListBySupplier(ctx context.Context, supplierID int64, onlyO
 
 	rows, err := r.db.Query(ctx, `
 		SELECT sd.id, sd.supplier_id, s.name, sd.purchase_id, sd.amount_cents, sd.remaining_cents,
-		       sd.status, COALESCE(sd.note,''), sd.created_by, COALESCE(u.full_name, ''), sd.created_at, sd.updated_at
+		       sd.status, COALESCE(sd.note,''), sd.created_by, COALESCE(u.name, ''), sd.created_at, sd.updated_at
 		FROM supplier_debts sd
 		JOIN suppliers s ON s.id = sd.supplier_id
-		LEFT JOIN users u ON u.id = sd.created_by
+		LEFT JOIN employees u ON u.id = sd.created_by
 		WHERE sd.supplier_id = $1 `+statusFilter+`
 		ORDER BY sd.created_at DESC
 		LIMIT $2 OFFSET $3
@@ -91,10 +91,10 @@ func (r *Repository) ListAll(ctx context.Context, limit, offset int) ([]Supplier
 
 	rows, err := r.db.Query(ctx, `
 		SELECT sd.id, sd.supplier_id, s.name, sd.purchase_id, sd.amount_cents, sd.remaining_cents,
-		       sd.status, COALESCE(sd.note,''), sd.created_by, COALESCE(u.full_name, ''), sd.created_at, sd.updated_at
+		       sd.status, COALESCE(sd.note,''), sd.created_by, COALESCE(u.name, ''), sd.created_at, sd.updated_at
 		FROM supplier_debts sd
 		JOIN suppliers s ON s.id = sd.supplier_id
-		LEFT JOIN users u ON u.id = sd.created_by
+		LEFT JOIN employees u ON u.id = sd.created_by
 		WHERE sd.status = 'open'
 		ORDER BY sd.created_at DESC
 		LIMIT $1 OFFSET $2
@@ -174,9 +174,9 @@ func (r *Repository) Pay(ctx context.Context, debtID int64, req PayRequest, user
 func (r *Repository) GetPayments(ctx context.Context, debtID int64) ([]DebtPayment, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT dp.id, dp.debt_id, dp.amount_cents, dp.payment_type_id, COALESCE(dp.note,''),
-		       dp.created_by, COALESCE(u.full_name, ''), dp.created_at
+		       dp.created_by, COALESCE(u.name, ''), dp.created_at
 		FROM supplier_debt_payments dp
-		LEFT JOIN users u ON u.id = dp.created_by
+		LEFT JOIN employees u ON u.id = dp.created_by
 		WHERE dp.debt_id = $1
 		ORDER BY dp.created_at
 	`, debtID)
