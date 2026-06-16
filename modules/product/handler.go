@@ -2,6 +2,7 @@ package product
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -371,8 +372,12 @@ func (h *Handler) GetPriceHistory(c *gin.Context) {
 		return
 	}
 
-	pg, _ := c.Get("pagination")
-	page := pg.(middleware.Pagination)
+	pgVal, _ := c.Get("pagination")
+	page, ok := pgVal.(middleware.Pagination)
+	if !ok {
+		c.Error(apperr.Internal(fmt.Errorf("pagination middleware missing")))
+		return
+	}
 
 	items, total, err := h.svc.GetPriceHistory(c.Request.Context(), id, page.Limit, page.Offset)
 	if err != nil {

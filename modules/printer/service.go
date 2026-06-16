@@ -106,7 +106,7 @@ func (s *Service) buildSaleReceipt(ctx context.Context, saleID int64) ([]byte, e
 	var shopName, shopAddress, shopPhone, footer, logoPath, customTemplate string
 	var logoWidth, logoHeight *string
 	var fsHeader, fsItems, fsMeta, fsTotal int
-	_ = s.db.QueryRow(ctx, `
+	if err := s.db.QueryRow(ctx, `
 		SELECT COALESCE(shop_name, 'Hezzet Market'), COALESCE(shop_address, ''), COALESCE(shop_phone, ''),
 		       COALESCE(footer, 'Satyn alanyňyz üçin sag boluň!'),
 		       COALESCE(logo_path, ''), COALESCE(template, ''),
@@ -114,7 +114,12 @@ func (s *Service) buildSaleReceipt(ctx context.Context, saleID int64) ([]byte, e
 		       font_size_header, font_size_items, font_size_meta, font_size_total
 		FROM receipt_settings LIMIT 1
 	`).Scan(&shopName, &shopAddress, &shopPhone, &footer, &logoPath, &customTemplate, &logoWidth, &logoHeight,
-		&fsHeader, &fsItems, &fsMeta, &fsTotal)
+		&fsHeader, &fsItems, &fsMeta, &fsTotal); err != nil {
+		// Don't fail the print on a missing settings row — fall back to
+		// in-code defaults — but surface the error in the log so an operator
+		// can see "why is my shop name blank on receipts".
+		log.Printf("[Printer] receipt_settings query failed, using defaults: %v", err)
+	}
 
 	// Sale header
 	var cashierName, warehouseName, customerName, workerName, paymentMethod, note *string

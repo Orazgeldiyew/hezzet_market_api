@@ -233,10 +233,13 @@ func (r *Repository) ReceivePO(
 			DO UPDATE SET
 				qty_milli        = warehouse_items.qty_milli + EXCLUDED.qty_milli,
 				total_cost_cents = warehouse_items.total_cost_cents + $5,
+				-- avg_cost_cents = total_cost / qty (in milli-cents-per-milli).
+				-- Computed in NUMERIC so very large warehouse totals can't
+				-- silently wrap an int64 multiply by 1000 before the divide.
 				avg_cost_cents   = CASE
 					WHEN (warehouse_items.qty_milli + EXCLUDED.qty_milli) > 0
-						THEN ((warehouse_items.total_cost_cents + $5) * 1000)
-						     / (warehouse_items.qty_milli + EXCLUDED.qty_milli)
+						THEN (((warehouse_items.total_cost_cents + $5)::numeric * 1000)
+						     / (warehouse_items.qty_milli + EXCLUDED.qty_milli))::bigint
 					ELSE 0
 				END,
 				updated_at = now()

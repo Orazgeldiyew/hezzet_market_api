@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"sync"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,7 +29,13 @@ type Repository struct {
 	debtRepo         *customerdebt.Repository
 	discountRuleRepo *discountrule.Repository
 	receiptRepo      *receiptsettings.Repository
-	printerSv        PrinterService
+
+	// printerSv is read inside the auto-print goroutine spawned per sale
+	// (see sale/service.go ConfirmSale). The setter is called once at
+	// startup wiring, but Go's memory model still treats a concurrent
+	// write/read on an interface field as a data race — guard it.
+	muPrinter sync.RWMutex
+	printerSv PrinterService
 }
 
 func NewRepository(db *pgxpool.Pool, baseURL string, customerRepo *customer.Repository) *Repository {
@@ -36,9 +44,17 @@ func NewRepository(db *pgxpool.Pool, baseURL string, customerRepo *customer.Repo
 
 func (r *Repository) SetDebtRepo(repo *customerdebt.Repository)         { r.debtRepo = repo }
 func (r *Repository) SetDiscountRuleRepo(repo *discountrule.Repository) { r.discountRuleRepo = repo }
-func (r *Repository) SetPrinterService(p PrinterService)                { r.printerSv = p }
-func (r *Repository) PrinterService() PrinterService                    { return r.printerSv }
-func (r *Repository) DB() *pgxpool.Pool                                 { return r.db }
+func (r *Repository) SetPrinterService(p PrinterService) {
+	r.muPrinter.Lock()
+	r.printerSv = p
+	r.muPrinter.Unlock()
+}
+func (r *Repository) PrinterService() PrinterService {
+	r.muPrinter.RLock()
+	defer r.muPrinter.RUnlock()
+	return r.printerSv
+}
+func (r *Repository) DB() *pgxpool.Pool { return r.db }
 
 // photoURL converts a nullable product photo_path to a full public URL.
 func (r *Repository) photoURL(path *string) *string {
@@ -401,9 +417,12 @@ func (r *Repository) ConfirmSale(
 			ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
 				qty_milli        = warehouse_items.qty_milli - $3::bigint,
 				total_cost_cents = GREATEST(warehouse_items.total_cost_cents - $4::bigint, 0),
+				-- NUMERIC intermediate so the *1000 multiply can't overflow
+				-- int64 on large warehouse totals before the divide.
 				avg_cost_cents   = CASE
 					WHEN (warehouse_items.qty_milli - $3::bigint) > 0
-						THEN ((warehouse_items.total_cost_cents - $4::bigint) * 1000) / (warehouse_items.qty_milli - $3::bigint)
+						THEN (((warehouse_items.total_cost_cents - $4::bigint)::numeric * 1000)
+						     / (warehouse_items.qty_milli - $3::bigint))::bigint
 					ELSE 0
 				END,
 				updated_at = now()
@@ -762,11 +781,16 @@ func (r *Repository) CancelSale(ctx context.Context, saleID int64, userID int64)
 			}
 		}
 
-		// Cancel open worker credit debt created during ConfirmSale
+		// Cancel open worker credit debt created during ConfirmSale. Use
+		// soft-cancel (status='canceled') instead of DELETE — payroll_run_debts
+		// may hold a FK to this row, and a hard DELETE would either fail with
+		// a constraint violation or, with future ON DELETE CASCADE, silently
+		// erase a snapshotted debt from a calculated payroll run.
 		if saleWorkerID != nil {
 			debtNote := "Sale #" + strconv.FormatInt(saleID, 10)
 			_, err = tx.Exec(ctx, `
-				DELETE FROM worker_debts
+				UPDATE worker_debts
+				SET status = 'canceled', remaining_cents = 0, updated_at = now()
 				WHERE worker_id = $1 AND type = 'purchase' AND note = $2 AND status = 'open'
 			`, *saleWorkerID, debtNote)
 			if err != nil {
@@ -1259,8 +1283,11 @@ func (r *Repository) ReturnSale(ctx context.Context, saleID int64, req ReturnSal
 		refundCents := lineTotalCents(ri.QtyMilli, origUnitPrice)
 		returnTotalCents += refundCents
 
-		// Calculate cost to restore (proportional)
-		costToRestore := (origCostCents * ri.QtyMilli) / origQtyMilli
+		// Calculate cost to restore (proportional). Rounded half-up so the
+		// inventory cost adjustment matches the refund (which is also rounded
+		// in lineTotalCents) — otherwise repeated partial returns drift the
+		// warehouse total_cost_cents away from the per-item average.
+		costToRestore := (origCostCents*ri.QtyMilli + origQtyMilli/2) / origQtyMilli
 
 		// Insert sale_return_items
 		_, err = tx.Exec(ctx, `
@@ -1291,7 +1318,8 @@ func (r *Repository) ReturnSale(ctx context.Context, saleID int64, req ReturnSal
 		newTotalCost := wTotalCost + costToRestore
 		newAvgCost := int64(0)
 		if newQty > 0 {
-			newAvgCost = (newTotalCost * 1000) / newQty
+			// Round half-up to keep newQty*newAvgCost/1000 close to newTotalCost.
+			newAvgCost = (newTotalCost*1000 + newQty/2) / newQty
 		}
 
 		// Ledger entry
@@ -1342,7 +1370,9 @@ func (r *Repository) ReturnSale(ctx context.Context, saleID int64, req ReturnSal
 
 	// 7. Proportional bonus restoration
 	if bonusUsedCents > 0 && saleCustomerID != nil && totalCents > 0 {
-		bonusToRestore := (bonusUsedCents * returnTotalCents) / totalCents
+		// Round half-up so customers don't lose fractional bonus points on
+		// repeated partial returns.
+		bonusToRestore := (bonusUsedCents*returnTotalCents + totalCents/2) / totalCents
 		if bonusToRestore > 0 {
 			_, err = tx.Exec(ctx, `
 				UPDATE customers SET bonus_points = bonus_points + $2, updated_at = now()

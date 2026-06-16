@@ -111,3 +111,62 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 	response.OK(c, out)
 }
+
+// Update godoc
+//
+//	@Summary		Update warehouse
+//	@Description	Updates the editable fields of a warehouse (name, address, is_active). Manager+.
+//	@Tags			Warehouses
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int64			true	"Warehouse ID"
+//	@Param			body	body		UpdateRequest	true	"Fields to update"
+//	@Success		200		{object}	response.APIResponse{data=Warehouse}
+//	@Failure		400		{object}	response.APIResponse{error=response.APIError}
+//	@Failure		404		{object}	response.APIResponse{error=response.APIError}
+//	@Failure		409		{object}	response.APIResponse{error=response.APIError}
+//	@Router			/api/warehouses/{id} [patch]
+func (h *Handler) Update(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.Error(apperr.Validation("invalid warehouse id"))
+		return
+	}
+	var req UpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	out, err := h.svc.Update(c.Request.Context(), id, req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, out)
+}
+
+// Delete godoc
+//
+//	@Summary		Delete warehouse (soft)
+//	@Description	Soft-deletes a warehouse. Blocked when it still holds stock or has active reservations.
+//	@Tags			Warehouses
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int64	true	"Warehouse ID"
+//	@Success		200	{object}	response.APIResponse
+//	@Failure		404	{object}	response.APIResponse{error=response.APIError}
+//	@Failure		409	{object}	response.APIResponse{error=response.APIError}
+//	@Router			/api/warehouses/{id} [delete]
+func (h *Handler) Delete(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.Error(apperr.Validation("invalid warehouse id"))
+		return
+	}
+	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
+}

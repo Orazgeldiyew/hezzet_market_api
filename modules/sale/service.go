@@ -104,7 +104,12 @@ func (s *Service) ConfirmSale(ctx context.Context, saleID int64, req ConfirmSale
 			log.Printf("[AutoPrint] found register_id=%d", rid)
 		}
 
-		go func() {
+		// Pass saleID/regID by value so the goroutine doesn't depend on the
+		// enclosing function's locals. context.Background() is intentional —
+		// the request ctx is cancelled the moment we return the response to
+		// the cashier, but the printer call must still complete after that.
+		// 10s timeout keeps a stuck printer from leaking goroutines.
+		go func(saleID int64, regID *int64, printerSv PrinterService) {
 			printCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			if perr := printerSv.PrintSale(printCtx, saleID, regID); perr != nil {
@@ -112,7 +117,7 @@ func (s *Service) ConfirmSale(ctx context.Context, saleID int64, req ConfirmSale
 			} else {
 				log.Printf("[AutoPrint] OK saleID=%d", saleID)
 			}
-		}()
+		}(saleID, regID, printerSv)
 	} else {
 		log.Printf("[AutoPrint] printer service is nil — skipping")
 	}

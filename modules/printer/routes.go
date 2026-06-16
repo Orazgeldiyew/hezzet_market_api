@@ -16,13 +16,16 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, uploadsDir string, pe
 	h := NewHandler(svc)
 
 	g := rg.Group("/printers")
-	g.Use(middleware.RequirePermission(permChecker, "reports", "view"))
 
-	g.GET("", h.List)
-	g.POST("", h.Create)
-	g.PATCH("/:id", h.Update)
-	g.DELETE("/:id", h.Delete)
-	g.POST("/:id/test", h.TestPrint)
+	// Per-action gating so a user with only reports:view can't create or
+	// delete printers. Admins still bypass through the privileged-role check.
+	g.GET("", middleware.RequirePermission(permChecker, "reports", "view"), h.List)
+	g.POST("", middleware.RequirePermission(permChecker, "reports", "create"), h.Create)
+	g.PATCH("/:id", middleware.RequirePermission(permChecker, "reports", "update"), h.Update)
+	g.DELETE("/:id", middleware.RequirePermission(permChecker, "reports", "delete"), h.Delete)
+	// TestPrint actually performs an action (sends bytes to a printer), so it
+	// requires update rather than view.
+	g.POST("/:id/test", middleware.RequirePermission(permChecker, "reports", "update"), h.TestPrint)
 
 	return svc
 }

@@ -3,6 +3,7 @@ package auditlog
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -197,7 +198,18 @@ func AuditMiddleware(repo *Repository) gin.HandlerFunc {
 			NewValue:   snapshotJSON(newSnap),
 		}
 
-		go repo.Create(context.Background(), entry)
+		// Bound the audit-log write to 5 seconds. context.Background() is
+		// deliberate — the request's own ctx is already cancelled by the time
+		// gin runs deferred middleware code, so any descendant ctx would
+		// short-circuit immediately. NOTE: in-flight goroutines aren't waited
+		// for on graceful shutdown, so a few audit entries can still be lost.
+		// Mitigation if that matters: switch to a buffered channel drained by
+		// a background worker.
+		go func(entry *AuditLog) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			repo.Create(ctx, entry)
+		}(entry)
 	}
 }
 

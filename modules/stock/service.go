@@ -17,6 +17,22 @@ func NewService(repo *Repository, notifSvc *notification.Service) *Service {
 	return &Service{repo: repo, notifSvc: notifSvc}
 }
 
+// notifyLowStockAsync fires a low-stock notification in the background. It is
+// nil-safe (no-op when notifSvc is missing) and bounds the work to 30s so a
+// stuck SMS provider can't leak goroutines forever. We deliberately don't pass
+// the request ctx because notifications must continue after the HTTP response
+// completes and ctx is cancelled.
+func (s *Service) notifyLowStockAsync(productID, warehouseID, qtyMilli int64) {
+	if s.notifSvc == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		s.notifSvc.NotifyAdminLowStock(ctx, productID, warehouseID, qtyMilli)
+	}()
+}
+
 func (s *Service) StockIn(ctx context.Context, req InRequest, userID int64) (MovementResult, error) {
 	d, it, err := s.repo.StockIn(ctx, req, userID)
 	if err != nil {
@@ -48,8 +64,7 @@ func (s *Service) StockOut(ctx context.Context, req OutRequest, userID int64) (M
 		return MovementResult{}, apperr.Internal(err)
 	}
 
-	// Async low-stock check (non-blocking, best-effort)
-	go s.notifSvc.NotifyAdminLowStock(context.Background(), req.ProductID, req.WarehouseID, it.QtyMilli)
+	s.notifyLowStockAsync(req.ProductID, req.WarehouseID, it.QtyMilli)
 
 	return MovementResult{Detail: d, Item: it}, nil
 }
@@ -66,8 +81,7 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest, userID int6
 		return TransferResult{}, apperr.Internal(err)
 	}
 
-	// Async low-stock check on source warehouse
-	go s.notifSvc.NotifyAdminLowStock(context.Background(), req.ProductID, req.FromWarehouseID, res.FromItem.QtyMilli)
+	s.notifyLowStockAsync(req.ProductID, req.FromWarehouseID, res.FromItem.QtyMilli)
 
 	return res, nil
 }
@@ -91,9 +105,8 @@ func (s *Service) Move(ctx context.Context, req MoveRequest, userID int64) (Move
 		return MovementResult{}, apperr.Internal(err)
 	}
 
-	// Async low-stock check only for stock-decreasing moves
 	if req.DeltaMilli < 0 {
-		go s.notifSvc.NotifyAdminLowStock(context.Background(), req.ProductID, req.WarehouseID, it.QtyMilli)
+		s.notifyLowStockAsync(req.ProductID, req.WarehouseID, it.QtyMilli)
 	}
 
 	return MovementResult{Detail: d, Item: it}, nil

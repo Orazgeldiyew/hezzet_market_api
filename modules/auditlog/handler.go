@@ -1,6 +1,7 @@
 package auditlog
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -32,8 +33,12 @@ func NewHandler(repo *Repository) *Handler { return &Handler{repo: repo} }
 // @Failure      400  {object}  response.APIResponse
 // @Router       /api/audit-logs [get]
 func (h *Handler) List(c *gin.Context) {
-	pg, _ := c.Get("pagination")
-	page := pg.(middleware.Pagination)
+	pgVal, _ := c.Get("pagination")
+	page, ok := pgVal.(middleware.Pagination)
+	if !ok {
+		c.Error(apperr.Internal(fmt.Errorf("pagination middleware missing")))
+		return
+	}
 
 	var f AuditFilter
 

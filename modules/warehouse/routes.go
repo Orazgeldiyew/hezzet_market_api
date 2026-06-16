@@ -29,5 +29,13 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, permChecker middlewar
 			middleware.RequirePermission(permChecker, "warehouses", "create"),
 			h.Create,
 		)
+		warehouses.PATCH("/:id",
+			middleware.RequirePermission(permChecker, "warehouses", "update"),
+			h.Update,
+		)
+		warehouses.DELETE("/:id",
+			middleware.RequirePermission(permChecker, "warehouses", "delete"),
+			h.Delete,
+		)
 	}
 }

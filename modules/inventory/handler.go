@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -37,8 +38,12 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	pg, _ := c.Get("pagination")
-	page := pg.(middleware.Pagination)
+	pgVal, _ := c.Get("pagination")
+	page, ok := pgVal.(middleware.Pagination)
+	if !ok {
+		c.Error(apperr.Internal(fmt.Errorf("pagination middleware missing")))
+		return
+	}
 
 	var warehouseID *int64
 	if v := c.Query("warehouse_id"); v != "" {

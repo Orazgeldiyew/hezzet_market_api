@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
-	"strconv"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -352,12 +353,18 @@ func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest, userI
 		return Product{}, apperr.Internal(err)
 	}
 
-	// Log price changes
+	// Log price changes. The product update itself already succeeded, so a
+	// failed history INSERT shouldn't unwind it — but it MUST be visible in
+	// the logs, otherwise we silently lose the audit trail of price moves.
 	if req.PurchasePrice != nil && *req.PurchasePrice != current.PurchasePrice {
-		_ = s.repo.LogPriceChange(ctx, id, "purchase_price", current.PurchasePrice, *req.PurchasePrice, userID)
+		if err := s.repo.LogPriceChange(ctx, id, "purchase_price", current.PurchasePrice, *req.PurchasePrice, userID); err != nil {
+			log.Printf("[product] LogPriceChange(purchase_price) failed for product %d: %v", id, err)
+		}
 	}
 	if req.SalePrice != nil && *req.SalePrice != current.SalePrice {
-		_ = s.repo.LogPriceChange(ctx, id, "sale_price", current.SalePrice, *req.SalePrice, userID)
+		if err := s.repo.LogPriceChange(ctx, id, "sale_price", current.SalePrice, *req.SalePrice, userID); err != nil {
+			log.Printf("[product] LogPriceChange(sale_price) failed for product %d: %v", id, err)
+		}
 	}
 
 	// Update categories if provided.
