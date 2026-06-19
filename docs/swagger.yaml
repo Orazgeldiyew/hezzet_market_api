@@ -2103,8 +2103,6 @@ definitions:
       salary:
         minimum: 0
         type: number
-      user_id:
-        type: integer
     required:
     - name
     type: object
@@ -2168,8 +2166,6 @@ definitions:
         type: number
       updated_at:
         type: string
-      user_id:
-        type: integer
     type: object
 info:
   contact: {}
@@ -3315,6 +3311,45 @@ paths:
       summary: Get customer by loyalty card code
       tags:
       - Customers
+  /api/employees:
+    get:
+      parameters:
+      - description: Search by name/username/phone/email
+        in: query
+        name: search
+        type: string
+      - description: Filter by is_worker
+        in: query
+        name: is_worker
+        type: boolean
+      - description: Filter by has_account
+        in: query
+        name: has_account
+        type: boolean
+      - description: Only is_active=true
+        in: query
+        name: active_only
+        type: boolean
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List employees
+      tags:
+      - Employees
   /api/favorites:
     get:
       description: Returns the current user's favorite products sorted by position

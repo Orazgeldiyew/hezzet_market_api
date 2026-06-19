@@ -1888,6 +1888,68 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/employees": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Employees"
+                ],
+                "summary": "List employees",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search by name/username/phone/email",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by is_worker",
+                        "name": "is_worker",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by has_account",
+                        "name": "has_account",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only is_active=true",
+                        "name": "active_only",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/favorites": {
             "get": {
                 "security": [
@@ -12713,9 +12775,6 @@ const docTemplate = `{
                 "salary": {
                     "type": "number",
                     "minimum": 0
-                },
-                "user_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -12805,9 +12864,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                },
-                "user_id": {
-                    "type": "integer"
                 }
             }
         }

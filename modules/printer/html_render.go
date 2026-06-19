@@ -20,10 +20,12 @@ type FontSizes struct {
 	Total  int // change line ("Gaýtargy")
 }
 
-func (f FontSizes) headerOrDefault() int { if f.Header > 0 { return f.Header }; return 32 }
-func (f FontSizes) itemsOrDefault() int  { if f.Items > 0  { return f.Items  }; return 25 }
-func (f FontSizes) metaOrDefault() int   { if f.Meta > 0   { return f.Meta   }; return 23 }
-func (f FontSizes) totalOrDefault() int  { if f.Total > 0  { return f.Total  }; return 30 }
+// Defaults bumped down by 1px each — operator wanted a tighter receipt that
+// fits more lines on 80mm tape without manual font tweaking.
+func (f FontSizes) headerOrDefault() int { if f.Header > 0 { return f.Header }; return 31 }
+func (f FontSizes) itemsOrDefault() int  { if f.Items > 0  { return f.Items  }; return 24 }
+func (f FontSizes) metaOrDefault() int   { if f.Meta > 0   { return f.Meta   }; return 22 }
+func (f FontSizes) totalOrDefault() int  { if f.Total > 0  { return f.Total  }; return 29 }
 
 // RenderHTMLToImage uses headless Chrome to render HTML to a PNG image
 // sized to fit a thermal printer (widthPx pixels wide).

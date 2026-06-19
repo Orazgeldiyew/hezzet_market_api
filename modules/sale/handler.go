@@ -505,8 +505,12 @@ func (h *Handler) Reprint(c *gin.Context) {
 		regID = &rid
 	}
 
+	// Printing is best-effort: a TCP error to the thermal printer must not
+	// surface as a 500 to the cashier, because the sale itself is already
+	// committed. Return printed:false + the error message so the UI can
+	// show a toast like "saved but receipt didn't print".
 	if err := printerSv.PrintSale(ctx, id, regID); err != nil {
-		c.Error(apperr.Internal(err))
+		response.OK(c, gin.H{"printed": false, "error": err.Error()})
 		return
 	}
 	response.OK(c, gin.H{"printed": true})

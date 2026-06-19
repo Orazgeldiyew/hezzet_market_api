@@ -55,6 +55,15 @@ func (r *Repository) GetByRegisterID(ctx context.Context, registerID int64) (Pri
 	))
 }
 
+// GetFirstActive returns any active printer — used as a fallback when the
+// caller has no register/shift (e.g. admin or manager ringing up a sale
+// without an open shift). Picks the lowest id so behaviour is deterministic.
+func (r *Repository) GetFirstActive(ctx context.Context) (Printer, error) {
+	return scanPrinter(r.db.QueryRow(ctx,
+		`SELECT `+cols+` FROM printers WHERE is_active = true ORDER BY id LIMIT 1`,
+	))
+}
+
 func (r *Repository) List(ctx context.Context) ([]Printer, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+cols+` FROM printers ORDER BY id`,

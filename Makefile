@@ -54,17 +54,17 @@ db-shell: psql ## Alias for `psql`
 
 migrate: migrate-up ## Apply all unapplied migrations (alias for migrate-up)
 
-migrate-up: ## Apply all .up.sql migrations not yet applied (idempotent via IF NOT EXISTS in files)
-	@for f in $$(ls $(MIG_DIR)/*.up.sql | sort); do \
-	  echo "▶ $$f"; \
-	  PGPASSWORD=$(DB_PASSWORD) psql -h $(DB_HOST) -U $(DB_USERNAME) -d $(DB_DATABASE) -v ON_ERROR_STOP=1 -f $$f >/dev/null || exit 1; \
-	done
-	@echo "✅ migrations applied"
+migrate-up: ## Apply pending migrations via golang-migrate (respects schema_migrations).
+	go run ./cmd/migrate/main.go -cmd up
 
-migrate-down: ## Roll back the LAST migration (uses paired .down.sql)
-	@latest=$$(ls $(MIG_DIR)/*.down.sql | sort | tail -1); \
-	echo "▼ $$latest"; \
-	PGPASSWORD=$(DB_PASSWORD) psql -h $(DB_HOST) -U $(DB_USERNAME) -d $(DB_DATABASE) -v ON_ERROR_STOP=1 -f $$latest
+migrate-down: ## Roll back ONE migration via golang-migrate.
+	go run ./cmd/migrate/main.go -cmd steps -n -1
+
+migrate-version: ## Show current schema_migrations version + dirty flag.
+	go run ./cmd/migrate/main.go -cmd version
+
+migrate-force: ## Mark schema_migrations as version N, dirty=false. Use after manual recovery: make migrate-force N=76
+	go run ./cmd/migrate/main.go -cmd force -n $(N)
 
 migrate-list: ## List migrations in order
 	@ls $(MIG_DIR)/*.up.sql | sort | sed 's|.*/||' | cat -n

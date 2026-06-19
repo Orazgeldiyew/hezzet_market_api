@@ -36,7 +36,7 @@ type Employee struct {
 type CreateRequest struct {
 	Name       string   `json:"name" binding:"required,min=1,max=255"`
 	Phone      string   `json:"phone" binding:"omitempty,max=50"`
-	Email      string   `json:"email" binding:"omitempty,email,max=255"`
+	Email      string   `json:"email" binding:"omitempty,max=255"`
 	Address    string   `json:"address"`
 	Position   string   `json:"position" binding:"omitempty,max=100"`
 	Department string   `json:"department" binding:"omitempty,max=100"`
@@ -54,7 +54,7 @@ type CreateRequest struct {
 type UpdateRequest struct {
 	Name       *string  `json:"name" binding:"omitempty,min=1,max=255"`
 	Phone      *string  `json:"phone" binding:"omitempty,max=50"`
-	Email      *string  `json:"email" binding:"omitempty,email,max=255"`
+	Email      *string  `json:"email" binding:"omitempty,max=255"`
 	Address    *string  `json:"address"`
 	Position   *string  `json:"position" binding:"omitempty,max=100"`
 	Department *string  `json:"department" binding:"omitempty,max=100"`
