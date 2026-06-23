@@ -46,8 +46,11 @@ type CreateRequest struct {
 
 	HasAccount bool    `json:"has_account"`
 	IsWorker   bool    `json:"is_worker"`
-	Username   *string `json:"username" binding:"omitempty,min=3,max=50"`
-	Password   *string `json:"password" binding:"omitempty,min=8"`
+	Username *string `json:"username" binding:"omitempty,min=3,max=50"`
+	// Password min=4 keeps it short for in-store cashier PINs while still
+	// catching the "user accidentally pressed Enter on an empty field"
+	// case. Manager UI can always set something stronger.
+	Password *string `json:"password" binding:"omitempty,min=4"`
 	Role       *string `json:"role"`
 }
 

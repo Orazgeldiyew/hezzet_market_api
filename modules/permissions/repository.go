@@ -58,9 +58,13 @@ func (r *Repository) IsAllowed(ctx context.Context, roleCodes []string, module, 
 
 		if err != nil {
 			if err == pgx.ErrNoRows {
-				// No explicit permission → default allow
-				r.cacheSet(ctx, code, module, action, true)
-				return true, nil
+				// No explicit permission → default DENY. Fail-closed is the
+				// correct posture for an RBAC system: any module/action pair
+				// we forgot to seed must not become an accidental backdoor.
+				// Admins still bypass this entirely via RequirePermission's
+				// IsPrivileged check, so the only impact is on real users.
+				r.cacheSet(ctx, code, module, action, false)
+				continue // try the next role for this user
 			}
 			return false, err
 		}

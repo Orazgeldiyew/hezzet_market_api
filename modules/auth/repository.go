@@ -28,7 +28,11 @@ func userScanDest(u *User) []any {
 	}
 }
 
-const userCols = `id, username, password_hash, name, phone, email,
+// COALESCE on nullable text columns so a row imported via the employees CRUD
+// (which leaves phone/email empty as NULL rather than '') still scans into
+// the auth User struct whose fields are plain strings.
+const userCols = `id, COALESCE(username,''), COALESCE(password_hash,''), name,
+       COALESCE(phone,''), COALESCE(email,''),
        is_active, blocked_at, blocked_reason, password_changed_at,
        token_version, last_login_at, created_by, updated_by,
        created_at, updated_at, deleted_at`
