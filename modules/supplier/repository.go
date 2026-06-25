@@ -21,7 +21,13 @@ func IsNotFound(err error) bool {
 }
 
 // supplierCols is the shared column list — keep RETURNING/SELECT/Scan in sync.
-const supplierCols = `id, user_id, name, COALESCE(legal_name,''), COALESCE(tax_id,''), phone, email, address, is_active, created_at`
+// COALESCE every nullable text column so a row created via legacy paths
+// (or seeded with empty fields stored as NULL) still scans into the Go
+// struct whose corresponding fields are plain `string`.
+const supplierCols = `id, user_id, name,
+	COALESCE(legal_name,''), COALESCE(tax_id,''),
+	COALESCE(phone,''), COALESCE(email,''), COALESCE(address,''),
+	is_active, created_at`
 
 func scanSupplier(row pgx.Row, s *Supplier) error {
 	return row.Scan(&s.ID, &s.UserID, &s.Name, &s.LegalName, &s.TaxID, &s.Phone, &s.Email, &s.Address, &s.IsActive, &s.CreatedAt)

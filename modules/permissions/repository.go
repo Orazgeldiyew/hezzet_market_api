@@ -80,11 +80,6 @@ func (r *Repository) IsAllowed(ctx context.Context, roleCodes []string, module, 
 	return false, nil
 }
 
-// IsEnabled provides backward compatibility with ModuleChecker interface.
-func (r *Repository) IsEnabled(ctx context.Context, role, module string) (bool, error) {
-	return r.IsAllowed(ctx, []string{role}, module, "view")
-}
-
 func (r *Repository) cacheSet(ctx context.Context, roleCode, module, action string, granted bool) {
 	if r.rdb == nil {
 		return

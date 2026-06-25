@@ -40,12 +40,14 @@ func (r *Repository) Create(ctx context.Context, c *Customer, cardCode *string) 
 }
 
 // IMPORTANT: Get returns row even if is_active=false. 404 only when deleted_at IS NOT NULL.
+// COALESCE on nullable text columns so legacy/imported rows with NULL contact
+// fields still scan into the Go struct's plain `string` slots.
 func (r *Repository) GetByID(ctx context.Context, id int64) (Customer, error) {
 	var c Customer
 	q := `
-		SELECT id, user_id, name, phone, email, type, total_spent, bonus_points,
+		SELECT id, user_id, name, COALESCE(phone,''), COALESCE(email,''), type, total_spent, bonus_points,
 		       COALESCE((SELECT SUM(remaining_cents) FROM customer_debts WHERE customer_id = customers.id AND status = 'open'), 0),
-		       card_code, is_active, notes, created_at, updated_at, deleted_at
+		       card_code, is_active, COALESCE(notes,''), created_at, updated_at, deleted_at
 		FROM customers
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -60,9 +62,9 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Customer, error) {
 func (r *Repository) GetByCardCode(ctx context.Context, code string) (Customer, error) {
 	var c Customer
 	q := `
-		SELECT id, user_id, name, phone, email, type, total_spent, bonus_points,
+		SELECT id, user_id, name, COALESCE(phone,''), COALESCE(email,''), type, total_spent, bonus_points,
 		       COALESCE((SELECT SUM(remaining_cents) FROM customer_debts WHERE customer_id = customers.id AND status = 'open'), 0),
-		       card_code, is_active, notes, created_at, updated_at, deleted_at
+		       card_code, is_active, COALESCE(notes,''), created_at, updated_at, deleted_at
 		FROM customers
 		WHERE card_code = $1 AND deleted_at IS NULL
 	`
@@ -113,9 +115,9 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	q := fmt.Sprintf(`
-		SELECT id, user_id, name, phone, email, type, total_spent, bonus_points,
+		SELECT id, user_id, name, COALESCE(phone,''), COALESCE(email,''), type, total_spent, bonus_points,
 		       COALESCE((SELECT SUM(remaining_cents) FROM customer_debts WHERE customer_id = customers.id AND status = 'open'), 0),
-		       card_code, is_active, notes, created_at, updated_at, deleted_at
+		       card_code, is_active, COALESCE(notes,''), created_at, updated_at, deleted_at
 		FROM customers
 		WHERE deleted_at IS NULL
 		  AND ($2 = false OR is_active = true)
@@ -171,9 +173,9 @@ func (r *Repository) AddSpent(ctx context.Context, id int64, amountCents int64, 
 			bonus_points = bonus_points + $2,
 			updated_at   = now()
 		WHERE id = $3 AND deleted_at IS NULL
-		RETURNING id, name, phone, email, type, total_spent, bonus_points,
+		RETURNING id, name, COALESCE(phone,''), COALESCE(email,''), type, total_spent, bonus_points,
 		          COALESCE((SELECT SUM(remaining_cents) FROM customer_debts WHERE customer_id = $3 AND status = 'open'), 0),
-		          card_code, is_active, notes, created_at, updated_at, deleted_at
+		          card_code, is_active, COALESCE(notes,''), created_at, updated_at, deleted_at
 	`
 	var c Customer
 	err := r.db.QueryRow(ctx, q, amountCents, bonusCents, id).Scan(
@@ -223,9 +225,9 @@ func (r *Repository) UpdateContact(ctx context.Context, id int64, req UpdateCont
 			notes     = COALESCE($4, notes),
 			updated_at = now()
 		WHERE id = $5 AND deleted_at IS NULL
-		RETURNING id, name, phone, email, type, total_spent, bonus_points,
+		RETURNING id, name, COALESCE(phone,''), COALESCE(email,''), type, total_spent, bonus_points,
 		          COALESCE((SELECT SUM(remaining_cents) FROM customer_debts WHERE customer_id = $5 AND status = 'open'), 0),
-		          card_code, is_active, notes, created_at, updated_at, deleted_at
+		          card_code, is_active, COALESCE(notes,''), created_at, updated_at, deleted_at
 	`
 
 	var c Customer
@@ -247,9 +249,9 @@ func (r *Repository) UpdateAdmin(ctx context.Context, id int64, req UpdateAdminR
 			card_code  = COALESCE($3, card_code),
 			updated_at = now()
 		WHERE id = $4 AND deleted_at IS NULL
-		RETURNING id, name, phone, email, type, total_spent, bonus_points,
+		RETURNING id, name, COALESCE(phone,''), COALESCE(email,''), type, total_spent, bonus_points,
 		          COALESCE((SELECT SUM(remaining_cents) FROM customer_debts WHERE customer_id = $4 AND status = 'open'), 0),
-		          card_code, is_active, notes, created_at, updated_at, deleted_at
+		          card_code, is_active, COALESCE(notes,''), created_at, updated_at, deleted_at
 	`
 	var c Customer
 	err := r.db.QueryRow(ctx, q, req.Type, req.IsActive, req.CardCode, id).Scan(

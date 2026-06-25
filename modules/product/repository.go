@@ -71,7 +71,7 @@ func (r *Repository) Create(ctx context.Context, p *Product) error {
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Product, error) {
 	q := `
-		SELECT id, name, sku, unit, purchase_price, sale_price, discount_percent, lead_time_days, safety_stock_milli, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
+		SELECT id, name, COALESCE(sku,''), unit, purchase_price, sale_price, discount_percent, lead_time_days, safety_stock_milli, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
 		FROM products WHERE id=$1 AND is_active=true
 	`
 	var p Product
@@ -118,7 +118,7 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (P
 			safety_stock_milli = COALESCE($11, safety_stock_milli),
 			updated_at       = now()
 		WHERE id=$1
-		RETURNING id, name, sku, unit, purchase_price, sale_price, discount_percent, lead_time_days, safety_stock_milli, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
+		RETURNING id, name, COALESCE(sku,''), unit, purchase_price, sale_price, discount_percent, lead_time_days, safety_stock_milli, is_active, unit_type, unit_scale, photo_path, created_at, updated_at
 	`
 	// Convert *UnitType and *Unit to *string so pgx sends NULL when nil,
 	// which COALESCE correctly interprets as "keep existing value".
@@ -210,7 +210,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT DISTINCT p.id, p.name, p.sku, p.unit, p.purchase_price, p.sale_price, p.discount_percent, p.lead_time_days, p.safety_stock_milli, p.is_active, p.unit_type, p.unit_scale, p.photo_path, p.created_at, p.updated_at
+		SELECT DISTINCT p.id, p.name, COALESCE(p.sku,''), p.unit, p.purchase_price, p.sale_price, p.discount_percent, p.lead_time_days, p.safety_stock_milli, p.is_active, p.unit_type, p.unit_scale, p.photo_path, p.created_at, p.updated_at
 		FROM products p
 		LEFT JOIN product_barcodes pb ON pb.product_id = p.id
 		WHERE p.is_active = true

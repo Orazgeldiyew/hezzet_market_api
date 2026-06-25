@@ -64,3 +64,19 @@ func Internal(err error) *AppError {
 		Err:        err,
 	}
 }
+
+// ServiceUnavailable returns 503. Used when the request is well-formed and
+// authorized in principle, but a dependency we need to *enforce* the policy
+// (Redis or Postgres for RBAC) is unreachable, so we can't decide either way.
+// The RBAC middleware uses this to fail closed — better to ask the client to
+// retry than to silently allow an action whose authorization we couldn't
+// verify. The wrapped err is logged with the request_id, never sent to the
+// client.
+func ServiceUnavailable(msg string, err error) *AppError {
+	return &AppError{
+		Code:       "SERVICE_UNAVAILABLE",
+		Message:    msg,
+		HTTPStatus: 503,
+		Err:        err,
+	}
+}

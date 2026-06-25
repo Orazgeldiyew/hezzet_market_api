@@ -330,15 +330,24 @@ func (r *Repository) StockOut(ctx context.Context, req OutRequest, userID int64)
 		return WarehouseItemDetail{}, WarehouseItem{}, err
 	}
 
-	// ✅ update qty + total_cost; recalc avg_cost from remaining
+	// ✅ update qty + total_cost; recalc avg_cost from remaining.
+	// total_cost is clamped to 0 (GREATEST) so cumulative rounding from prior
+	// operations can't push the bookkeeping negative, and snapped to 0 when
+	// qty hits zero so the row never lands in the "empty shelf but ledger
+	// still parks N cents here" state.
 	item, err := scanItem(tx.QueryRow(ctx, `
 		UPDATE warehouse_items
 		SET
 			qty_milli = qty_milli - $3,
-			total_cost_cents = total_cost_cents - $4,
+			total_cost_cents = CASE
+				WHEN (qty_milli - $3) <= 0
+					THEN 0
+				ELSE GREATEST(total_cost_cents - $4, 0)
+			END,
 			avg_cost_cents = CASE
 				WHEN (qty_milli - $3) > 0
-					THEN ((total_cost_cents - $4) * 1000) / (qty_milli - $3)
+					THEN ((GREATEST(total_cost_cents - $4, 0)::numeric * 1000)
+					     / (qty_milli - $3))::bigint
 				ELSE 0
 			END,
 			updated_at = now()
@@ -428,15 +437,21 @@ func (r *Repository) Transfer(ctx context.Context, req TransferRequest, userID i
 		return TransferResult{}, err
 	}
 
-	// update source: qty - , total_cost -
+	// update source: qty - , total_cost - . Same consistency clamps as StockOut:
+	// total snaps to 0 when qty empties; total never goes negative.
 	fromItem, err := scanItem(tx.QueryRow(ctx, `
 		UPDATE warehouse_items
 		SET
 			qty_milli = qty_milli - $3,
-			total_cost_cents = total_cost_cents - $4,
+			total_cost_cents = CASE
+				WHEN (qty_milli - $3) <= 0
+					THEN 0
+				ELSE GREATEST(total_cost_cents - $4, 0)
+			END,
 			avg_cost_cents = CASE
 				WHEN (qty_milli - $3) > 0
-					THEN ((total_cost_cents - $4) * 1000) / (qty_milli - $3)
+					THEN ((GREATEST(total_cost_cents - $4, 0)::numeric * 1000)
+					     / (qty_milli - $3))::bigint
 				ELSE 0
 			END,
 			updated_at = now()

@@ -409,14 +409,22 @@ func (r *Repository) ConfirmSale(
 			return Sale{}, err
 		}
 
-		// Upsert warehouse_items (decrement stock; INSERT if row didn't exist)
+		// Upsert warehouse_items (decrement stock; INSERT if row didn't exist).
+		// Keep the invariant total = qty * avg / 1000 by snapping both total and
+		// avg to zero whenever the new qty hits zero — otherwise integer-cents
+		// rounding from prior operations can leave avg=0 but total>0, which
+		// looks like "no inventory but ledger thinks 7.56 manat is parked here".
 		_, err = tx.Exec(ctx, `
 			INSERT INTO warehouse_items
 				(warehouse_id, product_id, qty_milli, avg_cost_cents, total_cost_cents, updated_at)
 			VALUES ($1, $2, (0 - $3::bigint), 0, 0, now())
 			ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
 				qty_milli        = warehouse_items.qty_milli - $3::bigint,
-				total_cost_cents = GREATEST(warehouse_items.total_cost_cents - $4::bigint, 0),
+				total_cost_cents = CASE
+					WHEN (warehouse_items.qty_milli - $3::bigint) <= 0
+						THEN 0
+					ELSE GREATEST(warehouse_items.total_cost_cents - $4::bigint, 0)
+				END,
 				-- NUMERIC intermediate so the *1000 multiply can't overflow
 				-- int64 on large warehouse totals before the divide.
 				avg_cost_cents   = CASE

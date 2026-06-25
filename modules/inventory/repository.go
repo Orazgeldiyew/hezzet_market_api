@@ -268,13 +268,21 @@ func (r *Repository) Confirm(ctx context.Context, countID, userID int64) error {
 	var shortageCents int64
 	for _, a := range adjustments {
 		// Capture current avg_cost BEFORE the stock change so shortage valuation
-		// reflects the actual cost of the missing goods.
+		// reflects the actual cost of the missing goods. When the warehouse
+		// has no row yet for this product (first time it appears here),
+		// fall back to products.purchase_price so we don't seed the row at
+		// avg=0 — that "free goods" state would make every future sale show
+		// a 100% margin until the next stock-in.
 		var avgCostCents int64
 		err = tx.QueryRow(ctx, `
 			SELECT COALESCE(avg_cost_cents, 0) FROM warehouse_items
 			WHERE warehouse_id = $1 AND product_id = $2
 		`, warehouseID, a.productID).Scan(&avgCostCents)
-		if err != nil && err != pgx.ErrNoRows {
+		if err == pgx.ErrNoRows {
+			_ = tx.QueryRow(ctx, `
+				SELECT COALESCE(purchase_price, 0) FROM products WHERE id = $1
+			`, a.productID).Scan(&avgCostCents)
+		} else if err != nil {
 			return apperr.Internal(err)
 		}
 
@@ -293,14 +301,22 @@ func (r *Repository) Confirm(ctx context.Context, countID, userID int64) error {
 			return apperr.Internal(err)
 		}
 
-		// Update warehouse_items
+		// Upsert warehouse_items: keep avg_cost stable (don't repaint history),
+		// but ALWAYS recompute total_cost from the new qty × avg so the row's
+		// three-number invariant (qty × avg / 1000 ≈ total) holds after the
+		// count. Pre-fix this UPSERT touched only qty_milli, leaving avg=0,
+		// total=0 on freshly-inserted rows and an ever-growing drift on
+		// updated rows. GREATEST clamps total to 0 if qty went negative
+		// (under-count of a previously empty row).
 		_, err = tx.Exec(ctx, `
 			INSERT INTO warehouse_items (warehouse_id, product_id, qty_milli, avg_cost_cents, total_cost_cents, updated_at)
-			VALUES ($1, $2, $3, 0, 0, now())
+			VALUES ($1, $2, $3, $4, GREATEST($3::bigint, 0) * $4 / 1000, now())
 			ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
-				qty_milli = warehouse_items.qty_milli + $3::bigint,
+				qty_milli        = warehouse_items.qty_milli + $3::bigint,
+				total_cost_cents = GREATEST(warehouse_items.qty_milli + $3::bigint, 0)
+				                   * warehouse_items.avg_cost_cents / 1000,
 				updated_at = now()
-		`, warehouseID, a.productID, a.diffMilli)
+		`, warehouseID, a.productID, a.diffMilli, avgCostCents)
 		if err != nil {
 			return apperr.Internal(err)
 		}

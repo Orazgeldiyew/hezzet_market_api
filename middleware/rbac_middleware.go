@@ -9,13 +9,6 @@ import (
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
-// ── Interfaces ──
-
-// ModuleChecker is the legacy interface (backward compat).
-type ModuleChecker interface {
-	IsEnabled(ctx context.Context, role, module string) (bool, error)
-}
-
 // PermissionChecker checks action-level permissions.
 type PermissionChecker interface {
 	IsAllowed(ctx context.Context, roleCodes []string, module, action string) (bool, error)
@@ -23,8 +16,13 @@ type PermissionChecker interface {
 
 // ── RequirePermission (new, action-level) ──
 
-// RequirePermission checks if the user's roles have granted=true for module+action.
-// Admin always bypasses. If DB/Redis is unavailable, defaults to allow (fail-open).
+// RequirePermission checks if the user's roles have granted=true for
+// module+action. Admin always bypasses.
+//
+// On checker failure (Redis down + DB down, etc.) we FAIL CLOSED: return 503
+// so the client retries instead of silently being granted access we couldn't
+// verify. The Redis fallback path inside IsAllowed already handles partial
+// outages by falling back to DB; we only get here if BOTH are dead.
 func RequirePermission(checker PermissionChecker, module, action string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rolesVal, _ := c.Get("roles")
@@ -38,42 +36,17 @@ func RequirePermission(checker PermissionChecker, module, action string) gin.Han
 		}
 
 		allowed, err := checker.IsAllowed(c.Request.Context(), userRoles, module, action)
-		if err != nil || allowed {
-			// err → fail-open (allow if DB/Redis unavailable)
+		if err != nil {
+			c.Error(apperr.ServiceUnavailable("permission service unavailable", err))
+			c.Abort()
+			return
+		}
+		if allowed {
 			c.Next()
 			return
 		}
 
 		c.Error(apperr.Forbidden("permission denied"))
-		c.Abort()
-	}
-}
-
-// ── RequireModule (legacy, backward compat) ──
-
-// RequireModule checks if the user's role has access to the given module.
-// Admin always bypasses. If Redis/DB is unavailable, defaults to allow.
-func RequireModule(repo ModuleChecker, module string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		rolesVal, _ := c.Get("roles")
-		userRoles, _ := rolesVal.([]string)
-
-		for _, r := range userRoles {
-			if r == "admin" {
-				c.Next()
-				return
-			}
-		}
-
-		for _, role := range userRoles {
-			enabled, err := repo.IsEnabled(c.Request.Context(), role, module)
-			if err != nil || enabled {
-				c.Next()
-				return
-			}
-		}
-
-		c.Error(apperr.Forbidden("module access denied"))
 		c.Abort()
 	}
 }

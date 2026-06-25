@@ -212,14 +212,22 @@ func (r *Repository) Confirm(
 			return SupplierReturn{}, err
 		}
 
-		// Update warehouse_items: subtract qty and cost
+		// Update warehouse_items: subtract qty and cost. Same consistency
+		// clamps as sale/stock paths: total never goes negative, and is
+		// snapped to 0 when qty hits zero so we don't leave bookkeeping cents
+		// parked on an empty shelf.
 		_, err = tx.Exec(ctx, `
 			UPDATE warehouse_items
 			SET qty_milli        = qty_milli - $3,
-			    total_cost_cents = total_cost_cents - $4,
+			    total_cost_cents = CASE
+			        WHEN (qty_milli - $3) <= 0
+			            THEN 0
+			        ELSE GREATEST(total_cost_cents - $4, 0)
+			    END,
 			    avg_cost_cents   = CASE
 			        WHEN (qty_milli - $3) > 0
-			            THEN ((total_cost_cents - $4) * 1000) / (qty_milli - $3)
+			            THEN ((GREATEST(total_cost_cents - $4, 0)::numeric * 1000)
+			                 / (qty_milli - $3))::bigint
 			        ELSE 0
 			    END,
 			    updated_at = now()

@@ -37,8 +37,10 @@ func (r *Repository) Create(ctx context.Context, w *Worker) error {
 func (r *Repository) GetByID(ctx context.Context, id int64) (Worker, error) {
 	var w Worker
 	q := `
-		SELECT id, name, position, department, phone, email, address,
-		       salary, hire_date, is_active, notes, created_at, updated_at, deleted_at
+		SELECT id, name,
+		       COALESCE(position,''), COALESCE(department,''),
+		       COALESCE(phone,''), COALESCE(email,''), COALESCE(address,''),
+		       salary, hire_date, is_active, COALESCE(notes,''), created_at, updated_at, deleted_at
 		FROM employees
 		WHERE id = $1 AND is_worker = true AND deleted_at IS NULL
 	`
@@ -85,8 +87,10 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 	}
 
 	q := fmt.Sprintf(`
-		SELECT id, name, position, department, phone, email, address,
-		       salary, hire_date, is_active, notes, created_at, updated_at, deleted_at
+		SELECT id, name,
+		       COALESCE(position,''), COALESCE(department,''),
+		       COALESCE(phone,''), COALESCE(email,''), COALESCE(address,''),
+		       salary, hire_date, is_active, COALESCE(notes,''), created_at, updated_at, deleted_at
 		FROM employees
 		WHERE is_worker = true AND deleted_at IS NULL
 		  AND ($2 = false OR is_active = true)
@@ -146,8 +150,10 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (W
 			notes      = COALESCE($10, notes),
 			updated_at = now()
 		WHERE id = $11 AND is_worker = true AND deleted_at IS NULL
-		RETURNING id, name, position, department, phone, email, address,
-		          salary, hire_date, is_active, notes, created_at, updated_at, deleted_at
+		RETURNING id, name,
+		          COALESCE(position,''), COALESCE(department,''),
+		          COALESCE(phone,''), COALESCE(email,''), COALESCE(address,''),
+		          salary, hire_date, is_active, COALESCE(notes,''), created_at, updated_at, deleted_at
 	`
 	var w Worker
 	err := r.db.QueryRow(ctx, q,
