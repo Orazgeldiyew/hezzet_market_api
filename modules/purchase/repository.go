@@ -232,7 +232,15 @@ func (r *Repository) ReceivePO(
 			ON CONFLICT (warehouse_id, product_id)
 			DO UPDATE SET
 				qty_milli        = warehouse_items.qty_milli + EXCLUDED.qty_milli,
-				total_cost_cents = warehouse_items.total_cost_cents + $5,
+				-- When a PO receive lands the row at exactly qty=0 (covers a
+				-- previous deficit from a force-sale), snap total to 0 too —
+				-- otherwise we'd seed the "qty=0 but total>0" inconsistency
+				-- that the rest of the warehouse-math fixes exist to prevent.
+				total_cost_cents = CASE
+					WHEN (warehouse_items.qty_milli + EXCLUDED.qty_milli) <= 0
+						THEN 0
+					ELSE warehouse_items.total_cost_cents + $5
+				END,
 				-- avg_cost_cents = total_cost / qty (in milli-cents-per-milli).
 				-- Computed in NUMERIC so very large warehouse totals can't
 				-- silently wrap an int64 multiply by 1000 before the divide.

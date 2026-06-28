@@ -732,13 +732,22 @@ func (r *Repository) CancelSale(ctx context.Context, saleID int64, userID int64)
 				rowExists = false
 			}
 
-			// Use the stored COGS as restoration cost (exact reversal)
+			// Use the stored COGS as restoration cost (exact reversal).
+			// Two consistency rules enforced here:
+			//   1. avg rounds half-up — keeps qty*avg/1000 ≈ total so
+			//      repeated cancels don't drift the warehouse books.
+			//   2. when newQty hits zero (cancel returns more than was on
+			//      the shelf — happens with deficit/force sales) snap total
+			//      to zero so we don't leave bookkeeping cents parked on an
+			//      empty row, the very state Fix 4 was about elsewhere.
 			inCost := si.costCents
 			newQty := currentQty + si.qtyMilli
 			newTotalCost := wTotalCost + inCost
 			newAvgCost := int64(0)
 			if newQty > 0 {
-				newAvgCost = (newTotalCost * 1000) / newQty
+				newAvgCost = (newTotalCost*1000 + newQty/2) / newQty
+			} else {
+				newTotalCost = 0
 			}
 
 			// Insert stock ledger entry (type='sale_return', delta=+qty)
@@ -1328,6 +1337,11 @@ func (r *Repository) ReturnSale(ctx context.Context, saleID int64, req ReturnSal
 		if newQty > 0 {
 			// Round half-up to keep newQty*newAvgCost/1000 close to newTotalCost.
 			newAvgCost = (newTotalCost*1000 + newQty/2) / newQty
+		} else {
+			// Returning more than was on the shelf (deficit recovery) lands
+			// the row at qty=0. Snap total to 0 so we don't leave parked
+			// cents on an empty row.
+			newTotalCost = 0
 		}
 
 		// Ledger entry
