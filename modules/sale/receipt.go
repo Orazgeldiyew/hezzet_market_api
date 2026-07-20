@@ -166,7 +166,16 @@ const defaultReceiptTemplate = `<!DOCTYPE html>
 
   {{if .Footer}}<div class="sep"></div><div class="center footer">{{.Footer}}</div>{{end}}
 
-  <script>window.onload=function(){window.print();}</script>
+  <script>
+    // Auto-print only when opened directly with ?autoprint=1 (the frontend's
+    // window.open fallback). When the HTML is embedded by the till app —
+    // Electron silent print or the hidden-iframe path — the frontend drives
+    // the print itself and this must stay quiet, otherwise a second print
+    // dialog pops over the silent job.
+    if (window.location.search.indexOf('autoprint') !== -1) {
+      window.onload = function () { window.print() }
+    }
+  </script>
 </body>
 </html>`
 

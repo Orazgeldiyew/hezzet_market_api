@@ -1,9 +1,12 @@
 package shift
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/Orazgeldiyew/hezzet_market_backend/middleware"
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
@@ -161,13 +164,134 @@ func (h *Handler) ListShifts(c *gin.Context) {
 // @Tags         Shifts
 // @Produce      json
 // @Security     BearerAuth
+// @Param        all  query  bool  false  "Include inactive registers (management screen)"
 // @Success      200 {object} response.APIResponse{data=[]CashRegister}
 // @Router       /api/registers [get]
 func (h *Handler) ListRegisters(c *gin.Context) {
-	regs, err := h.repo.ListRegisters(c.Request.Context())
+	var regs []CashRegister
+	var err error
+	if c.Query("all") == "true" {
+		regs, err = h.repo.ListAllRegisters(c.Request.Context())
+	} else {
+		regs, err = h.repo.ListRegisters(c.Request.Context())
+	}
 	if err != nil {
 		c.Error(apperr.Internal(err))
 		return
 	}
 	response.OK(c, regs)
+}
+
+// CreateRegister godoc
+// @Summary      Create cash register
+// @Tags         Shifts
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      201 {object} response.APIResponse{data=CashRegister}
+// @Router       /api/registers [post]
+func (h *Handler) CreateRegister(c *gin.Context) {
+	var req struct {
+		Name string `json:"name" binding:"required,min=1,max=100"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	cr, err := h.repo.CreateRegister(c.Request.Context(), req.Name)
+	if err != nil {
+		c.Error(apperr.Internal(err))
+		return
+	}
+	response.Created(c, cr)
+}
+
+// UpdateRegister godoc
+// @Summary      Update cash register (rename / enable / disable)
+// @Tags         Shifts
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id  path  int  true  "Register ID"
+// @Success      200 {object} response.APIResponse{data=CashRegister}
+// @Router       /api/registers/{id} [patch]
+func (h *Handler) UpdateRegister(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.Error(apperr.Validation("invalid register id"))
+		return
+	}
+	var req struct {
+		Name     *string `json:"name" binding:"omitempty,min=1,max=100"`
+		IsActive *bool   `json:"is_active"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+
+	// Deactivating a till someone is mid-shift on would strand the cashier.
+	if req.IsActive != nil && !*req.IsActive {
+		busy, err := h.repo.RegisterHasOpenShift(c.Request.Context(), id)
+		if err != nil {
+			c.Error(apperr.Internal(err))
+			return
+		}
+		if busy {
+			c.Error(apperr.Conflict("REGISTER_IN_USE", "register has an open shift — close it first"))
+			return
+		}
+	}
+
+	cr, err := h.repo.UpdateRegister(c.Request.Context(), id, req.Name, req.IsActive)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.Error(apperr.NotFound("REGISTER_NOT_FOUND", "register not found"))
+			return
+		}
+		c.Error(apperr.Internal(err))
+		return
+	}
+	response.OK(c, cr)
+}
+
+// DeleteRegister godoc
+// @Summary      Delete cash register
+// @Description  Hard delete. Fails when shifts or printers still reference the register — deactivate instead.
+// @Tags         Shifts
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id  path  int  true  "Register ID"
+// @Success      200 {object} response.APIResponse
+// @Router       /api/registers/{id} [delete]
+func (h *Handler) DeleteRegister(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.Error(apperr.Validation("invalid register id"))
+		return
+	}
+	busy, err := h.repo.RegisterHasOpenShift(c.Request.Context(), id)
+	if err != nil {
+		c.Error(apperr.Internal(err))
+		return
+	}
+	if busy {
+		c.Error(apperr.Conflict("REGISTER_IN_USE", "register has an open shift — close it first"))
+		return
+	}
+	if err := h.repo.DeleteRegister(c.Request.Context(), id); err != nil {
+		if err == pgx.ErrNoRows {
+			c.Error(apperr.NotFound("REGISTER_NOT_FOUND", "register not found"))
+			return
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			c.Error(apperr.Conflict("REGISTER_REFERENCED",
+				"register has shift history or a bound printer — deactivate it instead of deleting"))
+			return
+		}
+		c.Error(apperr.Internal(err))
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
 }

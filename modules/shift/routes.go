@@ -18,10 +18,25 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, permChecker middlewar
 	repo := NewRepository(db)
 	h := NewHandler(repo)
 
-	// Cash registers — read-only.
+	// Cash registers — read for cashiers (needed to open a shift),
+	// management (create/rename/disable/delete) is warehouse-level config
+	// so it rides the `warehouses` permission like other physical-layout
+	// resources. Admin bypasses everything.
 	rg.GET("/registers",
 		middleware.RequirePermission(permChecker, "sales", "view"),
 		h.ListRegisters,
+	)
+	rg.POST("/registers",
+		middleware.RequirePermission(permChecker, "warehouses", "create"),
+		h.CreateRegister,
+	)
+	rg.PATCH("/registers/:id",
+		middleware.RequirePermission(permChecker, "warehouses", "update"),
+		h.UpdateRegister,
+	)
+	rg.DELETE("/registers/:id",
+		middleware.RequirePermission(permChecker, "warehouses", "delete"),
+		h.DeleteRegister,
 	)
 
 	// Shifts — own-shift operations: open/close/current.

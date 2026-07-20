@@ -85,42 +85,12 @@ func (s *Service) ConfirmSale(ctx context.Context, saleID int64, req ConfirmSale
 		return detail, err
 	}
 
-	// Auto-print receipt to thermal printer via TCP (fire-and-forget — printer errors must not break the sale)
-	if printerSv := s.repo.PrinterService(); printerSv != nil {
-		log.Printf("[AutoPrint] START saleID=%d userID=%d", saleID, userID)
-
-		// Get register_id from user's current open shift
-		var regID *int64
-		var rid int64
-		err := s.repo.DB().QueryRow(ctx, `
-			SELECT register_id FROM shifts
-			WHERE user_id = $1 AND status = 'open'
-			ORDER BY opened_at DESC LIMIT 1
-		`, userID).Scan(&rid)
-		if err != nil {
-			log.Printf("[AutoPrint] no open shift for userID=%d: %v", userID, err)
-		} else {
-			regID = &rid
-			log.Printf("[AutoPrint] found register_id=%d", rid)
-		}
-
-		// Pass saleID/regID by value so the goroutine doesn't depend on the
-		// enclosing function's locals. context.Background() is intentional —
-		// the request ctx is cancelled the moment we return the response to
-		// the cashier, but the printer call must still complete after that.
-		// 10s timeout keeps a stuck printer from leaking goroutines.
-		go func(saleID int64, regID *int64, printerSv PrinterService) {
-			printCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if perr := printerSv.PrintSale(printCtx, saleID, regID); perr != nil {
-				log.Printf("[AutoPrint] FAILED saleID=%d: %v", saleID, perr)
-			} else {
-				log.Printf("[AutoPrint] OK saleID=%d", saleID)
-			}
-		}(saleID, regID, printerSv)
-	} else {
-		log.Printf("[AutoPrint] printer service is nil — skipping")
-	}
+	// No auto-print: receipts are printed only when the cashier presses the
+	// print button. The frontend fetches the HTML template from
+	// GET /sales/:id/receipt and drives the print itself (till printers are
+	// attached to the cashier's computer, not networked). The TCP reprint
+	// endpoint (POST /sales/:id/print) remains available for networked
+	// printers if a shop ever wires one up.
 
 	return detail, nil
 }

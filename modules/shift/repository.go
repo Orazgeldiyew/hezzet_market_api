@@ -285,3 +285,72 @@ func (r *Repository) ListRegisters(ctx context.Context) ([]CashRegister, error) 
 	}
 	return out, rows.Err()
 }
+
+// ListAllRegisters returns every register including inactive — the admin
+// management screen needs to show disabled tills so they can be re-enabled.
+func (r *Repository) ListAllRegisters(ctx context.Context) ([]CashRegister, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT id, name, is_active, created_at FROM cash_registers ORDER BY id`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []CashRegister
+	for rows.Next() {
+		var cr CashRegister
+		if err := rows.Scan(&cr.ID, &cr.Name, &cr.IsActive, &cr.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, cr)
+	}
+	if out == nil {
+		out = []CashRegister{}
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) CreateRegister(ctx context.Context, name string) (CashRegister, error) {
+	var cr CashRegister
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO cash_registers (name) VALUES ($1)
+		RETURNING id, name, is_active, created_at
+	`, name).Scan(&cr.ID, &cr.Name, &cr.IsActive, &cr.CreatedAt)
+	return cr, err
+}
+
+func (r *Repository) UpdateRegister(ctx context.Context, id int64, name *string, isActive *bool) (CashRegister, error) {
+	var cr CashRegister
+	err := r.db.QueryRow(ctx, `
+		UPDATE cash_registers
+		SET name = COALESCE($2, name), is_active = COALESCE($3, is_active)
+		WHERE id = $1
+		RETURNING id, name, is_active, created_at
+	`, id, name, isActive).Scan(&cr.ID, &cr.Name, &cr.IsActive, &cr.CreatedAt)
+	return cr, err
+}
+
+// RegisterHasOpenShift blocks disabling/deleting a till someone is actively
+// using — the cashier would lose their register mid-shift.
+func (r *Repository) RegisterHasOpenShift(ctx context.Context, id int64) (bool, error) {
+	var n int
+	err := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM shifts WHERE register_id = $1 AND status = 'open'`, id,
+	).Scan(&n)
+	return n > 0, err
+}
+
+// DeleteRegister hard-deletes a register. Fails with FK violation if shifts
+// or printers reference it — the handler translates that into a friendly
+// "deactivate instead" message.
+func (r *Repository) DeleteRegister(ctx context.Context, id int64) error {
+	ct, err := r.db.Exec(ctx, `DELETE FROM cash_registers WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}

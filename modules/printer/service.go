@@ -71,28 +71,20 @@ func (s *Service) TestPrint(ctx context.Context, printerID int64) error {
 }
 
 // PrintSale gathers sale data and prints a receipt to the printer
-// bound to the given register. Returns nil if no printer bound (silent).
+// bound to the given register — STRICTLY. Each till (register) has its own
+// printer; we never fall back to "any printer in the shop", otherwise a
+// receipt from cashier A would come out on cashier B's device. No register
+// (admin/manager selling without a shift) or no bound printer → the handler
+// replies printed:false and the frontend falls back to browser print.
 func (s *Service) PrintSale(ctx context.Context, saleID int64, registerID *int64) error {
-	// Resolve a printer in two stages: first the one bound to the caller's
-	// register (the normal cashier path), then any active printer as a
-	// fallback (admin/manager rang up a sale without a shift, but a printer
-	// exists in the shop). Returning a non-nil error makes the HTTP handler
-	// reply printed:false so the frontend can fall back to browser print.
-	var p Printer
-	var err error
-	if registerID != nil {
-		p, err = s.repo.GetByRegisterID(ctx, *registerID)
-		if err != nil {
-			log.Printf("[PrintSale] no printer for register_id=%d, trying fallback: %v", *registerID, err)
-			p, err = s.repo.GetFirstActive(ctx)
-		}
-	} else {
-		log.Printf("[PrintSale] registerID is nil, falling back to first active printer (saleID=%d)", saleID)
-		p, err = s.repo.GetFirstActive(ctx)
+	if registerID == nil {
+		log.Printf("[PrintSale] no shift/register for caller (saleID=%d) — thermal print skipped", saleID)
+		return fmt.Errorf("no register: open a shift bound to a printer, or use browser print")
 	}
+	p, err := s.repo.GetByRegisterID(ctx, *registerID)
 	if err != nil {
-		log.Printf("[PrintSale] no active printer in system: %v", err)
-		return fmt.Errorf("no active printer configured")
+		log.Printf("[PrintSale] no printer bound to register_id=%d: %v", *registerID, err)
+		return fmt.Errorf("no printer bound to this register")
 	}
 	log.Printf("[PrintSale] found printer id=%d name=%s ip=%s:%d active=%v", p.ID, p.Name, p.IPAddress, p.Port, p.IsActive)
 
