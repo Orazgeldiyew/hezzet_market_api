@@ -3,6 +3,7 @@ package employees
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -216,7 +217,27 @@ func (r *Repository) Create(ctx context.Context, req CreateRequest, passwordHash
 	if err := tx.Commit(ctx); err != nil {
 		return Employee{}, err
 	}
+	if salary > 0 {
+		_ = r.syncCompensationFromSalary(ctx, id, salary)
+	}
 	return r.GetByID(ctx, id)
+}
+
+// syncCompensationFromSalary keeps payroll base in sync with the employee card salary (TMT).
+func (r *Repository) syncCompensationFromSalary(ctx context.Context, workerID int64, salaryTMT float64) error {
+	cents := int64(math.Round(salaryTMT * 100))
+	if cents <= 0 {
+		return nil
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO worker_compensation (worker_id, base_salary_cents, pay_day, is_active)
+		VALUES ($1, $2, 1, true)
+		ON CONFLICT (worker_id) DO UPDATE
+		SET base_salary_cents = EXCLUDED.base_salary_cents,
+		    is_active = true,
+		    updated_at = now()
+	`, workerID, cents)
+	return err
 }
 
 func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest, updatedBy *int64) (Employee, error) {
@@ -316,6 +337,9 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest, up
 
 	if err := tx.Commit(ctx); err != nil {
 		return Employee{}, err
+	}
+	if req.Salary != nil && *req.Salary > 0 {
+		_ = r.syncCompensationFromSalary(ctx, id, *req.Salary)
 	}
 	return r.GetByID(ctx, id)
 }

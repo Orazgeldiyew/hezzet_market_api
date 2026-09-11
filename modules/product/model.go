@@ -70,7 +70,7 @@ type UpdateRequest struct {
 	Unit             *Unit     `json:"unit"       binding:"omitempty,oneof=piece kg g l ml"`
 	PurchasePrice    *int64    `json:"purchase_price"`
 	SalePrice        *int64    `json:"sale_price"`
-	DiscountPercent  *int      `json:"discount_percent"`
+	DiscountPercent  *int      `json:"discount_percent" binding:"omitempty,gte=0,lte=100"`
 	LeadTimeDays     *int      `json:"lead_time_days"     binding:"omitempty,min=0,max=365"`
 	SafetyStockMilli *int64    `json:"safety_stock_milli" binding:"omitempty,min=0"`
 	IsActive         *bool     `json:"is_active"`

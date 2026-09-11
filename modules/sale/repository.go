@@ -567,17 +567,20 @@ func (r *Repository) ConfirmSale(
 		}
 	}
 
-	// 8. Customer debt — if payment_type is "debt" (id=4) and customer is set
-	if req.PaymentTypeID != nil && *req.PaymentTypeID == 4 && saleCustomerID != nil && r.debtRepo != nil {
-		paidAmount := int64(0)
-		if req.PaymentAmount != nil {
-			paidAmount = *req.PaymentAmount
-		}
-		debtAmount := effectiveAmount - paidAmount
-		if debtAmount > 0 {
-			debtNote := "Sale #" + strconv.FormatInt(saleID, 10)
-			if _, err := r.debtRepo.CreateDebt(ctx, tx, *saleCustomerID, &saleID, debtAmount, debtNote, uid); err != nil {
-				return Sale{}, err
+	// 8. Customer debt — if payment_type is "debt" (by code) and customer is set
+	if req.PaymentTypeID != nil && saleCustomerID != nil && r.debtRepo != nil && finRepo != nil {
+		debtPTID, err := finRepo.GetPaymentTypeIDByCode(ctx, "debt")
+		if err == nil && *req.PaymentTypeID == debtPTID {
+			paidAmount := int64(0)
+			if req.PaymentAmount != nil {
+				paidAmount = *req.PaymentAmount
+			}
+			debtAmount := effectiveAmount - paidAmount
+			if debtAmount > 0 {
+				debtNote := "Sale #" + strconv.FormatInt(saleID, 10)
+				if _, err := r.debtRepo.CreateDebt(ctx, tx, *saleCustomerID, &saleID, debtAmount, debtNote, uid); err != nil {
+					return Sale{}, err
+				}
 			}
 		}
 	}

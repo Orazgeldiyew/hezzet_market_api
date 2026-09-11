@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,6 +27,9 @@ func NewService(repo *Repository, db *pgxpool.Pool, uploadsDir string) *Service 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Printer, error) {
 	p, err := s.repo.Create(ctx, req)
 	if err != nil {
+		if strings.Contains(err.Error(), "ip_address is required") {
+			return Printer{}, apperr.Validation(err.Error())
+		}
 		return Printer{}, apperr.Internal(err)
 	}
 	return p, nil
@@ -42,6 +46,9 @@ func (s *Service) List(ctx context.Context) ([]Printer, error) {
 func (s *Service) Update(ctx context.Context, id int64, req UpdateRequest) (Printer, error) {
 	p, err := s.repo.Update(ctx, id, req)
 	if err != nil {
+		if strings.Contains(err.Error(), "ip_address is required") {
+			return Printer{}, apperr.Validation(err.Error())
+		}
 		return Printer{}, apperr.Internal(err)
 	}
 	return p, nil
@@ -54,7 +61,8 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-// TestPrint sends a simple test page to the given printer.
+// TestPrint sends a simple test page to a network printer.
+// USB printers are driven by the cashier PC — TestPrint is not applicable.
 func (s *Service) TestPrint(ctx context.Context, printerID int64) error {
 	p, err := s.repo.GetByID(ctx, printerID)
 	if err != nil {
@@ -63,6 +71,12 @@ func (s *Service) TestPrint(ctx context.Context, printerID int64) error {
 	if !p.IsActive {
 		return apperr.Conflict("PRINTER_INACTIVE", "printer is not active")
 	}
+	if p.ConnectionType == ConnectionUSB {
+		return apperr.Validation("USB printer: set it as the OS default and press Чек on the cashier screen")
+	}
+	if p.IPAddress == "" {
+		return apperr.Validation("network printer has no IP address")
+	}
 	data := buildTestPage(p.Name, p.IPAddress)
 	if err := SendToTCP(p.IPAddress, p.Port, data); err != nil {
 		return apperr.Internal(fmt.Errorf("print failed: %w", err))
@@ -70,36 +84,51 @@ func (s *Service) TestPrint(ctx context.Context, printerID int64) error {
 	return nil
 }
 
-// PrintSale gathers sale data and prints a receipt to the printer
-// bound to the given register — STRICTLY. Each till (register) has its own
-// printer; we never fall back to "any printer in the shop", otherwise a
-// receipt from cashier A would come out on cashier B's device. No register
-// (admin/manager selling without a shift) or no bound printer → the handler
-// replies printed:false and the frontend falls back to browser print.
-func (s *Service) PrintSale(ctx context.Context, saleID int64, registerID *int64) error {
-	if registerID == nil {
-		log.Printf("[PrintSale] no shift/register for caller (saleID=%d) — thermal print skipped", saleID)
-		return fmt.Errorf("no register: open a shift bound to a printer, or use browser print")
-	}
-	p, err := s.repo.GetByRegisterID(ctx, *registerID)
-	if err != nil {
+// resolvePrinter picks the till printer, then any active printer (admin sale
+// without a shift). Missing printer → USB/browser path on the frontend.
+func (s *Service) resolvePrinter(ctx context.Context, registerID *int64) (Printer, error) {
+	if registerID != nil {
+		p, err := s.repo.GetByRegisterID(ctx, *registerID)
+		if err == nil {
+			return p, nil
+		}
 		log.Printf("[PrintSale] no printer bound to register_id=%d: %v", *registerID, err)
-		return fmt.Errorf("no printer bound to this register")
 	}
-	log.Printf("[PrintSale] found printer id=%d name=%s ip=%s:%d active=%v", p.ID, p.Name, p.IPAddress, p.Port, p.IsActive)
+	return s.repo.GetFirstActive(ctx)
+}
+
+// PrintSale prints over TCP for network printers. USB printers (and missing
+// config) return Mode=usb so the frontend prints via the OS/browser path.
+func (s *Service) PrintSale(ctx context.Context, saleID int64, registerID *int64) sale.PrintResult {
+	p, err := s.resolvePrinter(ctx, registerID)
+	if err != nil {
+		log.Printf("[PrintSale] no printer configured (saleID=%d) — USB/browser fallback", saleID)
+		return sale.PrintResult{Printed: false, Mode: ConnectionUSB, Error: "no printer configured"}
+	}
+	log.Printf("[PrintSale] found printer id=%d name=%s type=%s ip=%s:%d active=%v",
+		p.ID, p.Name, p.ConnectionType, p.IPAddress, p.Port, p.IsActive)
 
 	if !p.IsActive {
-		log.Printf("[PrintSale] printer %d is inactive", p.ID)
-		return nil
+		return sale.PrintResult{Printed: false, Mode: ConnectionUSB, Error: "printer inactive"}
+	}
+	if p.ConnectionType == ConnectionUSB {
+		return sale.PrintResult{Printed: false, Mode: ConnectionUSB}
+	}
+	if p.IPAddress == "" {
+		return sale.PrintResult{Printed: false, Mode: ConnectionUSB, Error: "network printer has no IP"}
 	}
 
 	data, err := s.buildSaleReceipt(ctx, saleID)
 	if err != nil {
-		return fmt.Errorf("build receipt: %w", err)
+		log.Printf("[PrintSale] build receipt failed saleID=%d: %v", saleID, err)
+		return sale.PrintResult{Printed: false, Mode: ConnectionNetwork, Error: fmt.Sprintf("build receipt: %v", err)}
 	}
 	log.Printf("[PrintSale] sending %d bytes to %s:%d", len(data), p.IPAddress, p.Port)
-
-	return SendToTCP(p.IPAddress, p.Port, data)
+	if err := SendToTCP(p.IPAddress, p.Port, data); err != nil {
+		log.Printf("[PrintSale] TCP failed: %v — frontend may fall back to USB", err)
+		return sale.PrintResult{Printed: false, Mode: ConnectionNetwork, Error: err.Error()}
+	}
+	return sale.PrintResult{Printed: true, Mode: ConnectionNetwork}
 }
 
 // buildSaleReceipt fetches sale data, renders the HTML receipt template,

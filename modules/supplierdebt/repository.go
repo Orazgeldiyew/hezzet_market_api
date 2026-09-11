@@ -2,17 +2,21 @@ package supplierdebt
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Orazgeldiyew/hezzet_market_backend/modules/finance"
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	finRepo *finance.Repository
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository {
-	return &Repository{db: db}
+func NewRepository(db *pgxpool.Pool, finRepo *finance.Repository) *Repository {
+	return &Repository{db: db, finRepo: finRepo}
 }
 
 // CreateDebt creates a new supplier debt (manual or from purchase).
@@ -114,6 +118,51 @@ func (r *Repository) Pay(ctx context.Context, debtID int64, req PayRequest, user
 	}
 	defer tx.Rollback(ctx)
 
+	// Peek purchase_id first so we can lock finance txn before the debt row
+	// (same order as purchase.AddPayment → avoids deadlocks).
+	var purchaseID *int64
+	err = tx.QueryRow(ctx,
+		`SELECT purchase_id FROM supplier_debts WHERE id = $1`, debtID,
+	).Scan(&purchaseID)
+	if err != nil {
+		return SupplierDebt{}, DebtPayment{}, err
+	}
+
+	var txnID int64
+	var txnAmount int64
+	var paidSum int64
+	if purchaseID != nil && r.finRepo != nil {
+		var txnStatus string
+		err = tx.QueryRow(ctx, `
+			SELECT id, status, amount_cents
+			FROM transactions
+			WHERE related_table = 'purchase' AND related_id = $1
+			FOR UPDATE
+		`, *purchaseID).Scan(&txnID, &txnStatus, &txnAmount)
+		if err != nil && err != pgx.ErrNoRows {
+			return SupplierDebt{}, DebtPayment{}, err
+		}
+		if err == nil {
+			if txnStatus == "canceled" {
+				return SupplierDebt{}, DebtPayment{}, errTxnCancelled
+			}
+			if txnStatus == "paid" {
+				return SupplierDebt{}, DebtPayment{}, errAlreadyPaid
+			}
+			if err := tx.QueryRow(ctx,
+				`SELECT COALESCE(SUM(amount_cents), 0) FROM payments WHERE transaction_id = $1`,
+				txnID,
+			).Scan(&paidSum); err != nil {
+				return SupplierDebt{}, DebtPayment{}, err
+			}
+			if paidSum+req.AmountCents > txnAmount {
+				return SupplierDebt{}, DebtPayment{}, errOverpay
+			}
+		} else {
+			txnID = 0 // no finance row — debt-only path
+		}
+	}
+
 	var remaining int64
 	var status string
 	err = tx.QueryRow(ctx,
@@ -165,10 +214,51 @@ func (r *Repository) Pay(ctx context.Context, debtID int64, req PayRequest, user
 		return SupplierDebt{}, DebtPayment{}, err
 	}
 
+	// Mirror onto finance when this debt came from a purchase receive.
+	if txnID > 0 && r.finRepo != nil {
+		paymentTypeID, err := r.resolvePaymentTypeID(ctx, tx, req.PaymentTypeID)
+		if err != nil {
+			return SupplierDebt{}, DebtPayment{}, err
+		}
+		finPay := finance.Payment{
+			TransactionID: txnID,
+			PaymentTypeID: paymentTypeID,
+			AmountCents:   req.AmountCents,
+			Note:          note,
+			CreatedBy:     userID,
+		}
+		if err := r.finRepo.CreatePayment(ctx, tx, &finPay); err != nil {
+			return SupplierDebt{}, DebtPayment{}, err
+		}
+		newPaid := paidSum + req.AmountCents
+		finStatus := "partial"
+		if newPaid >= txnAmount {
+			finStatus = "paid"
+		}
+		if _, err := r.finRepo.UpdateTransactionStatus(ctx, tx, txnID, finStatus); err != nil {
+			return SupplierDebt{}, DebtPayment{}, err
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return SupplierDebt{}, DebtPayment{}, err
 	}
 	return debt, payment, nil
+}
+
+// resolvePaymentTypeID uses the request value or falls back to cash.
+func (r *Repository) resolvePaymentTypeID(ctx context.Context, tx pgx.Tx, requested *int64) (int64, error) {
+	if requested != nil && *requested > 0 {
+		return *requested, nil
+	}
+	var id int64
+	err := tx.QueryRow(ctx, `
+		SELECT id FROM payment_types WHERE code = 'cash' AND is_active = true LIMIT 1
+	`).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("payment_type_id required (no default cash type): %w", err)
+	}
+	return id, nil
 }
 
 func (r *Repository) GetPayments(ctx context.Context, debtID int64) ([]DebtPayment, error) {
@@ -255,3 +345,5 @@ type appError string
 func (e appError) Error() string { return string(e) }
 
 const errOverpay = appError("payment amount exceeds remaining debt")
+const errTxnCancelled = appError("purchase transaction has been cancelled")
+const errAlreadyPaid = appError("purchase order is already fully paid")

@@ -28,6 +28,10 @@ func (s *Service) SetCompensation(ctx context.Context, req SetCompensationReques
 	if err := s.repo.UpsertCompensation(ctx, &c); err != nil {
 		return WorkerCompensation{}, apperr.Internal(err)
 	}
+	// Keep employee card salary (TMT) aligned with payroll compensation.
+	if err := s.repo.SyncEmployeeSalaryFromCents(ctx, req.WorkerID, req.BaseSalaryCents); err != nil {
+		return WorkerCompensation{}, apperr.Internal(err)
+	}
 	return c, nil
 }
 

@@ -77,7 +77,7 @@ type MoveRequest struct {
 	WarehouseID    int64  `json:"warehouse_id" binding:"required,gt=0"`
 	ProductID      int64  `json:"product_id" binding:"required,gt=0"`
 	DeltaMilli     int64  `json:"delta_milli" binding:"required,ne=0"`
-	Type           string `json:"type" binding:"required"` // damaged | adjustment | etc.
+	Type           string `json:"type" binding:"required,oneof=damaged adjustment return_to_supplier"`
 	IdempotencyKey string `json:"idempotency_key" binding:"required,uuid"`
 
 	PriceCents *int64  `json:"price_cents"`

@@ -103,6 +103,7 @@ type UserPermission struct {
 	Return   bool   `json:"return"`
 	Discount bool   `json:"discount"`
 	History  bool   `json:"history"`
+	Import   bool   `json:"import"`
 }
 
 type TokenResponse struct {

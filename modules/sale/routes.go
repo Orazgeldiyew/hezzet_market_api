@@ -19,37 +19,37 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repo
 	sales := rg.Group("/sales")
 
 	sales.POST("",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "create"),
 		h.CreateSale,
 	)
 
 	sales.GET("",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "view"),
 		h.ListSales,
 	)
 
 	sales.GET("/:id",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "view"),
 		h.GetSale,
 	)
 
 	sales.GET("/:id/receipt",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "view"),
 		h.GetReceipt,
 	)
 
 	sales.POST("/:id/print",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "view"),
 		h.Reprint,
 	)
 
 	sales.POST("/:id/confirm",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "update"),
 		h.ConfirmSale,
 	)
 
 	sales.POST("/:id/cancel",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "update"),
 		h.CancelSale,
 	)
 
@@ -63,12 +63,12 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repo
 		h.ReturnSale,
 	)
 	sales.PATCH("/:id/items/:item_id/decrease",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "update"),
 		h.DecreaseItem,
 	)
 
 	sales.DELETE("/:id/items/:item_id",
-		middleware.RequireRoles("cashier", "operator", "manager"),
+		middleware.RequirePermission(permChecker, "sales", "update"),
 		h.DeleteSaleItem,
 	)
 

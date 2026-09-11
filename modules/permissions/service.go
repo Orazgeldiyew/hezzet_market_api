@@ -7,7 +7,10 @@ import (
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
-var validActions = map[string]bool{"view": true, "create": true, "update": true, "delete": true, "transfer": true, "return": true, "discount": true, "history": true}
+var validActions = map[string]bool{
+	"view": true, "create": true, "update": true, "delete": true,
+	"transfer": true, "return": true, "discount": true, "history": true, "import": true,
+}
 var roleCodeRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,49}$`)
 
 type Service struct {
@@ -100,7 +103,7 @@ func (s *Service) Matrix(ctx context.Context) ([]MatrixEntry, error) {
 
 func (s *Service) UpdatePermission(ctx context.Context, roleID int, module, action string, granted bool, callerRoles []string) (Permission, error) {
 	if !validActions[action] {
-		return Permission{}, apperr.Validation("action must be view, create, update, or delete")
+		return Permission{}, apperr.Validation("action must be view, create, update, delete, transfer, return, discount, history, or import")
 	}
 
 	role, err := s.repo.GetRole(ctx, roleID)

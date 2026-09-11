@@ -125,6 +125,10 @@ func (h *Handler) Pay(c *gin.Context) {
 			c.Error(apperr.Validation("payment amount exceeds remaining debt"))
 			return
 		}
+		if err == errTxnCancelled || err == errAlreadyPaid {
+			c.Error(apperr.Conflict("PAYMENT_BLOCKED", err.Error()))
+			return
+		}
 		c.Error(apperr.Internal(err))
 		return
 	}

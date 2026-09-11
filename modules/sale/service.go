@@ -11,9 +11,16 @@ import (
 	apperr "github.com/Orazgeldiyew/hezzet_market_backend/pkg/errors"
 )
 
-// PrinterService is an optional hook for auto-printing receipts on confirm.
+// PrintResult mirrors printer.PrintResult so sale can avoid an import cycle.
+type PrintResult struct {
+	Printed bool
+	Mode    string // network | usb
+	Error   string
+}
+
+// PrinterService is an optional hook for networked / USB receipt printing.
 type PrinterService interface {
-	PrintSale(ctx context.Context, saleID int64, registerID *int64) error
+	PrintSale(ctx context.Context, saleID int64, registerID *int64) PrintResult
 }
 
 type Service struct {

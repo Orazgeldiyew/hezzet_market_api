@@ -21,14 +21,13 @@ type Customer struct {
 	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
 }
 
-// ---------- Requests ----------
 
 type CreateRequest struct {
 	UserID   *int64  `json:"user_id"`
 	Name     string  `json:"name" binding:"required,min=1,max=255"`
 	Phone    string  `json:"phone" binding:"omitempty,max=50"`
 	Email    string  `json:"email" binding:"omitempty,email,max=255"`
-	Type     *string `json:"type" binding:"omitempty,oneof=regular vip wholesale"`
+	Type     *string `json:"type" binding:"omitempty,oneof=regular wholesale"`
 	Notes    string  `json:"notes"`
 	CardCode *string `json:"card_code"`
 }
@@ -40,7 +39,7 @@ type UpdateRequest struct {
 	Name  *string `json:"name" binding:"omitempty,min=1,max=255"`
 	Phone *string `json:"phone" binding:"omitempty,max=50"`
 	Email *string `json:"email" binding:"omitempty,email,max=255"`
-	Type  *string `json:"type" binding:"omitempty,oneof=regular vip wholesale"`
+	Type  *string `json:"type" binding:"omitempty,oneof=regular wholesale"`
 
 	IsActive *bool   `json:"is_active"`
 	Notes    *string `json:"notes"`
@@ -56,7 +55,7 @@ type UpdateContactRequest struct {
 
 // Только бизнес-поля (manager/admin)
 type UpdateAdminRequest struct {
-	Type     *string `json:"type" binding:"omitempty"`
+	Type     *string `json:"type" binding:"omitempty,oneof=regular wholesale"`
 	IsActive *bool   `json:"is_active"`
 	CardCode *string `json:"card_code"`
 }

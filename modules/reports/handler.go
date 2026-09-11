@@ -158,7 +158,7 @@ func (h *Handler) Dashboard(c *gin.Context) {
 // @Param        from          query  string  false  "Start datetime RFC3339 (default: start of current month)"
 // @Param        to            query  string  false  "End datetime RFC3339 (default: now)"
 // @Param        warehouse_id  query  int     false  "Filter by warehouse"
-// @Param        customer_type query  string  false  "Filter by customer type: regular | vip | wholesale"
+// @Param        customer_type query  string  false  "Filter by customer type: regular | wholesale"
 // @Success      200  {object}  response.APIResponse{data=[]SalesPeriodRow}
 // @Failure      400  {object}  response.APIResponse
 // @Failure      500  {object}  response.APIResponse
@@ -260,7 +260,7 @@ func (h *Handler) ReorderSuggestions(c *gin.Context) {
 // @Param        from          query  string  false  "RFC3339"
 // @Param        to            query  string  false  "RFC3339"
 // @Param        warehouse_id  query  int     false  "Filter by warehouse"
-// @Param        customer_type query  string  false  "regular | vip | wholesale"
+// @Param        customer_type query  string  false  "regular | wholesale"
 // @Success      200
 // @Router       /api/reports/sales/export [get]
 func (h *Handler) ExportSales(c *gin.Context) {

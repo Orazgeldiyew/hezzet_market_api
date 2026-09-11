@@ -59,6 +59,16 @@ func (r *Repository) UpsertCompensation(ctx context.Context, c *WorkerCompensati
 	).Scan(&c.ID, &c.WorkerID, &c.BaseSalaryCents, &c.PayDay, &c.IsActive, &c.CreatedAt, &c.UpdatedAt)
 }
 
+// SyncEmployeeSalaryFromCents mirrors payroll compensation into employees.salary (TMT).
+func (r *Repository) SyncEmployeeSalaryFromCents(ctx context.Context, workerID, cents int64) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE employees
+		SET salary = $2::numeric / 100.0, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+	`, workerID, cents)
+	return err
+}
+
 func (r *Repository) GetCompensation(ctx context.Context, workerID int64) (WorkerCompensation, error) {
 	return scanCompensation(r.db.QueryRow(ctx,
 		`SELECT `+compensationCols+` FROM worker_compensation WHERE worker_id = $1 AND is_active = true`,

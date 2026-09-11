@@ -202,11 +202,11 @@ func (r *Repository) Confirm(
 	for _, it := range items {
 		outCost := lineTotalCents(it.qtyMilli, it.unitCostCents)
 
-		// Stock ledger entry (type='supplier_return', delta = -qty)
+		// Stock ledger entry (type='return_to_supplier', delta = -qty)
 		_, err = tx.Exec(ctx, `
 			INSERT INTO warehouse_item_details
 				(idempotency_key, warehouse_id, product_id, delta_milli, type, price_cents, created_by)
-			VALUES (gen_random_uuid(), $1, $2, $3, 'supplier_return', $4, $5)
+			VALUES (gen_random_uuid(), $1, $2, $3, 'return_to_supplier', $4, $5)
 		`, warehouseID, it.productID, -it.qtyMilli, it.unitCostCents, uid)
 		if err != nil {
 			return SupplierReturn{}, err

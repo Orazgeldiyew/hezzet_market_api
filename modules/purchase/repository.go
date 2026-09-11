@@ -456,6 +456,44 @@ func (r *Repository) AddPayment(
 		return finance.Payment{}, err
 	}
 
+	// 5. Mirror onto supplier_debts so /supplier-debts stays in sync.
+	// Lock order: transaction (above) → supplier_debts (here).
+	var debtID int64
+	var debtRemaining int64
+	var debtStatus string
+	err = tx.QueryRow(ctx, `
+		SELECT id, remaining_cents, status
+		FROM supplier_debts
+		WHERE purchase_id = $1
+		FOR UPDATE
+	`, poID).Scan(&debtID, &debtRemaining, &debtStatus)
+	if err != nil && err != pgx.ErrNoRows {
+		return finance.Payment{}, err
+	}
+	if err == nil && debtStatus == "open" {
+		newRemaining := debtRemaining - req.AmountCents
+		if newRemaining < 0 {
+			newRemaining = 0
+		}
+		debtNewStatus := "open"
+		if newRemaining == 0 {
+			debtNewStatus = "settled"
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE supplier_debts
+			SET remaining_cents = $2, status = $3, updated_at = now()
+			WHERE id = $1
+		`, debtID, newRemaining, debtNewStatus); err != nil {
+			return finance.Payment{}, err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO supplier_debt_payments (debt_id, amount_cents, payment_type_id, note, created_by)
+			VALUES ($1, $2, $3, $4, $5)
+		`, debtID, req.AmountCents, req.PaymentTypeID, req.Note, uid); err != nil {
+			return finance.Payment{}, err
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return finance.Payment{}, err
 	}

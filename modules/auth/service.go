@@ -35,6 +35,7 @@ type MatrixEntry struct {
 	Return   bool
 	Discount bool
 	History  bool
+	Import   bool
 }
 
 type Service struct {
@@ -164,7 +165,8 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 					Transfer: e.Transfer,
 					Return:   e.Return,
 					Discount: e.Discount,
-				History:  e.History,
+					History:  e.History,
+					Import:   e.Import,
 				})
 			}
 		}

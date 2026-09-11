@@ -215,7 +215,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	saleRepo.SetDiscountRuleRepo(discountRuleRepo)
 
 	// ── Supplier Debts ──
-	supplierdebt.RegisterRoutes(api, deps.DB, permRepo)
+	supplierdebt.RegisterRoutes(api, deps.DB, finRepo, permRepo)
 
 	// ── Supplier Returns ──
 	supplierreturn.RegisterRoutes(mod("purchases"), deps.DB, permRepo)
@@ -275,6 +275,7 @@ func (a *permAdapter) MatrixForRoles(ctx context.Context, roleCodes []string) ([
 			Return:   e.Return,
 			Discount: e.Discount,
 			History:  e.History,
+			Import:   e.Import,
 		}
 	}
 	return out, nil

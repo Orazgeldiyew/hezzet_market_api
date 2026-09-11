@@ -3,6 +3,7 @@ package workers
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,16 +23,38 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
 func isNotFound(err error) bool { return err == pgx.ErrNoRows }
 
+func (r *Repository) syncCompensationFromSalary(ctx context.Context, workerID int64, salaryTMT float64) error {
+	cents := int64(math.Round(salaryTMT * 100))
+	if cents <= 0 {
+		return nil
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO worker_compensation (worker_id, base_salary_cents, pay_day, is_active)
+		VALUES ($1, $2, 1, true)
+		ON CONFLICT (worker_id) DO UPDATE
+		SET base_salary_cents = EXCLUDED.base_salary_cents,
+		    is_active = true,
+		    updated_at = now()
+	`, workerID, cents)
+	return err
+}
+
 func (r *Repository) Create(ctx context.Context, w *Worker) error {
 	q := `
 		INSERT INTO employees (name, position, department, phone, email, address, salary, hire_date, notes, is_active, is_worker)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
 		RETURNING id, is_active, created_at, updated_at
 	`
-	return r.db.QueryRow(ctx, q,
+	if err := r.db.QueryRow(ctx, q,
 		w.Name, w.Position, w.Department, w.Phone, w.Email,
 		w.Address, w.Salary, w.HireDate, w.Notes, w.IsActive,
-	).Scan(&w.ID, &w.IsActive, &w.CreatedAt, &w.UpdatedAt)
+	).Scan(&w.ID, &w.IsActive, &w.CreatedAt, &w.UpdatedAt); err != nil {
+		return err
+	}
+	if w.Salary > 0 {
+		_ = r.syncCompensationFromSalary(ctx, w.ID, w.Salary)
+	}
+	return nil
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Worker, error) {
@@ -163,7 +186,13 @@ func (r *Repository) Update(ctx context.Context, id int64, req UpdateRequest) (W
 		&w.ID, &w.Name, &w.Position, &w.Department, &w.Phone, &w.Email, &w.Address,
 		&w.Salary, &w.HireDate, &w.IsActive, &w.Notes, &w.CreatedAt, &w.UpdatedAt, &w.DeletedAt,
 	)
-	return w, err
+	if err != nil {
+		return w, err
+	}
+	if req.Salary != nil && *req.Salary > 0 {
+		_ = r.syncCompensationFromSalary(ctx, id, *req.Salary)
+	}
+	return w, nil
 }
 
 // SoftDelete sets deleted_at=now() and is_active=false. Restricted to rows
