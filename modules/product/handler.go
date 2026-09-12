@@ -81,9 +81,10 @@ func (h *Handler) Create(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        page             query  int     false  "Page (default 1)"
-// @Param        limit            query  int     false  "Limit (default 10, max 100)"
+// @Param        limit            query  int     false  "Limit (default 200 when omitted, max 1000)"
 // @Param        skip             query  int     false  "Skip (legacy, default 0). If provided, overrides page/offset."
 // @Param        search           query  string  false  "Search by name, SKU, or barcode"
+// @Param        category_id      query  int     false  "Filter products belonging to this category"
 // @Param        order_by         query  string  false  "Order by field (name, created_at)" Enums(name,created_at)
 // @Param        order_direction  query  string  false  "Order direction (asc/desc)" Enums(asc,desc)
 // @Success      200              {object}  response.APIResponse{data=ListResponse}
@@ -91,21 +92,33 @@ func (h *Handler) Create(c *gin.Context) {
 // @Failure      500              {object}  response.APIResponse
 // @Router       /api/products [get]
 func (h *Handler) List(c *gin.Context) {
-	// Defaults from pagination middleware (page+limit -> offset)
+	// Dropdowns (purchases, cashier, stock) call GET /api/products with no
+	// limit. The global pagination default is 10, which hides the rest of
+	// the catalogue — use a larger slice unless the client paginates.
+	const (
+		defaultListLimit = 200
+		maxListLimit     = 1000
+	)
+
 	page := 1
-	limit := 10
+	limit := defaultListLimit
 	offset := 0
+	limitProvided := c.Query("limit") != ""
 
 	if pRaw, ok := c.Get("pagination"); ok {
 		if p, ok := pRaw.(middleware.Pagination); ok {
 			if p.Page > 0 {
 				page = p.Page
 			}
-			if p.Limit > 0 {
-				limit = p.Limit
-			}
-			if p.Offset >= 0 {
-				offset = p.Offset
+			if limitProvided {
+				if p.Limit > 0 {
+					limit = p.Limit
+				}
+				if p.Offset >= 0 {
+					offset = p.Offset
+				}
+			} else {
+				offset = (page - 1) * limit
 			}
 		}
 	}
@@ -126,15 +139,24 @@ func (h *Handler) List(c *gin.Context) {
 		}
 	}
 
-	// Validate limit/offset hard
-	if limit <= 0 || limit > 200 {
-		limit = 50
+	if limit <= 0 {
+		limit = defaultListLimit
+	}
+	if limit > maxListLimit {
+		limit = maxListLimit
 	}
 	if offset < 0 {
 		offset = 0
 	}
 
 	q := c.Query("search")
+
+	var categoryID int64
+	if v := c.Query("category_id"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			categoryID = n
+		}
+	}
 
 	orderBy := c.Query("order_by")
 	if orderBy == "" {
@@ -156,7 +178,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	out, err := h.svc.List(c.Request.Context(), limit, offset, orderBy, orderDir, q)
+	out, err := h.svc.List(c.Request.Context(), limit, offset, orderBy, orderDir, q, categoryID)
 	if err != nil {
 		c.Error(err)
 		return

@@ -409,9 +409,12 @@ func (s *Service) UploadPhoto(ctx context.Context, id int64, fh *multipart.FileH
 	return s.repo.GetByID(ctx, id)
 }
 
-func (s *Service) List(ctx context.Context, limit, offset int, orderBy, orderDir, q string) (ListResponse, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
+func (s *Service) List(ctx context.Context, limit, offset int, orderBy, orderDir, q string, categoryID int64) (ListResponse, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
 	}
 	if offset < 0 {
 		offset = 0
@@ -423,7 +426,7 @@ func (s *Service) List(ctx context.Context, limit, offset int, orderBy, orderDir
 		orderDir = "desc"
 	}
 
-	items, total, err := s.repo.List(ctx, limit, offset, orderBy, orderDir, q)
+	items, total, err := s.repo.List(ctx, limit, offset, orderBy, orderDir, q, categoryID)
 	if err != nil {
 		return ListResponse{}, apperr.Internal(err)
 	}

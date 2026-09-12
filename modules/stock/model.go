@@ -22,6 +22,8 @@ type WarehouseItemDetail struct {
 type WarehouseItem struct {
 	WarehouseID    int64     `json:"warehouse_id"`
 	ProductID      int64     `json:"product_id"`
+	ProductName    string    `json:"product_name,omitempty"`
+	Unit           string    `json:"unit,omitempty"`
 	QtyMilli       int64     `json:"qty_milli"`
 	AvgCostCents   int64     `json:"avg_cost_cents"`   // средняя себестоимость за 1.000 единицу
 	TotalCostCents int64     `json:"total_cost_cents"` // себестоимость всего остатка

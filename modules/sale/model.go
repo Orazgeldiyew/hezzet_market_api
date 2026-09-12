@@ -84,6 +84,14 @@ type TransferSaleRequest struct {
 	CashierID int64 `json:"cashier_id" binding:"required,gt=0"`
 }
 
+// TransferTarget is a staff account that can receive a draft cart.
+type TransferTarget struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+	FullName string `json:"full_name"`
+	IsActive bool   `json:"is_active"`
+}
+
 type ReturnItemRequest struct {
 	SaleItemID int64 `json:"sale_item_id" binding:"required,gt=0"`
 	QtyMilli   int64 `json:"qty_milli"    binding:"required,gt=0"`

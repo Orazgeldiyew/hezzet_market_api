@@ -124,6 +124,14 @@ func (s *Service) TransferDraft(ctx context.Context, saleID, currentUserID, newC
 	return nil
 }
 
+func (s *Service) ListTransferTargets(ctx context.Context, excludeUserID int64) ([]TransferTarget, error) {
+	items, err := s.repo.ListTransferTargets(ctx, excludeUserID)
+	if err != nil {
+		return nil, apperr.Internal(err)
+	}
+	return items, nil
+}
+
 // GetSale loads a sale with ownership enforcement: a non-privileged caller
 // (cashier) can only fetch sales they themselves created. Privileged callers
 // (admin/manager/operator) see everything for reporting.
@@ -171,8 +179,9 @@ func (s *Service) ListSales(
 	status *string,
 	dateFrom, dateTo *time.Time,
 	limit, offset int,
+	transferredOnly bool,
 ) (SaleListResult, error) {
-	items, total, err := s.repo.List(ctx, warehouseID, customerID, createdBy, status, dateFrom, dateTo, limit, offset)
+	items, total, err := s.repo.List(ctx, warehouseID, customerID, createdBy, status, dateFrom, dateTo, limit, offset, transferredOnly)
 	if err != nil {
 		return SaleListResult{}, apperr.Internal(err)
 	}

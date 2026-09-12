@@ -121,6 +121,7 @@ func (h *Handler) ListSales(c *gin.Context) {
 	if v := c.Query("status"); v != "" {
 		status = &v
 	}
+	transferredOnly := c.Query("transferred_only") == "1" || c.Query("transferred_only") == "true"
 	if v := c.Query("date_from"); v != "" {
 		tm, err := time.Parse(time.RFC3339, v)
 		if err != nil {
@@ -149,7 +150,7 @@ func (h *Handler) ListSales(c *gin.Context) {
 		}
 	}
 
-	out, err := h.svc.ListSales(c.Request.Context(), warehouseID, customerID, createdBy, status, dateFrom, dateTo, limit, offset)
+	out, err := h.svc.ListSales(c.Request.Context(), warehouseID, customerID, createdBy, status, dateFrom, dateTo, limit, offset, transferredOnly)
 	if err != nil {
 		c.Error(err)
 		return
@@ -346,6 +347,22 @@ func (h *Handler) TransferDraft(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"transferred": true, "new_cashier_id": req.CashierID})
+}
+
+// ListTransferTargets godoc
+// @Summary      List cashiers that can receive a draft
+// @Tags         Sales
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object} response.APIResponse
+// @Router       /api/sales/transfer-targets [get]
+func (h *Handler) ListTransferTargets(c *gin.Context) {
+	items, err := h.svc.ListTransferTargets(c.Request.Context(), extractUserID(c))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.OK(c, items)
 }
 
 // @Description Returns an HTML page formatted for an 80mm thermal printer. Uses custom template from receipt settings if configured.

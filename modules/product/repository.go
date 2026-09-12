@@ -172,9 +172,12 @@ func ptrUnitToString(v *Unit) *string {
 	return &s
 }
 
-func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, orderDir, qstr string) ([]Product, int, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
+func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, orderDir, qstr string, categoryID int64) ([]Product, int, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
 	}
 	if offset < 0 {
 		offset = 0
@@ -189,9 +192,13 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		       p.name ILIKE '%' || $1 || '%' OR
 		       p.sku ILIKE '%' || $1 || '%' OR
 		       pb.barcode ILIKE '%' || $1 || '%')
+		  AND ($2::bigint = 0 OR EXISTS (
+		        SELECT 1 FROM product_categories pc
+		        WHERE pc.product_id = p.id AND pc.category_id = $2
+		      ))
 	`
 	var total int
-	if err := r.db.QueryRow(ctx, countSQL, qstr).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, countSQL, qstr, categoryID).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -218,11 +225,15 @@ func (r *Repository) List(ctx context.Context, limit, offset int, orderBy, order
 		       p.name ILIKE '%%' || $1 || '%%' OR
 		       p.sku ILIKE '%%' || $1 || '%%' OR
 		       pb.barcode ILIKE '%%' || $1 || '%%')
+		  AND ($2::bigint = 0 OR EXISTS (
+		        SELECT 1 FROM product_categories pc
+		        WHERE pc.product_id = p.id AND pc.category_id = $2
+		      ))
 		ORDER BY %s %s
-		LIMIT $2 OFFSET $3
+		LIMIT $3 OFFSET $4
 	`, col, dir)
 
-	rows, err := r.db.Query(ctx, sql, qstr, limit, offset)
+	rows, err := r.db.Query(ctx, sql, qstr, categoryID, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

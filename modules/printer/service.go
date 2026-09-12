@@ -84,15 +84,18 @@ func (s *Service) TestPrint(ctx context.Context, printerID int64) error {
 	return nil
 }
 
-// resolvePrinter picks the till printer, then any active printer (admin sale
-// without a shift). Missing printer → USB/browser path on the frontend.
+// resolvePrinter picks the till printer. When the cashier has an open shift
+// (registerID set) we only use a printer bound to that till — never another
+// register's network IP (that causes a TCP timeout before USB/browser fallback).
+// Admin/reprint without a register still falls back to any active printer.
 func (s *Service) resolvePrinter(ctx context.Context, registerID *int64) (Printer, error) {
 	if registerID != nil {
 		p, err := s.repo.GetByRegisterID(ctx, *registerID)
 		if err == nil {
 			return p, nil
 		}
-		log.Printf("[PrintSale] no printer bound to register_id=%d: %v", *registerID, err)
+		log.Printf("[PrintSale] no printer bound to register_id=%d: %v — local/USB fallback", *registerID, err)
+		return Printer{}, err
 	}
 	return s.repo.GetFirstActive(ctx)
 }

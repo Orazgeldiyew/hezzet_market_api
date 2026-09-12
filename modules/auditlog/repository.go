@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync/atomic"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -148,4 +149,56 @@ func (r *Repository) List(ctx context.Context, f AuditFilter, limit, offset int)
 		out = []AuditLog{}
 	}
 	return out, total, rows.Err()
+}
+
+// DeleteRange removes audit_logs with id between fromID and toID inclusive.
+func (r *Repository) DeleteRange(ctx context.Context, fromID, toID int64) (int64, error) {
+	if fromID > toID {
+		fromID, toID = toID, fromID
+	}
+	ct, err := r.db.Exec(ctx, `
+		DELETE FROM audit_logs
+		WHERE id >= $1 AND id <= $2
+	`, fromID, toID)
+	if err != nil {
+		return 0, err
+	}
+	return ct.RowsAffected(), nil
+}
+
+// DeleteByDateRange removes audit_logs created between from and to (inclusive).
+// from/to are compared on created_at; either bound may be nil (open-ended).
+func (r *Repository) DeleteByDateRange(ctx context.Context, from, to *time.Time) (int64, error) {
+	if from == nil && to == nil {
+		return 0, fmt.Errorf("from or to date is required")
+	}
+	if from != nil && to != nil && from.After(*to) {
+		from, to = to, from
+	}
+
+	var (
+		where []string
+		args  []any
+		idx   = 1
+	)
+	if from != nil {
+		where = append(where, fmt.Sprintf("created_at >= $%d", idx))
+		args = append(args, *from)
+		idx++
+	}
+	if to != nil {
+		where = append(where, fmt.Sprintf("created_at <= $%d", idx))
+		args = append(args, *to)
+	}
+
+	q := "DELETE FROM audit_logs WHERE " + where[0]
+	for i := 1; i < len(where); i++ {
+		q += " AND " + where[i]
+	}
+
+	ct, err := r.db.Exec(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return ct.RowsAffected(), nil
 }

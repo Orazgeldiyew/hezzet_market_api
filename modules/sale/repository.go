@@ -638,10 +638,31 @@ func (r *Repository) TransferDraft(ctx context.Context, saleID, currentUserID, n
 		return apperr.Forbidden("only the owner or manager can transfer a draft")
 	}
 
-	ct, err := r.db.Exec(ctx,
-		`UPDATE sales SET created_by = $2 WHERE id = $1 AND status = 'draft'`,
-		saleID, newCashierID,
-	)
+	if newCashierID == currentUserID {
+		return apperr.Validation("cannot transfer a draft to yourself")
+	}
+
+	// Ensure the target employee account exists and is active.
+	var targetActive bool
+	err = r.db.QueryRow(ctx, `
+		SELECT is_active FROM employees
+		WHERE id = $1 AND deleted_at IS NULL AND has_account = true
+	`, newCashierID).Scan(&targetActive)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return apperr.Validation("target cashier not found")
+		}
+		return err
+	}
+	if !targetActive {
+		return apperr.Validation("target cashier is inactive")
+	}
+
+	ct, err := r.db.Exec(ctx, `
+		UPDATE sales
+		SET created_by = $2, transferred_from = $3
+		WHERE id = $1 AND status = 'draft'
+	`, saleID, newCashierID, currentUserID)
 	if err != nil {
 		return err
 	}
@@ -649,6 +670,36 @@ func (r *Repository) TransferDraft(ctx context.Context, saleID, currentUserID, n
 		return apperr.NotFound("SALE_NOT_FOUND", "sale not found or not draft")
 	}
 	return nil
+}
+
+
+func (r *Repository) ListTransferTargets(ctx context.Context, excludeUserID int64) ([]TransferTarget, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT e.id, COALESCE(e.username, ''), e.name, e.is_active
+		FROM employees e
+		WHERE e.deleted_at IS NULL
+		  AND e.has_account = true
+		  AND e.is_active = true
+		  AND e.id <> $1
+		ORDER BY e.name, e.username
+	`, excludeUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []TransferTarget
+	for rows.Next() {
+		var t TransferTarget
+		if err := rows.Scan(&t.ID, &t.Username, &t.FullName, &t.IsActive); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	if out == nil {
+		out = []TransferTarget{}
+	}
+	return out, rows.Err()
 }
 
 func (r *Repository) CancelSale(ctx context.Context, saleID int64, userID int64) error {
@@ -1126,6 +1177,7 @@ func (r *Repository) List(
 	status *string,
 	dateFrom, dateTo *time.Time,
 	limit, offset int,
+	transferredOnly bool,
 ) ([]SaleListItem, int, error) {
 
 	where := `
@@ -1135,12 +1187,13 @@ func (r *Repository) List(
 		  AND ($4::timestamptz IS NULL OR s.created_at <= $4)
 		  AND ($5::bigint IS NULL OR s.created_by = $5)
 		  AND ($6::text IS NULL OR s.status = $6)
+		  AND (NOT $7::boolean OR s.transferred_from IS NOT NULL)
 	`
 
 	var total int
 	if err := r.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM sales s `+where,
-		warehouseID, customerID, dateFrom, dateTo, createdBy, status,
+		warehouseID, customerID, dateFrom, dateTo, createdBy, status, transferredOnly,
 	).Scan(&total); err != nil {
 		return nil, 0, err
 	}
@@ -1153,8 +1206,8 @@ func (r *Repository) List(
 		LEFT JOIN customers c ON c.id = s.customer_id
 		`+where+`
 		ORDER BY s.created_at DESC, s.id DESC
-		LIMIT $7 OFFSET $8
-	`, warehouseID, customerID, dateFrom, dateTo, createdBy, status, limit, offset)
+		LIMIT $8 OFFSET $9
+	`, warehouseID, customerID, dateFrom, dateTo, createdBy, status, transferredOnly, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

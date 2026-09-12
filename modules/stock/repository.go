@@ -607,19 +607,20 @@ func (r *Repository) Move(ctx context.Context, req MoveRequest, userID int64) (W
 
 func (r *Repository) GetItems(ctx context.Context, warehouseID, productID *int64) ([]WarehouseItem, error) {
 	q := `
-		SELECT wi.warehouse_id, wi.product_id, wi.qty_milli,
-		       wi.avg_cost_cents, wi.total_cost_cents, wi.updated_at,
+		SELECT wi.warehouse_id, wi.product_id, COALESCE(p.name, ''), COALESCE(p.unit::text, ''),
+		       wi.qty_milli, wi.avg_cost_cents, wi.total_cost_cents, wi.updated_at,
 		       wi.qty_milli - COALESCE(SUM(sr.qty_milli), 0) AS available_milli
 		FROM warehouse_items wi
+		LEFT JOIN products p ON p.id = wi.product_id
 		LEFT JOIN stock_reservations sr
 		       ON sr.warehouse_id = wi.warehouse_id
 		      AND sr.product_id   = wi.product_id
 		      AND sr.status = 'active'
 		WHERE ($1::bigint IS NULL OR wi.warehouse_id = $1)
 		  AND ($2::bigint IS NULL OR wi.product_id = $2)
-		GROUP BY wi.warehouse_id, wi.product_id, wi.qty_milli,
+		GROUP BY wi.warehouse_id, wi.product_id, p.name, p.unit, wi.qty_milli,
 		         wi.avg_cost_cents, wi.total_cost_cents, wi.updated_at
-		ORDER BY wi.warehouse_id, wi.product_id
+		ORDER BY p.name, wi.product_id
 	`
 	rows, err := r.db.Query(ctx, q, warehouseID, productID)
 	if err != nil {
@@ -631,8 +632,8 @@ func (r *Repository) GetItems(ctx context.Context, warehouseID, productID *int64
 	for rows.Next() {
 		var it WarehouseItem
 		if err := rows.Scan(
-			&it.WarehouseID, &it.ProductID, &it.QtyMilli,
-			&it.AvgCostCents, &it.TotalCostCents, &it.UpdatedAt,
+			&it.WarehouseID, &it.ProductID, &it.ProductName, &it.Unit,
+			&it.QtyMilli, &it.AvgCostCents, &it.TotalCostCents, &it.UpdatedAt,
 			&it.AvailableMilli,
 		); err != nil {
 			return nil, err

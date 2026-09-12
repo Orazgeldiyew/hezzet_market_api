@@ -12,6 +12,11 @@ type Pagination struct {
 	Offset int
 }
 
+const (
+	DefaultPageLimit = 10
+	MaxPageLimit     = 1000
+)
+
 func PaginationMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pageStr := c.DefaultQuery("page", "1")
@@ -23,8 +28,11 @@ func PaginationMiddleware() gin.HandlerFunc {
 		}
 
 		limit, err := strconv.Atoi(limitStr)
-		if err != nil || limit <= 0 || limit > 100 {
-			limit = 10
+		if err != nil || limit <= 0 {
+			limit = DefaultPageLimit
+		}
+		if limit > MaxPageLimit {
+			limit = MaxPageLimit
 		}
 
 		offset := (page - 1) * limit

@@ -28,6 +28,12 @@ func RegisterRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, finRepo *finance.Repo
 		h.ListSales,
 	)
 
+	// Must be registered before /:id so "transfer-targets" is not parsed as an id.
+	sales.GET("/transfer-targets",
+		middleware.RequirePermission(permChecker, "sales", "transfer"),
+		h.ListTransferTargets,
+	)
+
 	sales.GET("/:id",
 		middleware.RequirePermission(permChecker, "sales", "view"),
 		h.GetSale,

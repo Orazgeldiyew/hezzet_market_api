@@ -19,4 +19,8 @@ func RegisterRoutes(rg *gin.RouterGroup, repo *Repository, permChecker middlewar
 		middleware.RequirePermission(permChecker, "reports", "view"),
 		h.Stats,
 	)
+	rg.POST("/audit-logs/delete-range",
+		middleware.RequirePermission(permChecker, "reports", "delete"),
+		h.DeleteRange,
+	)
 }
